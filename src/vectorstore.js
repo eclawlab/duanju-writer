@@ -206,7 +206,7 @@ export function createStore(filepath) {
     /**
      * Persist store to JSON file.
      */
-    async save() {
+    save() {
       const dir = dirname(filepath);
       mkdirSync(dir, { recursive: true });
       const data = {
@@ -218,7 +218,7 @@ export function createStore(filepath) {
     /**
      * Load store from JSON file (if it exists).
      */
-    async load() {
+    load() {
       if (!existsSync(filepath)) return;
       try {
         const raw = readFileSync(filepath, 'utf8');
@@ -236,7 +236,7 @@ export function createStore(filepath) {
     /**
      * Clear all entries and delete the file if it exists.
      */
-    async clear() {
+    clear() {
       entries.clear();
       invalidateCache();
       if (existsSync(filepath)) {

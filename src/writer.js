@@ -10,8 +10,8 @@ import { checkConsistency, rewriteForConsistency, updateMotifTracker } from './c
 import { createStore } from './vectorstore.js';
 import { queryKnowledge } from './knowledge.js';
 import { generateSnowflake } from './snowflake.js';
-import { updateGlobalSummary, formatGlobalSummary } from './compressor.js';
-import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc, getOpenPlotArcs, getUnresolvedForeshadowing } from './story-state.js';
+import { updateGlobalSummary } from './compressor.js';
+import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc } from './story-state.js';
 import { getSceneTypeRules } from './scene-types.js';
 import { needsEnrichment, enrichScene } from './enrichment.js';
 import { loadConfig } from './config.js';
