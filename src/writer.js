@@ -9,6 +9,9 @@ import { updateCharacter, updateItem, getAvailableRevelations, markRevealed, toP
 import { checkConsistency, rewriteForConsistency, updateMotifTracker } from './consistency.js';
 import { createStore } from './vectorstore.js';
 import { queryKnowledge } from './knowledge.js';
+import { generateSnowflake } from './snowflake.js';
+import { updateGlobalSummary, formatGlobalSummary } from './compressor.js';
+import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc, getOpenPlotArcs, getUnresolvedForeshadowing } from './story-state.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -150,6 +153,12 @@ export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, la
     }
     if (narrativeContext.pacing) {
       template += `\n\n## Pacing\n\nThis scene's pacing should be: ${narrativeContext.pacing}\n`;
+    }
+    if (narrativeContext.suspenseDensity) {
+      template += `\n\n## Suspense\n\nSuspense density: ${narrativeContext.suspenseDensity}. Twist strength: ${narrativeContext.twistStrength || 1}/5.\n`;
+    }
+    if (narrativeContext.globalSummary) {
+      template += `\n\n## Global Story Summary\n\n${narrativeContext.globalSummary}\n`;
     }
     if (narrativeContext.knowledgeContext) {
       template += `\n\n## Reference Knowledge\n\nRelevant context from prior scenes and reference materials:\n${narrativeContext.knowledgeContext}\n`;
@@ -328,9 +337,23 @@ export async function generateStory(materials, options = {}) {
     }
   }
 
-  // Step 1: Generate outline
+  // Step 0: Snowflake architecture (optional, enriches outline)
+  let snowflake = null;
+  try {
+    log('Building story architecture (Snowflake method)...');
+    snowflake = await generateSnowflake(materials, { lang, log });
+    if (options.onSnowflake) options.onSnowflake(snowflake);
+    log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
+  } catch (err) {
+    log(`[snowflake failed] ${err.message} — continuing with standard outline`);
+  }
+
+  // Step 1: Generate outline (enriched with snowflake if available)
   log('Generating story outline...');
-  const outline = await generateOutline(materials, { lang, style });
+  const enrichedMaterials = snowflake
+    ? { ...materials, snowflake }
+    : materials;
+  const outline = await generateOutline(enrichedMaterials, { lang, style });
   if (options.onOutline) options.onOutline(outline);
   log(`Outline: "${outline.title}" — ${outline.episodes[0].scenePlan.length} scenes planned`);
 
@@ -347,8 +370,34 @@ export async function generateStory(materials, options = {}) {
 
   // Step 3: Initialize story state from plan
   const state = initStateFromPlan(plan);
+
+  // Populate character arcs from snowflake
+  if (snowflake && snowflake.characters) {
+    for (const sc of snowflake.characters) {
+      if (sc.arc && state.characters[sc.name]) {
+        try { setCharacterArc(state, sc.name, sc.arc); } catch {}
+      }
+    }
+  }
+
+  // Populate plot arcs from plan
+  for (const arc of (plan.plotArcs || [])) {
+    try { addPlotArc(state, arc); } catch {}
+  }
+
+  // Populate foreshadowing from plan
+  for (const f of (plan.foreshadowing || [])) {
+    try { addForeshadowing(state, f); } catch {}
+  }
+
+  // Populate relationships from plan
+  for (const rel of (plan.relationships || [])) {
+    try { addRelationship(state, rel.char1, rel.char2, rel.type, rel.description); } catch {}
+  }
+
   const motifTracker = {};
   const compressedHistory = [];
+  let globalSummary = '';
 
   // Step 4: Generate each scene with narrative intelligence
   const story = {
@@ -412,6 +461,9 @@ export async function generateStory(materials, options = {}) {
             events: planScene.events,
             pacing: planScene.pacing,
             knowledgeContext,
+            suspenseDensity: planScene.suspenseDensity,
+            twistStrength: planScene.twistStrength,
+            globalSummary,
           },
         });
       } catch (firstErr) {
@@ -448,6 +500,13 @@ export async function generateStory(materials, options = {}) {
         } catch (err) {
           log(`[consistency rewrite failed] ${err.message}`);
         }
+      }
+
+      // Update global narrative summary
+      try {
+        globalSummary = await updateGlobalSummary(globalSummary, scene.content, lang);
+      } catch (err) {
+        log(`[global summary update failed] ${err.message}`);
       }
 
       // Update motif tracker
@@ -497,6 +556,14 @@ export async function generateStory(materials, options = {}) {
         } catch (err) {
           log(`[revelation skipped] ${err.message}`);
         }
+      }
+
+      // Handle foreshadowing operations from plan
+      for (const fId of (planScene.reinforceForeshadowing || [])) {
+        try { reinforceForeshadowing(state, fId, globalSceneIndex); } catch {}
+      }
+      for (const fId of (planScene.resolveForeshadowing || [])) {
+        try { resolveForeshadowing(state, fId, globalSceneIndex); } catch {}
       }
 
       // Compress scene into history
