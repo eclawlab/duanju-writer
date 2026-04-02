@@ -12,6 +12,9 @@ import { queryKnowledge } from './knowledge.js';
 import { generateSnowflake } from './snowflake.js';
 import { updateGlobalSummary, formatGlobalSummary } from './compressor.js';
 import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc, getOpenPlotArcs, getUnresolvedForeshadowing } from './story-state.js';
+import { getSceneTypeRules } from './scene-types.js';
+import { needsEnrichment, enrichScene } from './enrichment.js';
+import { loadConfig } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -165,6 +168,9 @@ export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, la
     }
     if (narrativeContext.consistencyNotes && narrativeContext.consistencyNotes.length > 0) {
       template += `\n\n## Writing Notes\n\nAvoid these patterns:\n${narrativeContext.consistencyNotes.map(n => '- ' + n).join('\n')}\n`;
+    }
+    if (narrativeContext.sceneTypeRules) {
+      template += `\n\n## Scene Type Guidelines\n\n${narrativeContext.sceneTypeRules}\n`;
     }
   }
 
@@ -325,6 +331,7 @@ export async function generateStory(materials, options = {}) {
   const lang = options.lang || 'en';
   let style = options.style;
   const log = options.log || (() => {});
+  const { targetWordsPerScene } = loadConfig();
 
   // Auto-pick style if not specified
   if (!style || style === 'default') {
@@ -449,6 +456,7 @@ export async function generateStory(materials, options = {}) {
       }
 
       // Generate scene with narrative context (with retry and fallback)
+      const sceneTypeRules = getSceneTypeRules(plan_scene.sceneType || 'NARRATIVE', lang);
       let scene;
       try {
         scene = await generateScene(outline, i, plan_scene, totalScenes, {
@@ -464,6 +472,7 @@ export async function generateStory(materials, options = {}) {
             suspenseDensity: planScene.suspenseDensity,
             twistStrength: planScene.twistStrength,
             globalSummary,
+            sceneTypeRules,
           },
         });
       } catch (firstErr) {
@@ -499,6 +508,16 @@ export async function generateStory(materials, options = {}) {
           scene.content = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
         } catch (err) {
           log(`[consistency rewrite failed] ${err.message}`);
+        }
+      }
+
+      // Enrich scene if below word count target
+      if (needsEnrichment(scene.content, targetWordsPerScene)) {
+        log(`Scene ${globalSceneIndex + 1} below word target (${targetWordsPerScene}) — enriching...`);
+        try {
+          scene.content = await enrichScene(scene.content, targetWordsPerScene, lang);
+        } catch (err) {
+          log(`[enrichment failed] ${err.message}`);
         }
       }
 

@@ -82,6 +82,7 @@ switch (command) {
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
       'maxRetries', 'maxConcurrentJobs', 'publishOnUpload', 'lang', 'style',
+      'targetWordsPerScene',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
