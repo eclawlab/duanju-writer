@@ -97,6 +97,62 @@ export async function compressScenes(scenes, lang = 'en') {
   return parseCompressorOutput(raw);
 }
 
+// ─── Global narrative summary ──────────────────────────────────────────────────
+
+export function buildGlobalSummaryPrompt(currentSummary, newSceneContent, lang = 'en') {
+  if (lang === 'cn') {
+    return [
+      '你是叙事摘要专家。请更新以下全局故事摘要，整合新场景的内容。',
+      '',
+      '## 当前全局摘要',
+      '',
+      currentSummary || '（尚无摘要——这是第一个场景）',
+      '',
+      '## 新场景内容',
+      '',
+      newSceneContent,
+      '',
+      '## 要求',
+      '',
+      '- 产出一段更新后的全局摘要，不超过2000字符',
+      '- 保留关键情节点、角色发展、未解悬念',
+      '- 整合新场景的重要事件',
+      '- 只返回摘要文本，不要JSON，不要解释',
+    ].join('\n');
+  }
+
+  return [
+    'You are a narrative summary expert. Update the following global story summary to incorporate the new scene content.',
+    '',
+    '## Current Global Summary',
+    '',
+    currentSummary || '(No summary yet — this is the first scene)',
+    '',
+    '## New Scene Content',
+    '',
+    newSceneContent,
+    '',
+    '## Requirements',
+    '',
+    '- Produce an updated global summary of no more than 2000 characters',
+    '- Preserve key plot points, character developments, and unresolved tensions',
+    '- Integrate important events from the new scene',
+    '- Return only the summary text, no JSON, no explanation',
+  ].join('\n');
+}
+
+export async function updateGlobalSummary(currentSummary, newSceneContent, lang = 'en') {
+  const prompt = buildGlobalSummaryPrompt(currentSummary, newSceneContent, lang);
+  const result = await callLLM(prompt, 'compress');
+  // Safety: truncate to 2000 chars
+  return result.slice(0, 2000).trim();
+}
+
+export function formatGlobalSummary(summary) {
+  if (!summary) return '';
+  return summary;
+}
+
 // ─── Context formatter ─────────────────────────────────────────────────────────
 
 export function buildHistoryContext(compressedScenes) {
