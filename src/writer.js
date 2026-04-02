@@ -274,7 +274,7 @@ export async function generateStory(materials, options = {}) {
   log('Planning scene details, events, and revelations...');
   const plan = await generatePlan(outline, { lang });
   if (options.onPlan) options.onPlan(plan);
-  log(`Plan: ${plan.scenes.length} scenes planned, ${plan.revelations.length} revelations scheduled`);
+  log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
 
   // Step 3: Initialize story state from plan
   const state = initStateFromPlan(plan);
@@ -341,17 +341,38 @@ export async function generateStory(materials, options = {}) {
       // Update motif tracker
       updateMotifTracker(motifTracker, scene.content, i);
 
-      // Apply character and item changes from plan
-      for (const [charName, changes] of Object.entries(planScene.characterChanges || {})) {
+      // Apply character changes from plan
+      for (const cc of (planScene.characterChanges || [])) {
         try {
-          updateCharacter(state, charName, changes);
+          const updates = {};
+          if (cc.enteringState) updates.emotional = cc.enteringState;
+          if (cc.locationChange) {
+            const parts = cc.locationChange.split('->').map(s => s.trim());
+            if (parts.length === 2) updates.location = parts[1];
+          }
+          if (cc.learns && cc.learns.length > 0) {
+            const char = state.characters[cc.name];
+            if (char) updates.knowledge = [...(char.knowledge || []), ...cc.learns];
+          }
+          if (Object.keys(updates).length > 0) {
+            updateCharacter(state, cc.name, updates);
+          }
         } catch (err) {
           log(`[state update skipped] ${err.message}`);
         }
       }
-      for (const [itemName, changes] of Object.entries(planScene.itemChanges || {})) {
+      // Apply item changes from plan
+      for (const ic of (planScene.itemChanges || [])) {
         try {
-          updateItem(state, itemName, changes);
+          if (ic.name && state.items[ic.name]) {
+            const updates = {};
+            if (ic.status) updates.status = ic.status;
+            if (ic.holder !== undefined) updates.holder = ic.holder;
+            if (ic.location !== undefined) updates.location = ic.location;
+            if (Object.keys(updates).length > 0) {
+              updateItem(state, ic.name, updates);
+            }
+          }
         } catch (err) {
           log(`[state update skipped] ${err.message}`);
         }
