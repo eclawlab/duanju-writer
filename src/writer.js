@@ -3,6 +3,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callClaude } from './claude.js';
 import { getStyle, listStyles } from './styles.js';
+import { generatePlan, initStateFromPlan } from './planner.js';
+import { compressScenes, buildHistoryContext } from './compressor.js';
+import { updateCharacter, updateItem, getAvailableRevelations, markRevealed, toPromptContext, validate } from './story-state.js';
+import { checkConsistency, rewriteForConsistency, updateMotifTracker } from './consistency.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -117,12 +121,37 @@ export async function generateOutline(materials, options = {}) {
 
 // ─── Step 2: Generate scenes one at a time ────────────────────────────────────
 
-export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang = 'en', styleKey) {
+export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang = 'en', styleKey, narrativeContext) {
   const templateFile = lang === 'cn' ? SCENES_PATH_CN : SCENES_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyle(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.scene}\n`;
+  }
+
+  // Inject narrative intelligence context
+  if (narrativeContext) {
+    if (narrativeContext.history) {
+      template += `\n\n## Story So Far\n\n${narrativeContext.history}\n`;
+    }
+    if (narrativeContext.stateContext) {
+      template += `\n\n## Current World State\n\n${narrativeContext.stateContext}\n`;
+    }
+    if (narrativeContext.revelations && narrativeContext.revelations.length > 0) {
+      const revList = narrativeContext.revelations.map(r =>
+        `- [${r.visibility}] ${r.info}`
+      ).join('\n');
+      template += `\n\n## Available Revelations\n\nYou may weave these into the scene naturally:\n${revList}\n`;
+    }
+    if (narrativeContext.events && narrativeContext.events.length > 0) {
+      template += `\n\n## Scene Beats\n\nThis scene should cover these beats:\n${narrativeContext.events.map(e => '- ' + e).join('\n')}\n`;
+    }
+    if (narrativeContext.pacing) {
+      template += `\n\n## Pacing\n\nThis scene's pacing should be: ${narrativeContext.pacing}\n`;
+    }
+    if (narrativeContext.consistencyNotes && narrativeContext.consistencyNotes.length > 0) {
+      template += `\n\n## Writing Notes\n\nAvoid these patterns:\n${narrativeContext.consistencyNotes.map(n => '- ' + n).join('\n')}\n`;
+    }
   }
 
   // Build a compact outline summary (without scenePlan details to save tokens)
@@ -171,7 +200,8 @@ export async function parseScene(raw) {
 export async function generateScene(outline, sceneIndex, scenePlan, totalScenes, options = {}) {
   const lang = options.lang || 'en';
   const style = options.style;
-  const prompt = buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang, style);
+  const narrativeContext = options.narrativeContext;
+  const prompt = buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang, style, narrativeContext);
   const raw = await callClaude(prompt);
   return await parseScene(raw);
 }
@@ -240,7 +270,18 @@ export async function generateStory(materials, options = {}) {
   if (options.onOutline) options.onOutline(outline);
   log(`Outline: "${outline.title}" — ${outline.episodes[0].scenePlan.length} scenes planned`);
 
-  // Step 2: Generate each scene
+  // Step 2: Generate plan (planning agent)
+  log('Planning scene details, events, and revelations...');
+  const plan = await generatePlan(outline, { lang });
+  if (options.onPlan) options.onPlan(plan);
+  log(`Plan: ${plan.scenes.length} scenes planned, ${plan.revelations.length} revelations scheduled`);
+
+  // Step 3: Initialize story state from plan
+  const state = initStateFromPlan(plan);
+  const motifTracker = {};
+  const compressedHistory = [];
+
+  // Step 4: Generate each scene with narrative intelligence
   const story = {
     title: outline.title,
     synopsis: outline.synopsis,
@@ -256,9 +297,87 @@ export async function generateStory(materials, options = {}) {
     const totalScenes = ep.scenePlan.length;
 
     for (let i = 0; i < totalScenes; i++) {
-      const plan = ep.scenePlan[i];
-      log(`Writing scene ${i + 1}/${totalScenes}: ${plan.summary.slice(0, 60)}...`);
-      const scene = await generateScene(outline, i, plan, totalScenes, { lang, style });
+      const plan_scene = ep.scenePlan[i];
+      log(`Writing scene ${i + 1}/${totalScenes}: ${plan_scene.summary.slice(0, 60)}...`);
+
+      // Build narrative context
+      const history = buildHistoryContext(compressedHistory);
+      const revelations = getAvailableRevelations(state, i);
+      const stateContext = toPromptContext(state);
+
+      // Validate state and log warnings
+      const stateWarnings = validate(state);
+      for (const warning of stateWarnings) {
+        log(`[state warning] ${warning}`);
+      }
+
+      // Get plan scene data for events/pacing
+      const planScene = plan.scenes[i] || {};
+
+      // Generate scene with narrative context
+      const scene = await generateScene(outline, i, plan_scene, totalScenes, {
+        lang,
+        style,
+        narrativeContext: {
+          history,
+          stateContext,
+          revelations,
+          events: planScene.events,
+          pacing: planScene.pacing,
+        },
+      });
+
+      // Check and fix consistency issues
+      const consistencyResult = checkConsistency(scene.content, motifTracker, i);
+      if (consistencyResult.issues.length > 0) {
+        log(`Fixing ${consistencyResult.issues.length} consistency issue(s) in scene ${i + 1}...`);
+        try {
+          scene.content = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
+        } catch (err) {
+          log(`[consistency rewrite failed] ${err.message}`);
+        }
+      }
+
+      // Update motif tracker
+      updateMotifTracker(motifTracker, scene.content, i);
+
+      // Apply character and item changes from plan
+      for (const [charName, changes] of Object.entries(planScene.characterChanges || {})) {
+        try {
+          updateCharacter(state, charName, changes);
+        } catch (err) {
+          log(`[state update skipped] ${err.message}`);
+        }
+      }
+      for (const [itemName, changes] of Object.entries(planScene.itemChanges || {})) {
+        try {
+          updateItem(state, itemName, changes);
+        } catch (err) {
+          log(`[state update skipped] ${err.message}`);
+        }
+      }
+
+      // Mark revelations as revealed
+      for (const revId of (planScene.revealIds || [])) {
+        try {
+          markRevealed(state, revId);
+        } catch (err) {
+          log(`[revelation skipped] ${err.message}`);
+        }
+      }
+
+      // Compress scene into history
+      try {
+        const compressed = await compressScenes([scene], lang);
+        compressedHistory.push(compressed);
+      } catch (err) {
+        log(`[compression failed] ${err.message}`);
+        compressedHistory.push({ summary: plan_scene.summary, characterActions: [], plotProgress: [], emotionalArc: '' });
+      }
+
+      // Notify caller of state update
+      if (options.onState) options.onState(state);
+
       episode.scenes.push(scene);
     }
 
