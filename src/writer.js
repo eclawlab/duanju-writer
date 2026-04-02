@@ -292,17 +292,19 @@ export async function generateStory(materials, options = {}) {
     episodes: [],
   };
 
+  let globalSceneIndex = 0;
+
   for (const ep of outline.episodes) {
     const episode = { title: ep.title, scenes: [] };
     const totalScenes = ep.scenePlan.length;
 
     for (let i = 0; i < totalScenes; i++) {
       const plan_scene = ep.scenePlan[i];
-      log(`Writing scene ${i + 1}/${totalScenes}: ${plan_scene.summary.slice(0, 60)}...`);
+      log(`Writing scene ${globalSceneIndex + 1}: ${plan_scene.summary.slice(0, 60)}...`);
 
       // Build narrative context
       const history = buildHistoryContext(compressedHistory);
-      const revelations = getAvailableRevelations(state, i);
+      const revelations = getAvailableRevelations(state, globalSceneIndex);
       const stateContext = toPromptContext(state);
 
       // Validate state and log warnings
@@ -311,8 +313,8 @@ export async function generateStory(materials, options = {}) {
         log(`[state warning] ${warning}`);
       }
 
-      // Get plan scene data for events/pacing
-      const planScene = plan.scenes[i] || {};
+      // Get plan scene data for events/pacing (flat array across all episodes)
+      const planScene = plan.scenes[globalSceneIndex] || {};
 
       // Generate scene with narrative context
       const scene = await generateScene(outline, i, plan_scene, totalScenes, {
@@ -328,9 +330,9 @@ export async function generateStory(materials, options = {}) {
       });
 
       // Check and fix consistency issues
-      const consistencyResult = checkConsistency(scene.content, motifTracker, i);
+      const consistencyResult = checkConsistency(scene.content, motifTracker, globalSceneIndex);
       if (consistencyResult.issues.length > 0) {
-        log(`Fixing ${consistencyResult.issues.length} consistency issue(s) in scene ${i + 1}...`);
+        log(`Fixing ${consistencyResult.issues.length} consistency issue(s) in scene ${globalSceneIndex + 1}...`);
         try {
           scene.content = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
         } catch (err) {
@@ -339,7 +341,7 @@ export async function generateStory(materials, options = {}) {
       }
 
       // Update motif tracker
-      updateMotifTracker(motifTracker, scene.content, i);
+      updateMotifTracker(motifTracker, scene.content, globalSceneIndex);
 
       // Apply character changes from plan
       for (const cc of (planScene.characterChanges || [])) {
@@ -400,6 +402,7 @@ export async function generateStory(materials, options = {}) {
       if (options.onState) options.onState(state);
 
       episode.scenes.push(scene);
+      globalSceneIndex++;
     }
 
     story.episodes.push(episode);
