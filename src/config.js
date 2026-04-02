@@ -11,6 +11,7 @@ const DEFAULTS = {
   maxRetries: 3,
   maxConcurrentJobs: 1,
   publishOnUpload: true,
+  targetWordsPerScene: 0,  // 0 = disabled, set to e.g. 200 to enable
   lang: 'en',
   style: 'default',
   providers: {
