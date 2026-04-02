@@ -206,6 +206,65 @@ export async function generateScene(outline, sceneIndex, scenePlan, totalScenes,
   return await parseScene(raw);
 }
 
+// ─── Fallback scene generation ──────────────────────────────────────────────
+
+export function buildRetryScenePrompt(scenePlan, lang = 'en') {
+  const summary = scenePlan.summary || 'A scene in the story';
+  const sceneType = scenePlan.sceneType || 'NARRATIVE';
+
+  if (lang === 'cn') {
+    return [
+      '请根据以下场景描述撰写一个场景。只返回有效的JSON对象，不要其他内容。',
+      '',
+      `场景描述：${summary}`,
+      `场景类型：${sceneType}`,
+      '',
+      '返回格式：',
+      '{"content": "[narrator]\\n你的场景文本...", "sceneType": "' + sceneType + '", "choices": [], "conclusion": null}',
+      '',
+      '重要：content字段中的换行用\\n表示，双引号用\\"转义。只返回JSON。',
+    ].join('\n');
+  }
+
+  return [
+    'Write a scene based on the following description. Return ONLY a valid JSON object, nothing else.',
+    '',
+    `Scene description: ${summary}`,
+    `Scene type: ${sceneType}`,
+    '',
+    'Return format:',
+    '{"content": "[narrator]\\nYour scene text here...", "sceneType": "' + sceneType + '", "choices": [], "conclusion": null}',
+    '',
+    'IMPORTANT: Newlines in content must be \\n, double quotes must be \\". Return only JSON.',
+  ].join('\n');
+}
+
+export function buildFallbackScene(scenePlan) {
+  const summary = scenePlan.summary || 'The story continues.';
+  const sceneType = scenePlan.sceneType || 'NARRATIVE';
+  const scene = {
+    content: `[narrator]\n${summary}`,
+    sceneType,
+    choices: [],
+    conclusion: null,
+  };
+  if (scenePlan.isConclusion) {
+    scene.conclusion = {
+      title: 'End',
+      overview: summary,
+      type: scenePlan.conclusionType || 'EPISODE_END',
+      ending: scenePlan.ending || 'GOOD',
+    };
+  }
+  if (scenePlan.hasChoices && scenePlan.choiceTexts) {
+    scene.choices = scenePlan.choiceTexts.map((text, idx) => ({
+      text,
+      nextSceneIndex: idx + 1,
+    }));
+  }
+  return scene;
+}
+
 // ─── Style selection ─────────────────────────────────────────────────────────
 
 export function buildPickStylePrompt(materials) {
@@ -270,11 +329,16 @@ export async function generateStory(materials, options = {}) {
   if (options.onOutline) options.onOutline(outline);
   log(`Outline: "${outline.title}" — ${outline.episodes[0].scenePlan.length} scenes planned`);
 
-  // Step 2: Generate plan (planning agent)
-  log('Planning scene details, events, and revelations...');
-  const plan = await generatePlan(outline, { lang });
-  if (options.onPlan) options.onPlan(plan);
-  log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
+  // Step 2: Generate plan (planning agent) — optional, continues without if it fails
+  let plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
+  try {
+    log('Planning scene details, events, and revelations...');
+    plan = await generatePlan(outline, { lang });
+    if (options.onPlan) options.onPlan(plan);
+    log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
+  } catch (planErr) {
+    log(`[planning failed] ${planErr.message} — continuing without plan`);
+  }
 
   // Step 3: Initialize story state from plan
   const state = initStateFromPlan(plan);
@@ -316,18 +380,31 @@ export async function generateStory(materials, options = {}) {
       // Get plan scene data for events/pacing (flat array across all episodes)
       const planScene = plan.scenes[globalSceneIndex] || {};
 
-      // Generate scene with narrative context
-      const scene = await generateScene(outline, i, plan_scene, totalScenes, {
-        lang,
-        style,
-        narrativeContext: {
-          history,
-          stateContext,
-          revelations,
-          events: planScene.events,
-          pacing: planScene.pacing,
-        },
-      });
+      // Generate scene with narrative context (with retry and fallback)
+      let scene;
+      try {
+        scene = await generateScene(outline, i, plan_scene, totalScenes, {
+          lang,
+          style,
+          narrativeContext: {
+            history,
+            stateContext,
+            revelations,
+            events: planScene.events,
+            pacing: planScene.pacing,
+          },
+        });
+      } catch (firstErr) {
+        log(`[scene ${globalSceneIndex + 1} failed] ${firstErr.message} — retrying with simplified prompt...`);
+        try {
+          const retryPrompt = buildRetryScenePrompt(plan_scene, lang);
+          const retryRaw = await callClaude(retryPrompt);
+          scene = await parseScene(retryRaw);
+        } catch (retryErr) {
+          log(`[scene ${globalSceneIndex + 1} retry failed] ${retryErr.message} — using fallback scene`);
+          scene = buildFallbackScene(plan_scene);
+        }
+      }
 
       // Check and fix consistency issues
       const consistencyResult = checkConsistency(scene.content, motifTracker, globalSceneIndex);

@@ -162,4 +162,57 @@ describe('writer', () => {
     const result = await parseScene(wrapped);
     assert.equal(result.content, '[narrator]\nTest');
   });
+
+  // ─── Retry and fallback tests ──────────────────────────────────────────────
+
+  test('buildRetryScenePrompt produces simplified prompt', async () => {
+    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const prompt = buildRetryScenePrompt({ summary: 'Hero enters cave', sceneType: 'NARRATIVE' });
+    assert.ok(prompt.includes('Hero enters cave'));
+    assert.ok(prompt.includes('NARRATIVE'));
+    assert.ok(prompt.includes('JSON'));
+  });
+
+  test('buildRetryScenePrompt uses Chinese for cn lang', async () => {
+    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const prompt = buildRetryScenePrompt({ summary: '英雄进入洞穴', sceneType: 'NARRATIVE' }, 'cn');
+    assert.ok(prompt.includes('英雄进入洞穴'));
+    assert.ok(prompt.includes('JSON'));
+  });
+
+  test('buildFallbackScene creates valid scene from plan', async () => {
+    const { buildFallbackScene } = await import('../src/writer.js');
+    const scene = buildFallbackScene({ summary: 'The hero arrives', sceneType: 'NARRATIVE' });
+    assert.ok(scene.content.includes('The hero arrives'));
+    assert.equal(scene.sceneType, 'NARRATIVE');
+    assert.deepEqual(scene.choices, []);
+    assert.equal(scene.conclusion, null);
+  });
+
+  test('buildFallbackScene handles conclusion scenes', async () => {
+    const { buildFallbackScene } = await import('../src/writer.js');
+    const scene = buildFallbackScene({
+      summary: 'The story ends',
+      sceneType: 'NARRATIVE',
+      isConclusion: true,
+      conclusionType: 'EPISODE_END',
+      ending: 'GOOD',
+    });
+    assert.ok(scene.conclusion);
+    assert.equal(scene.conclusion.type, 'EPISODE_END');
+    assert.equal(scene.conclusion.ending, 'GOOD');
+  });
+
+  test('buildFallbackScene handles choice scenes', async () => {
+    const { buildFallbackScene } = await import('../src/writer.js');
+    const scene = buildFallbackScene({
+      summary: 'A fork in the road',
+      sceneType: 'CHOICE',
+      hasChoices: true,
+      choiceTexts: ['Go left', 'Go right'],
+    });
+    assert.equal(scene.choices.length, 2);
+    assert.equal(scene.choices[0].text, 'Go left');
+    assert.equal(scene.choices[1].text, 'Go right');
+  });
 });
