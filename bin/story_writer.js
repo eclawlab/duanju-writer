@@ -275,8 +275,93 @@ switch (command) {
     }
     break;
   }
+  case 'knowledge': {
+  const sub = args[0];
+
+  if (sub === 'import' && args[1]) {
+    const { statSync } = await import('node:fs');
+    const { createStore } = await import('../src/vectorstore.js');
+    const { importDocument, importDirectory } = await import('../src/knowledge.js');
+    const { loadConfig } = await import('../src/config.js');
+    const target = args[1];
+
+    // Determine store path — use --job flag or default global store
+    let storePath;
+    const jobIdx = args.indexOf('--job');
+    if (jobIdx !== -1 && args[jobIdx + 1]) {
+      const { JOBS_DIR } = await import('../src/constants.js');
+      const { join } = await import('node:path');
+      storePath = join(JOBS_DIR, args[jobIdx + 1], 'vectorstore.json');
+    } else {
+      storePath = (await import('node:path')).join(DATA_DIR, 'knowledge.json');
+    }
+
+    const store = createStore(storePath);
+    store.load();
+
+    try {
+      const stat = statSync(target);
+      if (stat.isDirectory()) {
+        const result = await importDirectory(store, target);
+        store.save();
+        console.log(`Imported ${result.files} files (${result.totalChunks} chunks) into knowledge base`);
+      } else {
+        const result = await importDocument(store, target);
+        store.save();
+        console.log(`Imported "${target}" (${result.chunks} chunks) into knowledge base`);
+      }
+    } catch (err) {
+      console.log(`Failed to import: ${err.message}`);
+      process.exit(1);
+    }
+
+  } else if (sub === 'clear') {
+    const { createStore } = await import('../src/vectorstore.js');
+
+    let storePath;
+    const jobIdx = args.indexOf('--job');
+    if (jobIdx !== -1 && args[jobIdx + 1]) {
+      const { JOBS_DIR } = await import('../src/constants.js');
+      const { join } = await import('node:path');
+      storePath = join(JOBS_DIR, args[jobIdx + 1], 'vectorstore.json');
+    } else {
+      storePath = (await import('node:path')).join(DATA_DIR, 'knowledge.json');
+    }
+
+    const store = createStore(storePath);
+    store.clear();
+    console.log('Knowledge base cleared.');
+
+  } else if (sub === 'info') {
+    const { createStore } = await import('../src/vectorstore.js');
+
+    let storePath;
+    const jobIdx = args.indexOf('--job');
+    if (jobIdx !== -1 && args[jobIdx + 1]) {
+      const { JOBS_DIR } = await import('../src/constants.js');
+      const { join } = await import('node:path');
+      storePath = join(JOBS_DIR, args[jobIdx + 1], 'vectorstore.json');
+    } else {
+      storePath = (await import('node:path')).join(DATA_DIR, 'knowledge.json');
+    }
+
+    const store = createStore(storePath);
+    store.load();
+    console.log(`Knowledge base: ${store.size()} entries`);
+    console.log(`Store path: ${storePath}`);
+
+  } else {
+    console.log('Usage: story_writer knowledge [import|clear|info] [path] [--job jobId]');
+    console.log('\nExamples:');
+    console.log('  story_writer knowledge import ./my-worldbuilding.txt');
+    console.log('  story_writer knowledge import ./reference-docs/');
+    console.log('  story_writer knowledge info');
+    console.log('  story_writer knowledge clear');
+  }
+  break;
+}
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: story_writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role]');
+    console.log('Usage: story_writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
     process.exit(1);
 }
