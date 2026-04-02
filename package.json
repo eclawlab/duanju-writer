@@ -1,6 +1,6 @@
 {
   "name": "story_writer",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Autonomous story generation daemon for autostory",
   "type": "module",
   "main": "src/constants.js",
