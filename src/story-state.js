@@ -18,6 +18,9 @@ export function createState() {
     items: {},
     locations: {},
     revelations: [],
+    plotArcs: [],
+    relationships: [],
+    foreshadowing: [],
   };
 }
 
@@ -242,6 +245,172 @@ export function validate(state) {
 }
 
 // ---------------------------------------------------------------------------
+// Plot Arcs
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a plot arc (unresolved story thread) to state.plotArcs.
+ * @param {object} state
+ * @param {{ id: string, description: string, status?: string, introducedInScene: number }} arc
+ */
+export function addPlotArc(state, { id, description, status, introducedInScene }) {
+  state.plotArcs.push({ id, description, status: status || 'open', introducedInScene, resolvedInScene: null });
+}
+
+/**
+ * Merge updates into an existing plot arc by id.
+ * @param {object} state
+ * @param {string} id
+ * @param {object} updates
+ */
+export function updatePlotArc(state, id, updates) {
+  const arc = state.plotArcs.find(a => a.id === id);
+  if (!arc) throw new Error(`Plot arc not found: ${id}`);
+  Object.assign(arc, updates);
+}
+
+/**
+ * Return all plot arcs that are not yet resolved.
+ * @param {object} state
+ * @returns {object[]}
+ */
+export function getOpenPlotArcs(state) {
+  return state.plotArcs.filter(a => a.status !== 'resolved');
+}
+
+/**
+ * Mark a plot arc as resolved at the given scene index.
+ * @param {object} state
+ * @param {string} id
+ * @param {number} sceneIndex
+ */
+export function resolvePlotArc(state, id, sceneIndex) {
+  const arc = state.plotArcs.find(a => a.id === id);
+  if (!arc) throw new Error(`Plot arc not found: ${id}`);
+  arc.status = 'resolved';
+  arc.resolvedInScene = sceneIndex;
+}
+
+// ---------------------------------------------------------------------------
+// Character Arcs (5-stage model)
+// ---------------------------------------------------------------------------
+
+/**
+ * Attach a 5-stage arc to a character.
+ * @param {object} state
+ * @param {string} name
+ * @param {{ initial: string, trigger: string, dissonance: string, transformation: string, final: string }} arc
+ */
+export function setCharacterArc(state, name, arc) {
+  if (!state.characters[name]) throw new Error(`Character not found: ${name}`);
+  state.characters[name].arc = arc;
+}
+
+/**
+ * Advance a character to a specific arc stage.
+ * @param {object} state
+ * @param {string} name
+ * @param {'initial'|'trigger'|'dissonance'|'transformation'|'final'} stage
+ */
+export function advanceCharacterArc(state, name, stage) {
+  if (!state.characters[name]) throw new Error(`Character not found: ${name}`);
+  state.characters[name].currentArcStage = stage;
+}
+
+// ---------------------------------------------------------------------------
+// Relationship Networks
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a directional relationship between two characters.
+ * @param {object} state
+ * @param {string} char1
+ * @param {string} char2
+ * @param {'ally'|'rival'|'lover'|'mentor'|'betrayer'|'neutral'} type
+ * @param {string} description
+ */
+export function addRelationship(state, char1, char2, type, description) {
+  if (!state.characters[char1]) throw new Error(`Character not found: ${char1}`);
+  if (!state.characters[char2]) throw new Error(`Character not found: ${char2}`);
+  if (!state.relationships) state.relationships = [];
+  state.relationships.push({ char1, char2, type, description });
+}
+
+/**
+ * Merge updates into an existing relationship (bidirectional lookup).
+ * @param {object} state
+ * @param {string} char1
+ * @param {string} char2
+ * @param {object} updates
+ */
+export function updateRelationship(state, char1, char2, updates) {
+  if (!state.relationships) return;
+  const rel = state.relationships.find(r =>
+    (r.char1 === char1 && r.char2 === char2) || (r.char1 === char2 && r.char2 === char1)
+  );
+  if (rel) Object.assign(rel, updates);
+}
+
+/**
+ * Return all relationships involving a character.
+ * @param {object} state
+ * @param {string} charName
+ * @returns {object[]}
+ */
+export function getRelationships(state, charName) {
+  if (!state.relationships) return [];
+  return state.relationships.filter(r => r.char1 === charName || r.char2 === charName);
+}
+
+// ---------------------------------------------------------------------------
+// Foreshadowing
+// ---------------------------------------------------------------------------
+
+/**
+ * Plant a foreshadowing element in the story.
+ * @param {object} state
+ * @param {{ id: string, description: string, type: 'plant'|'reinforce'|'resolve', plantedInScene: number }} opts
+ */
+export function addForeshadowing(state, { id, description, type, plantedInScene }) {
+  if (!state.foreshadowing) state.foreshadowing = [];
+  state.foreshadowing.push({ id, description, type, plantedInScene, reinforcedInScenes: [], resolvedInScene: null });
+}
+
+/**
+ * Record a scene where existing foreshadowing is reinforced.
+ * @param {object} state
+ * @param {string} id
+ * @param {number} sceneIndex
+ */
+export function reinforceForeshadowing(state, id, sceneIndex) {
+  if (!state.foreshadowing) return;
+  const f = state.foreshadowing.find(x => x.id === id);
+  if (f) f.reinforcedInScenes.push(sceneIndex);
+}
+
+/**
+ * Mark foreshadowing as resolved (paid off) at a given scene.
+ * @param {object} state
+ * @param {string} id
+ * @param {number} sceneIndex
+ */
+export function resolveForeshadowing(state, id, sceneIndex) {
+  if (!state.foreshadowing) return;
+  const f = state.foreshadowing.find(x => x.id === id);
+  if (f) f.resolvedInScene = sceneIndex;
+}
+
+/**
+ * Return foreshadowing elements that have not yet been resolved.
+ * @param {object} state
+ * @returns {object[]}
+ */
+export function getUnresolvedForeshadowing(state) {
+  if (!state.foreshadowing) return [];
+  return state.foreshadowing.filter(f => f.resolvedInScene === null);
+}
+
+// ---------------------------------------------------------------------------
 // Serialization
 // ---------------------------------------------------------------------------
 
@@ -304,6 +473,35 @@ export function toPromptContext(state) {
     lines.push(`- ${loc.name} [${loc.status}]`);
   }
   if (Object.keys(state.locations).length === 0) lines.push('(none)');
+
+  // Plot arcs
+  const openArcs = (state.plotArcs || []).filter(a => a.status !== 'resolved');
+  if (openArcs.length > 0) {
+    lines.push('');
+    lines.push('### Open Plot Threads');
+    for (const arc of openArcs) {
+      lines.push(`- [${arc.status}] ${arc.description}`);
+    }
+  }
+
+  // Relationships
+  if (state.relationships && state.relationships.length > 0) {
+    lines.push('');
+    lines.push('### Relationships');
+    for (const rel of state.relationships) {
+      lines.push(`- ${rel.char1} ↔ ${rel.char2}: ${rel.type} (${rel.description})`);
+    }
+  }
+
+  // Foreshadowing
+  const unresolved = (state.foreshadowing || []).filter(f => f.resolvedInScene === null);
+  if (unresolved.length > 0) {
+    lines.push('');
+    lines.push('### Active Foreshadowing');
+    for (const f of unresolved) {
+      lines.push(`- [${f.type}] ${f.description} (reinforced ${f.reinforcedInScenes.length}x)`);
+    }
+  }
 
   return lines.join('\n');
 }
