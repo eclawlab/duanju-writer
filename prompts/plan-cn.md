@@ -45,7 +45,9 @@
       "characterChanges": [{ "name": "名字", "enteringState": "平静", "learns": ["新信息"], "locationChange": "森林 -> 洞穴" }],
       "itemChanges": [{ "name": "道具", "change": "被爱丽丝获得" }],
       "revealIds": ["rev_1"],
-      "pacing": "蓄势"
+      "pacing": "蓄势",
+      "suspenseDensity": "compact|gradual|explosive",
+      "twistStrength": 3
     }
   ]
 }
@@ -58,4 +60,7 @@
 - 标记为"never_explicit"的揭示从不被直接陈述
 - 角色只能在其出现的场景中学习信息
 - 明确追踪位置变化
+- 每个场景必须有 suspenseDensity（compact/gradual/explosive）和 twistStrength（1-5）
+- 遵循"2紧1缓"模式：每3个场景应有2个高张力场景 + 1个低张力场景
+- twistStrength 4-5 应保留给重大揭示或高潮时刻
 - 所有内容必须用中文撰写

@@ -45,7 +45,9 @@ Return ONLY valid JSON (no markdown, no commentary):
       "characterChanges": [{ "name": "Name", "enteringState": "calm", "learns": ["new info"], "locationChange": "forest -> cave" }],
       "itemChanges": [{ "name": "Item", "change": "acquired by Alice" }],
       "revealIds": ["rev_1"],
-      "pacing": "building"
+      "pacing": "building",
+      "suspenseDensity": "compact|gradual|explosive",
+      "twistStrength": 3
     }
   ]
 }
@@ -58,3 +60,6 @@ Return ONLY valid JSON (no markdown, no commentary):
 - Revelations tagged "never_explicit" are never directly stated
 - Characters should only learn things when they're present in the scene
 - Track location changes explicitly
+- Each scene must have suspenseDensity (compact/gradual/explosive) and twistStrength (1-5)
+- Follow the "2 tense, 1 buffer" pattern: every 3 scenes should have 2 high-tension + 1 lower-tension
+- twistStrength 4-5 should be reserved for major reveals or climactic moments
