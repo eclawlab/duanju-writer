@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { callClaude } from './claude.js';
+import { callLLM } from './llm.js';
 import { getStyle, listStyles } from './styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
 import { compressScenes, buildHistoryContext } from './compressor.js';
@@ -60,7 +60,7 @@ async function repairJson(broken, label) {
     broken,
   ].join('\n');
 
-  const fixed = await callClaude(prompt);
+  const fixed = await callLLM(prompt, 'repair');
   const result = tryParseJson(fixed);
   if (result) return result;
 
@@ -115,7 +115,7 @@ export async function generateOutline(materials, options = {}) {
   const lang = options.lang || 'en';
   const style = options.style;
   const prompt = buildOutlinePrompt(materials, lang, style);
-  const raw = await callClaude(prompt);
+  const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }
 
@@ -202,7 +202,7 @@ export async function generateScene(outline, sceneIndex, scenePlan, totalScenes,
   const style = options.style;
   const narrativeContext = options.narrativeContext;
   const prompt = buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang, style, narrativeContext);
-  const raw = await callClaude(prompt);
+  const raw = await callLLM(prompt, 'scene');
   return await parseScene(raw);
 }
 
@@ -294,7 +294,7 @@ export function buildPickStylePrompt(materials) {
 
 export async function pickStyle(materials) {
   const prompt = buildPickStylePrompt(materials);
-  const raw = await callClaude(prompt);
+  const raw = await callLLM(prompt, 'style');
   const key = raw.trim().toLowerCase().replace(/[^a-z]/g, '');
   // Validate the key — fall back to null (default) if unrecognized
   try {
@@ -398,7 +398,7 @@ export async function generateStory(materials, options = {}) {
         log(`[scene ${globalSceneIndex + 1} failed] ${firstErr.message} — retrying with simplified prompt...`);
         try {
           const retryPrompt = buildRetryScenePrompt(plan_scene, lang);
-          const retryRaw = await callClaude(retryPrompt);
+          const retryRaw = await callLLM(retryPrompt, 'scene');
           scene = await parseScene(retryRaw);
         } catch (retryErr) {
           log(`[scene ${globalSceneIndex + 1} retry failed] ${retryErr.message} — using fallback scene`);

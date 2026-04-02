@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { callClaude } from './claude.js';
+import { callLLM } from './llm.js';
 import {
   createState,
   addCharacter,
@@ -127,6 +127,6 @@ export function initStateFromPlan(plan) {
 export async function generatePlan(outline, options = {}) {
   const lang = options.lang || 'en';
   const prompt = buildPlanPrompt(outline, lang);
-  const raw = await callClaude(prompt, options);
+  const raw = await callLLM(prompt, 'plan');
   return parsePlan(raw);
 }

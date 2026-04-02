@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { callClaude } from './claude.js';
+import { callLLM } from './llm.js';
 import { search } from './websearch.js';
 import { fetchPage } from './webfetch.js';
 
@@ -169,7 +169,7 @@ async function repairJson(broken) {
     '',
     broken,
   ].join('\n');
-  const fixed = await callClaude(prompt);
+  const fixed = await callLLM(prompt, 'repair');
   const result = tryParseJson(fixed);
   if (result) return result;
   const extracted = extractJsonObject(fixed);
@@ -196,6 +196,6 @@ export async function collect(history, options = {}) {
   const lang = options.lang || 'en';
   const webResearch = await gatherWebResearch(lang);
   const prompt = buildResearchPrompt(history, webResearch, lang);
-  const raw = await callClaude(prompt);
+  const raw = await callLLM(prompt, 'research');
   return await parseMaterials(raw);
 }

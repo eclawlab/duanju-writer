@@ -1,6 +1,4 @@
-import { execFile } from 'node:child_process';
-import { CLAUDE_TIMEOUT } from './constants.js';
-import { loadConfig } from './config.js';
+import { callLLM } from './llm.js';
 
 export function buildArgs(claudePath) {
   return {
@@ -23,34 +21,5 @@ export function parseClaudeOutput(stdout) {
 }
 
 export function callClaude(prompt, options = {}) {
-  const config = loadConfig();
-  const claudePath = options.claudePath || config.claudePath || 'claude';
-  const timeout = options.timeout || CLAUDE_TIMEOUT;
-  const { cmd, flags } = buildArgs(claudePath);
-
-  return new Promise((resolve, reject) => {
-    const child = execFile(cmd, flags, {
-      timeout,
-      maxBuffer: 10 * 1024 * 1024,
-      encoding: 'utf8',
-    }, (err, stdout, stderr) => {
-      if (err) {
-        if (err.killed) {
-          reject(new Error(`Claude CLI timed out after ${timeout}ms`));
-        } else {
-          reject(new Error(`Claude CLI failed: ${err.message}\n${stderr}`));
-        }
-        return;
-      }
-      try {
-        const result = parseClaudeOutput(stdout);
-        resolve(result);
-      } catch (parseErr) {
-        reject(parseErr);
-      }
-    });
-
-    child.stdin.write(prompt);
-    child.stdin.end();
-  });
+  return callLLM(prompt, options.role || 'scene');
 }

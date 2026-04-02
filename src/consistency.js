@@ -1,4 +1,4 @@
-import { callClaude } from './claude.js';
+import { callLLM } from './llm.js';
 
 // Strip narrator/character/player/choice tags from content before processing
 function stripTags(content) {
@@ -156,5 +156,5 @@ Rewrite the content to address the issues above while keeping the plot and chara
  */
 export async function rewriteForConsistency(content, issues, lang = 'en') {
   const prompt = buildRewritePrompt(content, issues, lang);
-  return callClaude(prompt);
+  return callLLM(prompt, 'consistency');
 }

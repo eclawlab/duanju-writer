@@ -1,4 +1,4 @@
-import { callClaude } from './claude.js';
+import { callLLM } from './llm.js';
 
 // ─── JSON extraction helpers (same pattern as writer.js / collector.js) ────────
 
@@ -93,7 +93,7 @@ export function parseCompressorOutput(raw) {
 
 export async function compressScenes(scenes, lang = 'en') {
   const prompt = buildCompressPrompt(scenes, lang);
-  const raw = await callClaude(prompt);
+  const raw = await callLLM(prompt, 'compress');
   return parseCompressorOutput(raw);
 }
 
