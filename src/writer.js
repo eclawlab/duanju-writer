@@ -7,6 +7,8 @@ import { generatePlan, initStateFromPlan } from './planner.js';
 import { compressScenes, buildHistoryContext } from './compressor.js';
 import { updateCharacter, updateItem, getAvailableRevelations, markRevealed, toPromptContext, validate } from './story-state.js';
 import { checkConsistency, rewriteForConsistency, updateMotifTracker } from './consistency.js';
+import { createStore } from './vectorstore.js';
+import { queryKnowledge } from './knowledge.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -148,6 +150,9 @@ export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, la
     }
     if (narrativeContext.pacing) {
       template += `\n\n## Pacing\n\nThis scene's pacing should be: ${narrativeContext.pacing}\n`;
+    }
+    if (narrativeContext.knowledgeContext) {
+      template += `\n\n## Reference Knowledge\n\nRelevant context from prior scenes and reference materials:\n${narrativeContext.knowledgeContext}\n`;
     }
     if (narrativeContext.consistencyNotes && narrativeContext.consistencyNotes.length > 0) {
       template += `\n\n## Writing Notes\n\nAvoid these patterns:\n${narrativeContext.consistencyNotes.map(n => '- ' + n).join('\n')}\n`;
@@ -380,6 +385,20 @@ export async function generateStory(materials, options = {}) {
       // Get plan scene data for events/pacing (flat array across all episodes)
       const planScene = plan.scenes[globalSceneIndex] || {};
 
+      // Query vector store for relevant prior context
+      let knowledgeContext = '';
+      if (options.vectorStore) {
+        try {
+          const query = plan_scene.summary + ' ' + (planScene.events || []).join(' ');
+          const results = await queryKnowledge(options.vectorStore, query, 3, globalSceneIndex);
+          if (results.length > 0) {
+            knowledgeContext = results.map(r => r.text).join('\n\n');
+          }
+        } catch (err) {
+          log(`[knowledge retrieval failed] ${err.message}`);
+        }
+      }
+
       // Generate scene with narrative context (with retry and fallback)
       let scene;
       try {
@@ -392,6 +411,7 @@ export async function generateStory(materials, options = {}) {
             revelations,
             events: planScene.events,
             pacing: planScene.pacing,
+            knowledgeContext,
           },
         });
       } catch (firstErr) {
@@ -403,6 +423,19 @@ export async function generateStory(materials, options = {}) {
         } catch (retryErr) {
           log(`[scene ${globalSceneIndex + 1} retry failed] ${retryErr.message} — using fallback scene`);
           scene = buildFallbackScene(plan_scene);
+        }
+      }
+
+      // Index scene in vector store for future retrieval
+      if (options.vectorStore) {
+        try {
+          options.vectorStore.add(
+            `scene_${globalSceneIndex}`,
+            scene.content,
+            { sceneIndex: globalSceneIndex, episodeTitle: ep.title }
+          );
+        } catch (err) {
+          log(`[scene indexing failed] ${err.message}`);
         }
       }
 

@@ -7,6 +7,7 @@ import { listJobs, updateJob, getJob } from './queue.js';
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
 import { generateStory } from './writer.js';
+import { createStore, getStoreDir } from './vectorstore.js';
 import { upload } from './uploader.js';
 
 export function getStatusTransitions() {
@@ -51,6 +52,11 @@ async function processJob(jobId, options = {}) {
       log('Resuming — materials already collected');
     }
 
+    // Initialize vector store for this job
+    const storePath = getStoreDir(jobId);
+    const vectorStore = createStore(storePath);
+    vectorStore.load(); // Load existing data if resuming
+
     // Step 2: Write (resume if story already saved)
     let story = loadArtifact(jobId, 'story.json');
     if (!story) {
@@ -59,11 +65,14 @@ async function processJob(jobId, options = {}) {
         lang,
         style,
         log,
+        vectorStore,
         onOutline: (outline) => saveArtifact(jobId, 'outline.json', outline),
         onPlan: (plan) => saveArtifact(jobId, 'plan.json', plan),
         onState: (state) => saveArtifact(jobId, 'state.json', state),
       });
       saveArtifact(jobId, 'story.json', story);
+      // Save vector store
+      try { vectorStore.save(); } catch {}
       log(`Generated "${story.title}" (${story.episodes[0]?.scenes?.length || 0} scenes)`);
     } else {
       log(`Resuming — story "${story.title}" already generated`);
