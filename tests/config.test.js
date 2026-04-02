@@ -85,4 +85,34 @@ describe('config', () => {
     const config = loadConfigFrom(file);
     assert.equal(config.aiApiKey, 'second');
   });
+
+  test('loadConfigFrom includes providers and roles defaults', async () => {
+    const { loadConfigFrom } = await import('../src/config.js');
+    const config = loadConfigFrom(join(TEST_DIR, 'nonexistent.json'));
+    assert.equal(config.providers.claude.type, 'claude-cli');
+    assert.equal(config.roles.scene, 'claude');
+  });
+
+  test('loadConfigFrom migrates legacy claudePath into providers', async () => {
+    const { loadConfigFrom, saveConfigTo } = await import('../src/config.js');
+    const file = join(TEST_DIR, 'config.json');
+    saveConfigTo(file, { claudePath: '/custom/claude' });
+    const config = loadConfigFrom(file);
+    assert.equal(config.providers.claude.claudePath, '/custom/claude');
+  });
+
+  test('user providers merge with defaults', async () => {
+    const { loadConfigFrom, saveConfigTo } = await import('../src/config.js');
+    const file = join(TEST_DIR, 'config.json');
+    saveConfigTo(file, {
+      providers: {
+        deepseek: { type: 'openai', apiKey: 'sk-test', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      },
+    });
+    const config = loadConfigFrom(file);
+    assert.ok(config.providers.claude, 'default claude provider should still exist');
+    assert.equal(config.providers.claude.type, 'claude-cli');
+    assert.ok(config.providers.deepseek, 'user-defined deepseek provider should exist');
+    assert.equal(config.providers.deepseek.type, 'openai');
+  });
 });
