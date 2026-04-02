@@ -60,6 +60,8 @@ async function processJob(jobId, options = {}) {
         style,
         log,
         onOutline: (outline) => saveArtifact(jobId, 'outline.json', outline),
+        onPlan: (plan) => saveArtifact(jobId, 'plan.json', plan),
+        onState: (state) => saveArtifact(jobId, 'state.json', state),
       });
       saveArtifact(jobId, 'story.json', story);
       log(`Generated "${story.title}" (${story.episodes[0]?.scenes?.length || 0} scenes)`);
