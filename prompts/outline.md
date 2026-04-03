@@ -59,6 +59,17 @@ Return ONLY valid JSON (no markdown, no commentary):
 }
 ```
 
+## Audio Novel Design Principles
+
+This story will be experienced as an AUDIO NOVEL — listeners hear it read aloud, they cannot skim or re-read. Design the story structure accordingly:
+
+- **Keep the cast focused** — 3-5 named characters maximum. Too many characters confuse listeners who can't glance at a character list.
+- **Give characters phonetically distinct names** — Avoid names that sound similar (e.g., "Mark" and "Clark", or "李明" and "黎鸣"). Listeners must distinguish characters by ear.
+- **Front-load context** — Each scene should establish WHO, WHERE, and WHAT early. Don't make listeners wait to understand what's happening.
+- **Design for momentum** — Audio listeners can't pause easily. Plan scenes that build steadily toward hooks, choices, or emotional peaks. Avoid scenes that are purely expository.
+- **Make choices clear and memorable** — Choice text will be read aloud. Keep options short (under 15 words) and meaningfully distinct so listeners can decide quickly.
+- **Avoid complex branching** — Listeners can't easily navigate back. Keep the story structure linear with branching choices that reconverge or lead to clear endings.
+
 ## Rules
 
 - Plan 1 episode with 5-8 scenes
@@ -67,3 +78,4 @@ Return ONLY valid JSON (no markdown, no commentary):
 - Every branch must eventually lead to a conclusion
 - Include 1-3 character customization questions
 - Make the story compelling with real tension and meaningful choices
+- Design every element for the LISTENING experience — clarity, momentum, and emotional impact

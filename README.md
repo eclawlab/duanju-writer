@@ -6,9 +6,9 @@
 
 **Research. Plan. Write. Publish.**
 
-An AI-powered daemon that researches trending fiction from 30 novel platforms worldwide, crafts branching interactive stories in 54 literary styles, and publishes them to the [AutoStory](https://autostory-web.fly.dev) platform — fully autonomously.
+An AI-powered daemon that researches trending fiction from 30 novel platforms worldwide, crafts branching interactive audio novels in 54 literary styles, and publishes them to the [AutoStory](https://autostory-web.fly.dev) platform — fully autonomously.
 
-一个 AI 驱动的自动化守护进程，从全球 30 个小说平台自动调研热门趋势、以 54 种文学风格撰写分支互动故事，并自动发布至 [AutoStory](https://autostory-web.fly.dev) 平台。
+一个 AI 驱动的自动化守护进程，从全球 30 个小说平台自动调研热门趋势、以 54 种文学风格撰写分支互动有声小说，并自动发布至 [AutoStory](https://autostory-web.fly.dev) 平台。
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -41,7 +41,7 @@ An AI-powered daemon that researches trending fiction from 30 novel platforms wo
 
 ## 项目简介
 
-**Story Writer** 是为 AutoStory 互动有声小说平台打造的全自动故事生成系统。读者在故事中做出选择，影响叙事走向 —— 而 Story Writer 负责生成这些充满分支与可能性的故事。
+**Story Writer** 是为 AutoStory 互动有声小说平台打造的全自动故事生成系统。听众通过语音收听故事并做出选择，影响叙事走向 —— 而 Story Writer 负责生成这些专为听觉体验优化的分支互动有声小说。
 
 从网络调研、素材收集、大纲规划、场景写作到最终发布，整个流程无需人工干预，完全自动化运行。
 
@@ -54,6 +54,9 @@ An AI-powered daemon that researches trending fiction from 30 novel platforms wo
 
 ### 🎭 54 种文学风格
 涵盖 9 个类别的作家风格 —— 从莫言的魔幻现实主义到托尔金的史诗奇幻，从刘慈欣的硬科幻到金庸的武侠世界。支持自动风格匹配或手动指定。
+
+### 🎧 音频小说优化
+所有内容专为语音合成（TTS）朗读体验优化。大纲阶段即融入音频设计原则（精简角色、读音可区分的名字、前置关键信息），场景写作遵循严格的听觉体验指南——明确说话者身份、控制节奏韵律、避免视觉化写法、为每个角色设计独特语音风格。
 
 ### 🌐 中英双语
 原生支持中文和英文内容生成，包含独立的提示词模板和调研源。中文模式优先采集中日韩平台内容。
@@ -94,9 +97,9 @@ An AI-powered daemon that researches trending fiction from 30 novel platforms wo
 | **网络调研** | 从 30 个平台随机选取 5 个进行搜索 + 5 个直接抓取，缓存 5 分钟 |
 | **素材收集** | AI 分析趋势数据，生成故事主题、角色原型、情节钩子 |
 | **雪花架构** | 四步结构化规划：核心种子 → 角色设计 → 世界构建 → 情节架构 |
-| **大纲生成** | 创建结构化大纲：标题、简介、类型、标签、分集场景计划 |
+| **大纲生成** | 创建结构化大纲：标题、简介、类型、标签、分集场景计划；融入音频小说设计原则 |
 | **状态规划** | 初始化角色/物品/地点状态，规划每场景事件、揭示、伏笔 |
-| **场景写作** | 逐场景写作，含叙述、对话、玩家选择；自动一致性检查和丰富化 |
+| **场景写作** | 逐场景写作，含叙述、对话、玩家选择；遵循音频小说写作指南，自动一致性检查和丰富化 |
 | **自动发布** | 将完成的故事上传至 AutoStory API 并自动发布 |
 
 ---
@@ -236,6 +239,16 @@ story_writer knowledge clear                                 # 清空知识库
 ---
 
 ## 叙事智能引擎 {#叙事智能引擎-1}
+
+### 音频小说设计
+
+故事从大纲阶段即为听觉体验而设计。大纲层面确保精简角色阵容（3-5人）、读音可区分的名字、前置关键信息和推进力驱动的节奏。场景层面的写作指南涵盖：
+
+- **听者清晰度** — 对话前明确说话者、频繁使用角色名、首次出场附带标志性描述
+- **节奏韵律** — 刻意变化句长、段落间隔创造呼吸停顿、每段2-4句
+- **避免视觉化写法** — 禁用"如上所示"、禁用同音名、禁用复杂嵌套长句、禁用括号补充
+- **声音氛围** — 环境音效描写、自然口语化对话、每个角色独特的语言风格
+- **TTS声音分配** — 每个角色分配特定的TTS声音（alloy, echo, fable, onyx, nova, shimmer）
 
 ### 场景类型特化
 
@@ -387,6 +400,9 @@ Draws inspiration from 30 top fiction platforms across 8 countries and 6 languag
 ### 🎭 54 Author Styles
 Spanning 9 categories — from Mo Yan's magical realism to Tolkien's epic fantasy, Liu Cixin's hard sci-fi to Jin Yong's wuxia. Auto-selects the best style for each story or lets you choose.
 
+### 🎧 Audio Novel Optimized
+Every story is crafted for the listening experience. Outline prompts enforce audio-first design principles (focused cast of 3-5 characters, phonetically distinct names, front-loaded context). Scene prompts follow strict audio novel writing guidelines — speaker identification before dialogue, rhythm and pacing for TTS, distinct speech patterns per character, and avoidance of audio-hostile patterns (visual references, complex nested sentences, ambiguous pronouns).
+
 ### 🌐 Bilingual (English & Chinese)
 First-class support for both languages with dedicated prompt templates and research sources. Chinese mode prioritizes CN/JP/KR platforms.
 
@@ -427,9 +443,9 @@ Every pipeline step (collect, write, upload) persists its artifacts. Interrupted
 | **Research** | Randomly samples 5 search queries + 5 fetch URLs from 30 global platforms; caches for 5 minutes |
 | **Collect** | AI analyzes trends and generates story topics, character archetypes, and plot hooks |
 | **Snowflake** | 4-step story architecture: core seed, character dynamics, world building, plot structure |
-| **Outline** | Creates a structured outline with title, synopsis, genres, tags, episodes, and scene plans |
+| **Outline** | Creates a structured outline with title, synopsis, genres, tags, episodes, and scene plans; applies audio novel design principles |
 | **Plan** | Initializes story state; plans characters, items, locations, revelations, events per scene |
-| **Write** | Writes each scene iteratively with full narrative intelligence (state tracking, knowledge retrieval, consistency checks, enrichment, compression) |
+| **Write** | Writes each scene iteratively with audio novel guidelines and full narrative intelligence (state tracking, knowledge retrieval, consistency checks, enrichment, compression) |
 | **Upload** | Posts the finished story to the AutoStory API and auto-publishes |
 
 Each step's output is saved to disk. If the process crashes, the next run resumes from the last completed step.
@@ -743,6 +759,16 @@ story_writer knowledge import ./plot-details.md --job <jobId>
 ---
 
 ## Narrative Intelligence
+
+### Audio Novel Design
+
+Stories are designed from the ground up for the listening experience. At the outline level, audio design principles ensure focused casts (3-5 characters), phonetically distinct names, front-loaded context, and momentum-driven pacing. At the scene level, comprehensive writing guidelines cover:
+
+- **Clarity** — Speaker identification before dialogue, frequent use of character names, memorable descriptors on first appearance
+- **Rhythm** — Varied sentence length, natural breathing pauses via paragraph breaks, 2-4 sentence blocks
+- **Audio-hostile avoidance** — No visual references ("see above"), no similar-sounding names, no complex nested sentences, no parenthetical asides
+- **Sound design** — Ambient sound descriptions, natural-sounding dialogue, distinct speech patterns per character
+- **TTS voice assignment** — Each character is assigned a specific TTS voice (alloy, echo, fable, onyx, nova, shimmer)
 
 ### Scene Type Specialization
 
