@@ -43,7 +43,7 @@ export function buildPlanPrompt(outline, lang = 'en') {
   const templateFile = lang === 'cn' ? 'plan-cn.md' : 'plan.md';
   const templatePath = join(__dirname, '..', 'prompts', templateFile);
   const template = readFileSync(templatePath, 'utf8');
-  return template.replace('{{outline}}', JSON.stringify(outline, null, 2));
+  return template.replace('{{outline}}', () => JSON.stringify(outline, null, 2));
 }
 
 // ─── Output parser ─────────────────────────────────────────────────────────────

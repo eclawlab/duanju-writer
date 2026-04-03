@@ -94,7 +94,7 @@ export function buildOutlinePrompt(materials, lang = 'en', styleKey) {
   if (style) {
     template += `\n\n## Writing Style\n\n${style.outline}\n`;
   }
-  return template.replace('{{materials}}', JSON.stringify(materials, null, 2));
+  return template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
 }
 
 export async function parseOutline(raw) {
@@ -185,24 +185,24 @@ export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, la
     })),
   };
 
-  template = template.replace('{{outline}}', JSON.stringify(outlineSummary, null, 2));
-  template = template.replace('{{sceneIndex}}', String(sceneIndex + 1));
-  template = template.replace('{{totalScenes}}', String(totalScenes));
-  template = template.replace('{{sceneSummary}}', scenePlan.summary);
-  template = template.replace('{{sceneType}}', scenePlan.sceneType || 'NARRATIVE');
+  template = template.replace('{{outline}}', () => JSON.stringify(outlineSummary, null, 2));
+  template = template.replace('{{sceneIndex}}', () => String(sceneIndex + 1));
+  template = template.replace('{{totalScenes}}', () => String(totalScenes));
+  template = template.replace('{{sceneSummary}}', () => scenePlan.summary);
+  template = template.replace('{{sceneType}}', () => scenePlan.sceneType || 'NARRATIVE');
 
   // Handle conditional sections
   if (scenePlan.hasChoices && scenePlan.choiceTexts) {
     template = template.replace('{{#hasChoices}}', '').replace('{{/hasChoices}}', '');
-    template = template.replace('{{choiceTexts}}', scenePlan.choiceTexts.join(', '));
+    template = template.replace('{{choiceTexts}}', () => scenePlan.choiceTexts.join(', '));
   } else {
     template = template.replace(/\{\{#hasChoices\}\}.*?\{\{\/hasChoices\}\}/gs, '');
   }
 
   if (scenePlan.isConclusion) {
     template = template.replace('{{#isConclusion}}', '').replace('{{/isConclusion}}', '');
-    template = template.replace('{{conclusionType}}', scenePlan.conclusionType || 'EPISODE_END');
-    template = template.replace('{{ending}}', scenePlan.ending || 'GOOD');
+    template = template.replace('{{conclusionType}}', () => scenePlan.conclusionType || 'EPISODE_END');
+    template = template.replace('{{ending}}', () => scenePlan.ending || 'GOOD');
   } else {
     template = template.replace(/\{\{#isConclusion\}\}.*?\{\{\/isConclusion\}\}/gs, '');
   }
@@ -315,7 +315,7 @@ export function buildPickStylePrompt(materials) {
 export async function pickStyle(materials) {
   const prompt = buildPickStylePrompt(materials);
   const raw = await callLLM(prompt, 'style');
-  const key = raw.trim().toLowerCase().replace(/[^a-z]/g, '');
+  const key = raw.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
   // Validate the key — fall back to null (default) if unrecognized
   try {
     getStyle(key);

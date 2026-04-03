@@ -9,52 +9,150 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROMPT_PATH = join(__dirname, '..', 'prompts', 'research.md');
 const PROMPT_PATH_CN = join(__dirname, '..', 'prompts', 'research-cn.md');
 
-const MAX_WEB_RESEARCH_LENGTH = 10_000;
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_WEB_RESEARCH_LENGTH = 15_000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (short TTL since sites are randomly picked)
 
 let webResearchCache = null;
 let webResearchCacheTime = 0;
 let webResearchCacheLang = null;
 
+function pickRandom(arr, n) {
+  const copy = [...arr];
+  const result = [];
+  while (result.length < n && copy.length > 0) {
+    const i = Math.floor(Math.random() * copy.length);
+    result.push(copy.splice(i, 1)[0]);
+  }
+  return result;
+}
+
 function getSearchQueries(lang) {
   const year = new Date().getFullYear();
-  const base = [
+
+  // Universal search queries (work for any language via DuckDuckGo)
+  const universal = [
     `Reddit WritingPrompts best this week`,
-    `Royal Road best rated fiction`,
+    `Royal Road best rated fiction ${year}`,
+    `Goodreads most popular novels ${year}`,
+    `Novel Updates top ranked series ${year}`,
   ];
+
+  let pool;
   if (lang === 'cn') {
-    return [
+    pool = [
+      // Chinese platforms
       `起点中文网 热门小说 ${year}`,
       `晋江文学城 热门推荐 ${year}`,
+      `纵横中文网 排行榜 ${year}`,
+      `书旗小说 热门排行 ${year}`,
+      `飞卢小说 热门 ${year}`,
       `最新网络小说排行榜 ${year}`,
-      ...base,
+      // Japanese platforms (popular in CN market)
+      `小説家になろう ランキング ${year}`,
+      `カクヨム 人気 ${year}`,
+      // Korean platforms
+      `카카오페이지 인기 웹소설 ${year}`,
+      `노벨피아 인기 소설 ${year}`,
+      ...universal,
+    ];
+  } else {
+    pool = [
+      // English platforms
+      `trending stories Wattpad ${year}`,
+      `popular web novels Webnovel ${year}`,
+      `Scribblehub top rated novels ${year}`,
+      `Tapas popular novels ${year}`,
+      `Archive of Our Own popular fanfics ${year}`,
+      `Dreame popular stories ${year}`,
+      `NovelToon trending stories ${year}`,
+      `Quotev popular stories ${year}`,
+      // Chinese platforms
+      `Qidian trending novels ${year}`,
+      `JJWXC trending novels ${year}`,
+      `Zongheng popular novels ${year}`,
+      // Japanese platforms
+      `Syosetu Narou top novels ${year}`,
+      `Kakuyomu popular web novels ${year}`,
+      `Alphapolis novel ranking ${year}`,
+      // Korean platforms
+      `KakaoPage popular web novels ${year}`,
+      `Novelpia top Korean web novels ${year}`,
+      `Joara best Korean novels ${year}`,
+      // Vietnamese / Indian / Other
+      `TruyenFull truyen hot ${year}`,
+      `Pratilipi trending stories India ${year}`,
+      ...universal,
     ];
   }
-  return [
-    `trending stories Wattpad ${year}`,
-    `popular web novels qidian ${year}`,
-    `jjwxc trending novels ${year}`,
-    ...base,
-  ];
+
+  return pickRandom(pool, 5);
 }
 
 function getFetchUrls(lang) {
-  const base = [
-    'https://www.wattpad.com/stories/trending',
-    'https://old.reddit.com/r/WritingPrompts/top/?t=week',
+  // Sites verified accessible via direct fetch
+  const global = [
+    'https://www.wattpad.com/stories/trending',                        // EN - Global fiction
+    'https://old.reddit.com/r/WritingPrompts/top/?t=week',             // EN - Writing prompts
+    'https://tapas.io/novels',                                          // EN - Serialized novels
+    'https://www.goodreads.com/list/show/1.Best_Books_Ever',           // EN - Book rankings
+    'https://www.quotev.com/stories',                                   // EN - User stories
+    'https://dreame.com/ranking',                                       // EN - Romance/fiction
+    'https://noveltoon.mobi/en/ranking/all',                            // EN - Global novels
+    'https://www.novelupdates.com/',                                    // EN - Asian novel translations
   ];
+
+  const chinese = [
+    'https://www.qidian.com/',                                          // CN - 起点中文网
+    'https://www.qidian.com/rank/',                                     // CN - Qidian rankings
+    'https://www.jjwxc.net/',                                           // CN - 晋江文学城
+    'https://www.zongheng.com/rank',                                    // CN - 纵横中文网
+    'https://www.shuqi.com/rank',                                       // CN - 书旗小说
+    'https://www.faloo.com/',                                           // CN - 飞卢小说
+  ];
+
+  const japanese = [
+    'https://www.syosetu.com/',                                         // JP - 小説家になろう
+    'https://yomou.syosetu.com/rank/list/type/daily_total/',            // JP - Syosetu daily ranking
+    'https://kakuyomu.jp/',                                             // JP - カクヨム
+    'https://www.alphapolis.co.jp/novel/ranking/annual',                // JP - アルファポリス
+    'https://www.pixiv.net/novel/ranking.php',                          // JP - Pixiv novels
+  ];
+
+  const korean = [
+    'https://page.kakao.com/menu/10011/screen/70',                     // KR - 카카오페이지
+    'https://novelpia.com/proc/ranking_list',                           // KR - 노벨피아
+    'https://www.joara.com/best',                                       // KR - 조아라
+    'https://ridibooks.com/category/books/2200',                        // KR - 리디북스
+  ];
+
+  const other = [
+    'https://truyenfull.vision/danh-sach/truyen-hot/',                  // VN - Vietnamese novels
+    'https://www.pratilipi.com/trending',                                // IN - Indian multi-language
+  ];
+
+  // Sites that may need browser-like access (included as best-effort)
+  const bestEffort = [
+    'https://www.royalroad.com/fictions/best-rated',                    // EN - Web fiction
+    'https://archiveofourown.org/works',                                // EN - Fanfiction (AO3)
+    'https://www.webnovel.com/ranking/novel',                           // EN - Qidian International
+    'https://www.scribblehub.com/series-ranking/',                      // EN - Web novels
+  ];
+
   if (lang === 'cn') {
+    // CN mode: pick 2 from Chinese, 1 from Japanese, 1 from Korean, 1 from the rest
     return [
-      'https://www.jjwxc.net/',
-      'https://www.qidian.com/',
-      'https://www.qidian.com/rank/',
-      ...base,
+      ...pickRandom(chinese, 2),
+      ...pickRandom(japanese, 1),
+      ...pickRandom(korean, 1),
+      ...pickRandom([...global, ...other, ...bestEffort], 1),
     ];
   }
+  // EN mode: pick 2 from global, 1 from Chinese, 1 from Japanese/Korean, 1 from best-effort/other
   return [
-    'https://www.jjwxc.net/',
-    'https://www.qidian.com/',
-    ...base,
+    ...pickRandom(global, 2),
+    ...pickRandom(chinese, 1),
+    ...pickRandom([...japanese, ...korean], 1),
+    ...pickRandom([...other, ...bestEffort], 1),
   ];
 }
 
@@ -133,8 +231,8 @@ export function buildResearchPrompt(history, webResearch, lang = 'en') {
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')
     : lang === 'cn' ? '（无——这是首次运行）' : '(none — this is the first run)';
   return template
-    .replace('{{webResearch}}', webResearch || (lang === 'cn' ? '（无网络研究数据）' : '(no web research available)'))
-    .replace('{{history}}', historyText);
+    .replace('{{webResearch}}', () => webResearch || (lang === 'cn' ? '（无网络研究数据）' : '(no web research available)'))
+    .replace('{{history}}', () => historyText);
 }
 
 function cleanRaw(raw) {

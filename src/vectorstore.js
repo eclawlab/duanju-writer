@@ -11,16 +11,44 @@ const STOPWORDS = new Set([
 ]);
 
 /**
- * Tokenize text: lowercase, strip punctuation, filter stopwords.
+ * Segment CJK text into bigrams (overlapping 2-char pairs).
+ * @param {string} text
+ * @returns {string[]}
+ */
+function segmentCJK(text) {
+  const tokens = [];
+  for (let i = 0; i < text.length - 1; i++) {
+    tokens.push(text.slice(i, i + 2));
+  }
+  if (text.length === 1) tokens.push(text);
+  return tokens;
+}
+
+const CJK_RE = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
+
+/**
+ * Tokenize text: handles both Latin (word-split) and CJK (bigram) text.
  * @param {string} text
  * @returns {string[]}
  */
 export function tokenize(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 0 && !STOPWORDS.has(t));
+  const lower = text.toLowerCase();
+  const tokens = [];
+
+  // Split on CJK vs non-CJK boundaries
+  const parts = lower.split(/([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+)/);
+  for (const part of parts) {
+    if (CJK_RE.test(part)) {
+      // CJK segment: use bigram tokenization
+      tokens.push(...segmentCJK(part));
+    } else {
+      // Latin/numeric segment: word-split, strip punctuation, filter stopwords
+      const words = part.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 0 && !STOPWORDS.has(t));
+      tokens.push(...words);
+    }
+  }
+
+  return tokens;
 }
 
 /**

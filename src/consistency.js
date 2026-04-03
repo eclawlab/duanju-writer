@@ -10,10 +10,12 @@ function stripTags(content) {
     .trim();
 }
 
-// Split text into sentences on .!? followed by space or end of string
+// Split text into sentences.
+// ASCII .!? require following whitespace or end-of-string (avoids splitting "Dr." or "3.5").
+// CJK 。！？ always split (they're unambiguous sentence terminators, never followed by space in Chinese).
 function splitSentences(text) {
   return text
-    .split(/[.!?](?:\s+|$)/)
+    .split(/[.!?](?:\s+|$)|[。！？]/)
     .map(s => s.trim())
     .filter(s => s.length > 0);
 }
@@ -99,8 +101,16 @@ export function checkMotifCooldown(content, tracker, sceneIndex) {
 
 /**
  * Extracts 4-5 word phrases from content and records them in tracker at sceneIndex.
+ * Prunes entries older than the cooldown window (3 scenes) to prevent unbounded growth.
  */
 export function updateMotifTracker(tracker, content, sceneIndex) {
+  // Prune entries outside the cooldown window
+  for (const phrase of Object.keys(tracker)) {
+    if (sceneIndex - tracker[phrase] >= 3) {
+      delete tracker[phrase];
+    }
+  }
+
   const cleaned = stripTags(content);
   const sentences = splitSentences(cleaned);
   for (const sentence of sentences) {

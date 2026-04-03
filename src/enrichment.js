@@ -12,13 +12,19 @@ function stripTags(text) {
 
 /**
  * Count words in text, excluding scene tags.
+ * For CJK text (no spaces between words), counts characters as words.
  * @param {string} text
  * @returns {number}
  */
 export function countWords(text) {
   if (!text) return 0;
   const stripped = stripTags(text);
-  return stripped.split(/\s+/).filter(w => w.length > 0).length;
+  // Count CJK characters individually (each ≈ 1 word)
+  const cjkCount = (stripped.match(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g) || []).length;
+  // Count Latin/other words by whitespace splitting (excluding CJK chars)
+  const nonCjk = stripped.replace(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g, '');
+  const latinCount = nonCjk.split(/\s+/).filter(w => w.length > 0).length;
+  return cjkCount + latinCount;
 }
 
 /**

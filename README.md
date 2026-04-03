@@ -6,13 +6,13 @@
 
 **Research. Plan. Write. Publish.**
 
-An AI-powered daemon that researches trending fiction, crafts branching interactive stories in 54 literary styles, and publishes them to the [AutoStory](https://autostory-web.fly.dev) platform — fully autonomously.
+An AI-powered daemon that researches trending fiction from 30 novel platforms worldwide, crafts branching interactive stories in 54 literary styles, and publishes them to the [AutoStory](https://autostory-web.fly.dev) platform — fully autonomously.
 
-一个 AI 驱动的自动化守护进程，自动调研热门小说趋势、以 54 种文学风格撰写分支互动故事，并自动发布至 [AutoStory](https://autostory-web.fly.dev) 平台。
+一个 AI 驱动的自动化守护进程，从全球 30 个小说平台自动调研热门趋势、以 54 种文学风格撰写分支互动故事，并自动发布至 [AutoStory](https://autostory-web.fly.dev) 平台。
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-121_passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-231_passing-brightgreen)](tests/)
 
 </div>
 
@@ -28,6 +28,7 @@ An AI-powered daemon that researches trending fiction, crafts branching interact
 - [生成流程](#生成流程)
 - [快速开始](#快速开始-1)
 - [命令行参考](#命令行参考-1)
+- [全球小说调研网络](#全球小说调研网络-1)
 - [写作风格库](#写作风格库-1)
 - [多模型供应商系统](#多模型供应商系统-1)
 - [知识库系统](#知识库系统-1)
@@ -48,48 +49,54 @@ An AI-powered daemon that researches trending fiction, crafts branching interact
 
 ## 核心特性
 
-### 🔬 智能调研
-自动抓取 Wattpad、Reddit、起点中文网、晋江文学城、Royal Road 等平台的热门小说趋势，确保生成的故事紧跟潮流。
+### 🌍 全球 30 站小说调研
+从 8 个国家/地区、6 种语言的 30 个顶级小说平台采集灵感。每次生成随机选取 5 个搜索查询和 5 个网站直接抓取，确保多样性。
 
 ### 🎭 54 种文学风格
-涵盖 10 个类别的作家风格 —— 从莫言的魔幻现实主义到托尔金的史诗奇幻，从刘慈欣的硬科幻到金庸的武侠世界。支持自动风格匹配或手动指定。
+涵盖 9 个类别的作家风格 —— 从莫言的魔幻现实主义到托尔金的史诗奇幻，从刘慈欣的硬科幻到金庸的武侠世界。支持自动风格匹配或手动指定。
 
 ### 🌐 中英双语
-原生支持中文和英文内容生成，包含独立的提示词模板和调研源。
+原生支持中文和英文内容生成，包含独立的提示词模板和调研源。中文模式优先采集中日韩平台内容。
 
 ### 🧠 叙事智能引擎
-- **故事状态追踪**：实时跟踪角色位置、物品归属、已揭示的秘密、情感变化
-- **一致性检查**：防止重复句式开头、过度使用相同短语、主题冷却机制
-- **场景压缩**：将已写场景压缩为叙事摘要，注入后续场景的上下文
-- **场景丰富化**：根据目标字数自动扩展场景，增添感官细节和氛围描写
-- **雪花写作法**：四步骤故事规划（核心种子→角色动态→世界构建→情节架构）
+- **故事状态追踪**：实时跟踪角色位置、物品归属、情感变化、关系网络、伏笔线索
+- **一致性检查**：防止重复句式开头、过度使用相同短语、主题冷却机制（支持中文标点分句）
+- **场景压缩**：将已写场景压缩为叙事摘要，维护全局故事概要，注入后续场景上下文
+- **场景丰富化**：根据目标字数自动扩展场景，增添感官细节和氛围描写（中文按字计数）
+- **雪花写作法**：四步骤故事规划（核心种子 → 角色动态 → 世界构建 → 情节架构）
+- **情节弧线**：跟踪未解决的情节线索、伏笔种植/强化/解决
+- **角色弧线**：五阶段角色发展模型（初始 → 触发 → 矛盾 → 转变 → 最终）
 
 ### 🔌 多模型供应商
-可插拔的 LLM 供应商架构。默认使用 Claude CLI，同时支持任何 OpenAI 兼容 API（如 Deepseek、Mistral 等）。可为不同任务角色分配不同模型。
+可插拔的 LLM 供应商架构。默认使用 Claude CLI，同时支持任何 OpenAI 兼容 API（如 Deepseek、Mistral 等）。可为 8 个不同任务角色分配不同模型。
 
 ### 📚 知识库
-内置 TF-IDF 向量检索引擎，支持导入世界观设定、参考资料等文档，在场景写作时自动注入相关上下文。
+内置 TF-IDF 向量检索引擎（支持中日韩文本双字符分词），支持导入世界观设定、参考资料等文档，在场景写作时自动注入相关上下文。
 
 ### ⚡ 零外部依赖
 仅依赖 `chalk` 一个 npm 包。无需数据库，纯文件系统存储，开箱即用。
+
+### 🔄 断点续传
+每个流程步骤（素材收集、故事生成、上传）的产物均持久化保存。任务中断后自动从断点恢复，避免重复工作和重复上传。
 
 ---
 
 ## 生成流程
 
 ```
-┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-│  网络调研  │──→│  素材收集  │──→│  大纲生成  │──→│  状态规划  │──→│  场景写作  │──→│  自动发布  │
-└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
+┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│  网络调研  │──→│  素材收集  │──→│  雪花架构  │──→│  大纲生成  │──→│  状态规划  │──→│  场景写作  │──→│  自动发布  │
+└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
 ```
 
 | 步骤 | 说明 |
 |------|------|
-| **网络调研** | 抓取多个平台的热门小说趋势，缓存 30 分钟 |
+| **网络调研** | 从 30 个平台随机选取 5 个进行搜索 + 5 个直接抓取，缓存 5 分钟 |
 | **素材收集** | AI 分析趋势数据，生成故事主题、角色原型、情节钩子 |
-| **大纲生成** | 创建结构化大纲：标题、简介、类型、标签、5-8 个场景 |
-| **状态规划** | 初始化故事状态，规划角色、物品、地点、每场景事件序列 |
-| **场景写作** | 逐场景写作，含叙述、对话、玩家选择，支持场景类型特化 |
+| **雪花架构** | 四步结构化规划：核心种子 → 角色设计 → 世界构建 → 情节架构 |
+| **大纲生成** | 创建结构化大纲：标题、简介、类型、标签、分集场景计划 |
+| **状态规划** | 初始化角色/物品/地点状态，规划每场景事件、揭示、伏笔 |
+| **场景写作** | 逐场景写作，含叙述、对话、玩家选择；自动一致性检查和丰富化 |
 | **自动发布** | 将完成的故事上传至 AutoStory API 并自动发布 |
 
 ---
@@ -194,9 +201,25 @@ story_writer knowledge clear                                 # 清空知识库
 
 ---
 
+## 全球小说调研网络 {#全球小说调研网络-1}
+
+从 30 个全球顶级小说平台采集创意灵感。每次运行随机选取 5 个搜索查询 + 5 个网站直接抓取，中文模式优先中日韩平台。
+
+| 地区 | 平台 |
+|------|------|
+| 🌐 英语/全球 | Wattpad, Reddit WritingPrompts, Tapas, Goodreads, Quotev, Dreame, NovelToon, Novel Updates |
+| 🇨🇳 中国 | 起点中文网, 晋江文学城, 纵横中文网, 书旗小说, 飞卢小说 |
+| 🇯🇵 日本 | 小説家になろう (Syosetu), カクヨム (Kakuyomu), アルファポリス (Alphapolis), Pixiv 小说 |
+| 🇰🇷 韩国 | 카카오페이지 (KakaoPage), 노벨피아 (Novelpia), 조아라 (Joara), 리디북스 (Ridibooks) |
+| 🇻🇳 越南 | TruyenFull |
+| 🇮🇳 印度 | Pratilipi（12 种印度语言） |
+| 🌐 最佳尝试 | Royal Road, AO3, Webnovel, Scribblehub |
+
+---
+
 ## 写作风格库 {#写作风格库-1}
 
-54 种预置作家风格，涵盖 10 个类别：
+54 种预置作家风格，涵盖 9 个类别：
 
 | 类别 | 数量 | 代表作家 |
 |------|------|----------|
@@ -209,55 +232,6 @@ story_writer knowledge clear                                 # 清空知识库
 | 英语悬疑 | 7 | 斯蒂芬·金、阿加莎·克里斯蒂、钱德勒、吉莉安·弗琳、爱伦·坡、洛夫克拉夫特 |
 | 英语言情 | 4 | 尼古拉斯·斯帕克斯、戴安娜·盖伯顿、彩虹·罗威尔、艾米莉·勃朗特 |
 | 英语网文 | 4 | Wildbow、pirateaba、ErraticErrata、Shirtaloon |
-
-### 添加自定义风格
-
-在 `styles/<category>/` 目录下创建 `.md` 文件即可，无需修改代码：
-
-```markdown
----
-name: 作者名
-category: 类别名
----
-
-## Outline
-大纲生成指导...
-
-## Scene
-场景写作指导...
-```
-
----
-
-## 多模型供应商系统 {#多模型供应商系统-1}
-
-可插拔架构，支持为不同创作环节指定不同 AI 模型：
-
-```
-┌─────────────┐
-│   角色分配    │
-├─────────────┤
-│ research → claude    │  调研：Claude
-│ outline  → claude    │  大纲：Claude
-│ scene    → deepseek  │  场景：Deepseek
-│ compress → claude    │  压缩：Claude
-└─────────────┘
-```
-
-**支持的供应商类型：**
-- `claude-cli` — 通过 Claude CLI 调用（默认）
-- `openai` — 任何 OpenAI 兼容 API（Deepseek、Mistral、本地模型等）
-
----
-
-## 知识库系统 {#知识库系统-1}
-
-内置的 TF-IDF 向量检索引擎，可导入参考资料并在写作时自动注入相关上下文：
-
-- 自动文档分块
-- 停用词过滤
-- 余弦相似度检索
-- 支持全局知识库和任务级知识库
 
 ---
 
@@ -277,18 +251,22 @@ category: 类别名
 ### 故事状态追踪
 
 实时维护完整的故事世界状态：
-- **角色**：位置、状态、已知信息、情绪
+- **角色**：位置、状态（存活/死亡）、已知信息、情绪、角色弧线（五阶段）
 - **物品**：位置、持有者、状态
-- **地点**：已探索/未探索、状态描述
-- **揭示**：已知秘密、可见性范围、揭示场景
+- **地点**：状态（正常/被毁）
+- **揭示**：可见性范围（公开/隐藏/延迟/永不明示）、揭示时机
+- **关系网络**：角色间的同盟/对手/恋人/导师/背叛关系
+- **情节弧线**：开放/升级/解决状态追踪
+- **伏笔**：种植、强化、解决三阶段管理
+- **矛盾检测**：死亡角色持有物品、存活角色在已毁地点等
 
 ### 雪花写作法
 
 四步骤结构化故事规划：
 1. **核心种子** — 一句话故事本质
-2. **角色动态** — 3-6 个角色的动机、弧线、秘密
-3. **世界构建** — 物理、社会、象征三个维度
-4. **情节架构** — 三幕式结构
+2. **角色动态** — 3-6 个角色的三层动机（表面/深层/灵魂）、弧线、秘密
+3. **世界构建** — 物理（地理、规则、漏洞）、社会（权力、禁忌）、象征三个维度
+4. **情节架构** — 三幕式结构（触发/对抗/解决）
 
 ---
 
@@ -317,34 +295,33 @@ category: 类别名
 story_writer/
 ├── bin/
 │   └── story_writer.js          # CLI 入口和命令路由
-├── src/
+├── src/                         # 24 个源文件
 │   ├── llm.js                   # 多供应商 LLM 抽象层
-│   ├── collector.js             # 网络调研 + 素材生成
+│   ├── collector.js             # 全球 30 站网络调研 + 素材生成
 │   ├── writer.js                # 大纲 + 场景生成编排器
-│   ├── planner.js               # 故事状态初始化
-│   ├── story-state.js           # 故事世界状态追踪
-│   ├── compressor.js            # 场景压缩（叙事上下文）
-│   ├── consistency.js           # 重复检测 + 主题冷却
-│   ├── enrichment.js            # 场景字数丰富化
-│   ├── scene-types.js           # 场景类型规则引擎
-│   ├── snowflake.js             # 雪花写作法
-│   ├── vectorstore.js           # TF-IDF 向量检索引擎
-│   ├── knowledge.js             # 知识库文档分块
-│   ├── styles.js                # 风格加载器
-│   ├── config.js                # 配置管理
-│   ├── queue.js                 # 任务队列
+│   ├── planner.js               # 故事状态初始化 + 场景规划
+│   ├── story-state.js           # 故事世界状态追踪（角色/物品/地点/关系/伏笔）
+│   ├── compressor.js            # 场景压缩 + 全局叙事摘要
+│   ├── consistency.js           # 重复检测 + 主题冷却（中英文）
+│   ├── enrichment.js            # 场景字数丰富化（中文按字计数）
+│   ├── scene-types.js           # 6 种场景类型规则引擎
+│   ├── snowflake.js             # 雪花写作法（四步骤）
+│   ├── vectorstore.js           # TF-IDF 向量检索（中日韩双字符分词）
+│   ├── knowledge.js             # 知识库文档分块 + 时间过滤检索
+│   ├── styles.js                # 54 种风格加载器
+│   ├── config.js                # 配置管理（含供应商/角色系统）
+│   ├── queue.js                 # 任务队列（创建/更新/查询）
 │   ├── scheduler.js             # 定时调度器
-│   ├── worker.js                # 任务处理管线
-│   ├── uploader.js              # API 上传
-│   ├── websearch.js             # DuckDuckGo 搜索
-│   ├── webfetch.js              # HTML 抓取解析
-│   ├── history.js               # 生成历史
+│   ├── worker.js                # 任务处理管线（断点续传 + 重试）
+│   ├── uploader.js              # AutoStory API 上传
+│   ├── websearch.js             # DuckDuckGo HTML 搜索
+│   ├── webfetch.js              # HTML 抓取 + 内容提取
+│   ├── history.js               # 生成历史（最近 50 条）
 │   ├── setup.js                 # 交互式配置向导
 │   └── constants.js             # 常量定义
-├── prompts/                     # 提示词模板（中英双语）
-├── styles/                      # 54 种写作风格定义
-├── tests/                       # 121 个单元测试
-└── docs/                        # 开发文档
+├── prompts/                     # 10 个提示词模板（中英双语）
+├── styles/                      # 54 种写作风格定义（9 个类别）
+└── tests/                       # 231 个单元测试
 ```
 
 ---
@@ -371,7 +348,7 @@ story_writer role set <role> <provider>
 ## 测试
 
 ```bash
-npm test    # 运行 121 个单元测试
+npm test    # 运行 231 个单元测试
 ```
 
 ---
@@ -390,6 +367,7 @@ MIT
 - [How It Works](#how-it-works)
 - [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
+- [Global Novel Research Network](#global-novel-research-network)
 - [Writing Styles](#writing-styles)
 - [Multi-Provider LLM System](#multi-provider-llm-system)
 - [Knowledge Base](#knowledge-base)
@@ -403,49 +381,58 @@ MIT
 
 ## Features
 
-### 🔬 Intelligent Research
-Automatically scrapes trending fiction from Wattpad, Reddit, Qidian, JJWXC, Royal Road, and more — ensuring stories stay fresh and relevant.
+### 🌍 30-Site Global Novel Research
+Draws inspiration from 30 top fiction platforms across 8 countries and 6 languages. Each generation randomly samples 5 search queries and 5 sites to scrape, ensuring diversity across runs.
 
 ### 🎭 54 Author Styles
-Spanning 10 categories — from Mo Yan's magical realism to Tolkien's epic fantasy, Liu Cixin's hard sci-fi to Jin Yong's wuxia. Auto-selects the best style or lets you choose.
+Spanning 9 categories — from Mo Yan's magical realism to Tolkien's epic fantasy, Liu Cixin's hard sci-fi to Jin Yong's wuxia. Auto-selects the best style for each story or lets you choose.
 
 ### 🌐 Bilingual (English & Chinese)
-First-class support for both languages with dedicated prompt templates and research sources.
+First-class support for both languages with dedicated prompt templates and research sources. Chinese mode prioritizes CN/JP/KR platforms.
 
 ### 🧠 Narrative Intelligence
-- **Story State Tracking** — Characters, items, locations, revelations, and emotional arcs
-- **Consistency Checking** — Prevents repetitive openers, overused phrases, and motif fatigue
-- **Scene Compression** — Summarizes prior scenes for narrative context injection
-- **Scene Enrichment** — Expands scenes to hit word-count targets with sensory detail
-- **Snowflake Method** — 4-step structured story planning
+- **Story State Tracking** — Characters, items, locations, revelations, relationships, plot arcs, foreshadowing
+- **Consistency Checking** — Detects repetitive openers, overused phrases, and motif fatigue (supports both English and Chinese punctuation)
+- **Scene Compression** — Summarizes prior scenes and maintains a rolling global narrative summary
+- **Scene Enrichment** — Expands scenes to word-count targets with sensory detail (CJK characters counted individually)
+- **Snowflake Method** — 4-step structured story planning (seed, characters, world, plot)
+- **Plot Arcs** — Tracks open/escalating/resolved story threads
+- **Character Arcs** — 5-stage development model (initial, trigger, dissonance, transformation, final)
+- **Contradiction Detection** — Dead character holding items, alive character at destroyed location, etc.
 
 ### 🔌 Multi-Provider LLMs
-Pluggable provider architecture. Ships with Claude CLI support; add any OpenAI-compatible API (Deepseek, Mistral, local models). Assign different models to different creative roles.
+Pluggable provider architecture. Ships with Claude CLI; add any OpenAI-compatible API (Deepseek, Mistral, local models). Assign different models to 8 creative roles.
 
 ### 📚 Knowledge Base
-Built-in TF-IDF vector store. Import worldbuilding docs, reference materials, or plot outlines — relevant context is automatically injected during scene writing.
+Built-in TF-IDF vector store with CJK bigram tokenization. Import worldbuilding docs — relevant context is automatically injected during scene writing with temporal filtering.
 
 ### ⚡ Minimal Dependencies
 One npm dependency (`chalk`). No database. Pure file-system storage. Runs anywhere Node.js does.
+
+### 🔄 Resumable Pipeline
+Every pipeline step (collect, write, upload) persists its artifacts. Interrupted jobs resume from the last checkpoint — no duplicate work or duplicate uploads.
 
 ---
 
 ## How It Works
 
 ```
-┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-│ Research  │──→│ Collect  │──→│ Outline  │──→│  Plan    │──→│  Write   │──→│ Upload   │
-└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
+┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│ Research  │──→│ Collect  │──→│Snowflake │──→│ Outline  │──→│  Plan    │──→│  Write   │──→│ Upload   │
+└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
 ```
 
 | Step | What Happens |
 |------|-------------|
-| **Research** | Scrapes trending fiction from multiple platforms; caches results for 30 minutes |
+| **Research** | Randomly samples 5 search queries + 5 fetch URLs from 30 global platforms; caches for 5 minutes |
 | **Collect** | AI analyzes trends and generates story topics, character archetypes, and plot hooks |
-| **Outline** | Creates a structured outline with title, synopsis, genres, tags, and 5–8 scenes |
-| **Plan** | Initializes story state; plans characters, items, locations, and per-scene event sequences |
-| **Write** | Writes each scene iteratively with narration, dialogue, and player choices; applies scene-type specialization, consistency checks, and enrichment |
+| **Snowflake** | 4-step story architecture: core seed, character dynamics, world building, plot structure |
+| **Outline** | Creates a structured outline with title, synopsis, genres, tags, episodes, and scene plans |
+| **Plan** | Initializes story state; plans characters, items, locations, revelations, events per scene |
+| **Write** | Writes each scene iteratively with full narrative intelligence (state tracking, knowledge retrieval, consistency checks, enrichment, compression) |
 | **Upload** | Posts the finished story to the AutoStory API and auto-publishes |
+
+Each step's output is saved to disk. If the process crashes, the next run resumes from the last completed step.
 
 ---
 
@@ -549,9 +536,30 @@ story_writer knowledge clear                                 # Clear knowledge b
 
 ---
 
+## Global Novel Research Network
+
+Draws inspiration from 30 top novel platforms worldwide. Each run randomly samples 5 search queries and 5 fetch URLs, with language-aware selection:
+
+- **EN mode**: 2 global + 1 Chinese + 1 Japanese/Korean + 1 other
+- **CN mode**: 2 Chinese + 1 Japanese + 1 Korean + 1 global
+
+| Region | Platforms |
+|--------|-----------|
+| 🌐 English / Global | Wattpad, Reddit WritingPrompts, Tapas, Goodreads, Quotev, Dreame, NovelToon, Novel Updates |
+| 🇨🇳 China | Qidian (起点中文网), JJWXC (晋江文学城), Zongheng (纵横中文网), Shuqi (书旗小说), Faloo (飞卢小说) |
+| 🇯🇵 Japan | Syosetu (小説家になろう), Kakuyomu (カクヨム), Alphapolis (アルファポリス), Pixiv Novels |
+| 🇰🇷 Korea | KakaoPage (카카오페이지), Novelpia (노벨피아), Joara (조아라), Ridibooks (리디북스) |
+| 🇻🇳 Vietnam | TruyenFull |
+| 🇮🇳 India | Pratilipi (12 Indian languages) |
+| 🌐 Best-effort | Royal Road, Archive of Our Own (AO3), Webnovel, Scribblehub |
+
+All fetches use `Promise.allSettled` — failed sites are gracefully skipped without blocking the pipeline.
+
+---
+
 ## Writing Styles
 
-54 pre-configured author styles across 10 categories. When style is set to `default`, the system auto-selects the best fit for each story.
+54 pre-configured author styles across 9 categories. When style is set to `default`, the system auto-selects the best fit for each story.
 
 | Category | Count | Notable Authors |
 |----------|-------|----------------|
@@ -686,14 +694,16 @@ A pluggable architecture that lets you assign different AI models to different c
 ```
 ┌─────────────────────────────────────┐
 │          Role Assignments           │
-├──────────┬──────────────────────────┤
-│ research │ claude                   │
-│ outline  │ claude                   │
-│ scene    │ deepseek                 │
-│ compress │ claude                   │
-│ style    │ claude                   │
-│ repair   │ claude                   │
-└──────────┴──────────────────────────┘
+├─────────────┬───────────────────────┤
+│ research    │ claude                │
+│ outline     │ claude                │
+│ plan        │ claude                │
+│ scene       │ deepseek              │
+│ compress    │ claude                │
+│ consistency │ claude                │
+│ style       │ claude                │
+│ repair      │ claude                │
+└─────────────┴───────────────────────┘
 ```
 
 **Supported provider types:**
@@ -702,6 +712,8 @@ A pluggable architecture that lets you assign different AI models to different c
 
 **Available roles:** `research`, `outline`, `plan`, `scene`, `compress`, `consistency`, `style`, `repair`
 
+Each provider is cached after first use. Provider instances are automatically created from configuration.
+
 ---
 
 ## Knowledge Base
@@ -709,16 +721,19 @@ A pluggable architecture that lets you assign different AI models to different c
 Import reference documents into a built-in TF-IDF vector store. Relevant chunks are automatically retrieved and injected into scene-writing prompts.
 
 **Capabilities:**
-- Automatic document chunking
-- Stopword filtering and tokenization
+- Automatic document chunking (paragraph and sentence boundaries)
+- CJK bigram tokenization alongside Latin word splitting
+- Stopword filtering
 - Cosine similarity search
+- Temporal filtering (excludes scenes within 3 of the current scene)
 - Per-job and global knowledge bases
+- Persistent storage (JSON files)
 
 ```bash
 # Import worldbuilding docs
 story_writer knowledge import ./worldbuilding.txt
 
-# Import a full directory
+# Import a full directory (.txt and .md files)
 story_writer knowledge import ./reference-docs/
 
 # Target a specific job
@@ -731,7 +746,7 @@ story_writer knowledge import ./plot-details.md --job <jobId>
 
 ### Scene Type Specialization
 
-Each scene is assigned a type that shapes how it's written:
+Each scene is assigned a type that shapes how it's written, with dedicated rules for both English and Chinese:
 
 | Type | Purpose |
 |------|---------|
@@ -745,26 +760,46 @@ Each scene is assigned a type that shapes how it's written:
 ### Story State Tracker
 
 Maintains a live world model throughout generation:
-- **Characters** — position, status, knowledge, emotional state
-- **Items** — location, holder, status
-- **Locations** — exploration state, descriptions
-- **Revelations** — secrets revealed, visibility scope, scene of origin
-- **Relationships, plot arcs, foreshadowing**
+
+- **Characters** — Position, status (alive/dead), knowledge, emotional state, 5-stage arc
+- **Items** — Location, holder, status (active/destroyed/used)
+- **Locations** — Status (normal/destroyed)
+- **Revelations** — Visibility scope (public/hidden/delayed/never_explicit), reveal timing
+- **Relationships** — Ally, rival, lover, mentor, betrayer, neutral
+- **Plot Arcs** — Open/escalating/resolved story threads with scene tracking
+- **Foreshadowing** — Plant, reinforce (with scene list), resolve lifecycle
+- **Validation** — Detects contradictions (dead character holding items, alive character at destroyed location, active item at destroyed location)
 
 ### Consistency Engine
 
 Prevents mechanical, repetitive writing:
 - Flags repetitive sentence openers (3+ occurrences)
-- Detects overused phrases (3–5 word sequences appearing 3+ times)
-- Enforces motif cooldowns (no reuse within 3 scenes)
+- Detects overused phrases (3-5 word sequences appearing 3+ times)
+- Enforces motif cooldowns (no reuse within 3 scenes; tracker auto-prunes)
+- Full support for Chinese punctuation (`。！？`) for sentence splitting
+- Automatic LLM-powered rewriting when issues are detected
+
+### Scene Enrichment
+
+When `targetWordsPerScene` is set in config:
+- Counts words using CJK-aware logic (each Chinese/Japanese/Korean character = 1 word)
+- Scenes below 80% of target are automatically expanded via LLM
+- Preserves all scene tags, plot events, and character actions
+
+### Scene Compression
+
+Maintains narrative continuity across scenes:
+- Each scene is compressed into a structured summary (character actions, plot progress, emotional arc, state changes)
+- A rolling global narrative summary (max 2000 chars) is maintained and injected into every scene prompt
+- Prior scene context is formatted and included in the "Story So Far" section
 
 ### Snowflake Method
 
-Structured 4-step story planning:
+Structured 4-step story planning that enriches the outline:
 1. **Core Seed** — The one-sentence essence of the story
-2. **Character Dynamics** — 3–6 characters with motivations, arcs, and secrets
-3. **World Building** — Physical, social, and symbolic dimensions
-4. **Plot Architecture** — Three-act structure with turning points
+2. **Character Dynamics** — 3-6 characters with triple-layer motivations (surface/deep/soul), 5-stage arcs, and secrets
+3. **World Building** — Physical (geography, rules, loopholes), social (power structures, taboos), symbolic (visual motifs, climate-mood mapping)
+4. **Plot Architecture** — Three-act structure: trigger (catalyst, reaction, stakes), confrontation (escalation, false victory, darkest moment), resolution (cost, twist, epilogue)
 
 ---
 
@@ -784,8 +819,8 @@ Stored at `~/.story_writer/config.json`.
 | `maxConcurrentJobs` | `1` | Max parallel jobs |
 | `publishOnUpload` | `true` | Auto-publish after upload |
 | `targetWordsPerScene` | `0` | Target words per scene (0 = disabled) |
-| `providers` | `{...}` | LLM provider configurations |
-| `roles` | `{...}` | Role-to-provider mappings |
+| `providers` | `{claude: {type: 'claude-cli'}}` | LLM provider configurations |
+| `roles` | `{research: 'claude', ...}` | Role-to-provider mappings |
 
 ---
 
@@ -795,34 +830,33 @@ Stored at `~/.story_writer/config.json`.
 story_writer/
 ├── bin/
 │   └── story_writer.js          # CLI entry point and command router
-├── src/
-│   ├── llm.js                   # Multi-provider LLM abstraction
-│   ├── collector.js             # Web research + material generation
+├── src/                         # 24 source files
+│   ├── llm.js                   # Multi-provider LLM abstraction (OpenAI + Claude CLI)
+│   ├── collector.js             # 30-site global web research + material generation
 │   ├── writer.js                # Outline + scene generation orchestrator
-│   ├── planner.js               # Story state initialization from outline
-│   ├── story-state.js           # World state tracker (characters, items, locations)
-│   ├── compressor.js            # Scene compression for narrative context
-│   ├── consistency.js           # Repetition detection + motif tracking
-│   ├── enrichment.js            # Scene word-count enrichment
-│   ├── scene-types.js           # Scene type rules engine
-│   ├── snowflake.js             # Snowflake method story planning
-│   ├── vectorstore.js           # In-memory TF-IDF vector store
-│   ├── knowledge.js             # Knowledge base document chunking
-│   ├── styles.js                # Writing style loader (.md files)
-│   ├── config.js                # Config loading/saving with provider system
-│   ├── queue.js                 # Job queue management
+│   ├── planner.js               # Story state initialization + scene planning
+│   ├── story-state.js           # World state tracker (characters/items/locations/arcs/foreshadowing)
+│   ├── compressor.js            # Scene compression + global narrative summary
+│   ├── consistency.js           # Repetition detection + motif cooldown (EN + CJK)
+│   ├── enrichment.js            # Scene word-count enrichment (CJK-aware counting)
+│   ├── scene-types.js           # 6 scene type rules engine (EN + CN)
+│   ├── snowflake.js             # Snowflake method (4-step story architecture)
+│   ├── vectorstore.js           # TF-IDF vector store (CJK bigram tokenization)
+│   ├── knowledge.js             # Knowledge base document chunking + temporal retrieval
+│   ├── styles.js                # 54 writing style loader
+│   ├── config.js                # Config management with provider/role system
+│   ├── queue.js                 # Job queue (create/update/query/busy detection)
 │   ├── scheduler.js             # Timed job creation daemon
-│   ├── worker.js                # Job processor pipeline with retry logic
+│   ├── worker.js                # Job processor pipeline (resume + retry)
 │   ├── uploader.js              # AutoStory API upload
-│   ├── websearch.js             # DuckDuckGo search scraper
-│   ├── webfetch.js              # HTML page fetcher + parser
-│   ├── history.js               # Generation history tracking
+│   ├── websearch.js             # DuckDuckGo HTML search scraper
+│   ├── webfetch.js              # HTML page fetcher + content extractor
+│   ├── history.js               # Generation history (last 50 entries)
 │   ├── setup.js                 # Interactive setup wizard
 │   └── constants.js             # Shared constants and paths
-├── prompts/                     # Prompt templates (English + Chinese)
-├── styles/                      # 54 writing style definitions (.md)
-├── tests/                       # 121 unit tests
-└── docs/                        # Development specs
+├── prompts/                     # 10 prompt templates (English + Chinese)
+├── styles/                      # 54 writing style definitions (9 categories)
+└── tests/                       # 231 unit tests
 ```
 
 ---
@@ -838,18 +872,25 @@ story_writer role set scene mymodel
 
 ### Add a Writing Style
 
-Drop a `.md` file in `styles/<category>/` with `name`, `category` frontmatter and `## Outline` / `## Scene` sections. Available immediately.
+Drop a `.md` file in `styles/<category>/` with `name`, `category` frontmatter and `## Outline` / `## Scene` sections. Available immediately — no code changes or restarts needed.
 
 ### Modify Prompts
 
-Edit templates in `prompts/`. Supported variables: `{{materials}}`, `{{outline}}`, `{{webResearch}}`, `{{history}}`, and more.
+Edit templates in `prompts/`. Available templates:
+- `research.md` / `research-cn.md` — Research material collection
+- `outline.md` / `outline-cn.md` — Story outline generation
+- `plan.md` / `plan-cn.md` — Scene planning
+- `scenes.md` / `scenes-cn.md` — Scene writing
+- `snowflake.md` / `snowflake-cn.md` — Snowflake method architecture
+
+Supported variables: `{{materials}}`, `{{outline}}`, `{{webResearch}}`, `{{history}}`, `{{sceneIndex}}`, `{{totalScenes}}`, `{{sceneSummary}}`, `{{sceneType}}`, and more.
 
 ---
 
 ## Testing
 
 ```bash
-npm test    # Runs 121 unit tests via Node.js native test runner
+npm test    # Runs 231 unit tests via Node.js native test runner
 ```
 
 ---

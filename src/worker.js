@@ -78,12 +78,17 @@ async function processJob(jobId, options = {}) {
       log(`Resuming — story "${story.title}" already generated`);
     }
 
-    // Step 3: Upload
-    updateJob(jobId, { status: 'uploading' });
-    log('Uploading to autostory...');
-    const result = await upload(story);
-    saveArtifact(jobId, 'result.json', result);
-    log(`Uploaded! Story ID: ${result.storyId}`);
+    // Step 3: Upload (resume if result already saved)
+    let result = loadArtifact(jobId, 'result.json');
+    if (!result) {
+      updateJob(jobId, { status: 'uploading' });
+      log('Uploading to autostory...');
+      result = await upload(story);
+      saveArtifact(jobId, 'result.json', result);
+      log(`Uploaded! Story ID: ${result.storyId}`);
+    } else {
+      log(`Resuming — already uploaded (Story ID: ${result.storyId})`);
+    }
 
     // Done
     updateJob(jobId, {

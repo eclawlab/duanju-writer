@@ -31,15 +31,15 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
   let template = readFileSync(templateFile, 'utf8');
   const part = PARTS[partIndex];
 
-  template = template.replace('{{materials}}', JSON.stringify(materials, null, 2));
-  template = template.replace('{{partNumber}}', String(partIndex + 1));
-  template = template.replace('{{partTitle}}', part.title);
+  template = template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
+  template = template.replace('{{partNumber}}', () => String(partIndex + 1));
+  template = template.replace('{{partTitle}}', () => part.title);
 
   let instructions = part.instructions;
   if (priorParts.length > 0) {
     instructions = 'Previous parts for context:\n' + JSON.stringify(priorParts, null, 2) + '\n\n' + instructions;
   }
-  template = template.replace('{{partInstructions}}', instructions);
+  template = template.replace('{{partInstructions}}', () => instructions);
 
   return template;
 }
