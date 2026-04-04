@@ -2,9 +2,36 @@ import { loadConfig } from './config.js';
 
 export function buildRequest(story, config) {
   const url = `${config.autostoryUrl}/api/ai/stories`;
-  const body = { ...story };
+  // Deep-copy episodes to avoid mutating the original story object
+  const body = {
+    ...story,
+    episodes: story.episodes?.map(ep => ({
+      ...ep,
+      scenes: ep.scenes?.map(scene => ({ ...scene })),
+    })),
+  };
   if (config.publishOnUpload !== undefined) {
     body.publish = config.publishOnUpload;
+  }
+
+  // Transform episodeChoices on last scenes into choices with nextEpisodeIndex
+  // so the server can resolve cross-episode scene references
+  if (body.episodes) {
+    for (const ep of body.episodes) {
+      if (ep.scenes) {
+        for (const scene of ep.scenes) {
+          if (scene.episodeChoices && scene.episodeChoices.length > 0) {
+            // Convert episode-level choices to scene choices with nextEpisodeIndex
+            scene.choices = scene.episodeChoices.map(c => ({
+              text: c.text,
+              nextEpisodeIndex: c.nextEpisodeIndex,
+              nextSceneIndex: 0, // always point to first scene of target episode
+            }));
+            delete scene.episodeChoices;
+          }
+        }
+      }
+    }
   }
 
   return {

@@ -30,8 +30,12 @@ describe('writer', () => {
       synopsis: 'A test',
       genres: ['test'],
       episodes: [{
+        episodeIndex: 0,
         title: 'Ep1',
+        isEnding: true,
+        ending: 'GOOD',
         scenePlan: [{ summary: 'Scene 1', sceneType: 'NARRATIVE' }],
+        episodeChoices: [],
       }],
     };
     const result = await parseOutline(JSON.stringify(valid));
@@ -42,7 +46,7 @@ describe('writer', () => {
   test('parseOutline throws on missing title', async () => {
     const { parseOutline } = await import('../src/writer.js');
     await assert.rejects(
-      () => parseOutline(JSON.stringify({ synopsis: 'A test', episodes: [{ title: 'E', scenePlan: [{ summary: 's' }] }] })),
+      () => parseOutline(JSON.stringify({ synopsis: 'A test', episodes: [{ episodeIndex: 0, title: 'E', scenePlan: [{ summary: 's' }] }] })),
       /Missing required field: title/
     );
   });
@@ -50,7 +54,7 @@ describe('writer', () => {
   test('parseOutline throws on missing synopsis', async () => {
     const { parseOutline } = await import('../src/writer.js');
     await assert.rejects(
-      () => parseOutline(JSON.stringify({ title: 'T', episodes: [{ title: 'E', scenePlan: [{ summary: 's' }] }] })),
+      () => parseOutline(JSON.stringify({ title: 'T', episodes: [{ episodeIndex: 0, title: 'E', scenePlan: [{ summary: 's' }] }] })),
       /Missing required field: synopsis/
     );
   });
@@ -63,14 +67,101 @@ describe('writer', () => {
     );
   });
 
+  test('parseOutline throws on missing episodeIndex', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    await assert.rejects(
+      () => parseOutline(JSON.stringify({
+        title: 'T', synopsis: 'S',
+        episodes: [{ title: 'Ep1', scenePlan: [{ summary: 's' }] }],
+      })),
+      /missing episodeIndex/
+    );
+  });
+
   test('parseOutline throws on empty scenePlan', async () => {
     const { parseOutline } = await import('../src/writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
-        episodes: [{ title: 'Ep1', scenePlan: [] }],
+        episodes: [{ episodeIndex: 0, title: 'Ep1', scenePlan: [] }],
       })),
       /at least 1 scene in scenePlan/
+    );
+  });
+
+  test('parseOutline rejects duplicate episodeIndex', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    await assert.rejects(
+      () => parseOutline(JSON.stringify({
+        title: 'T', synopsis: 'S',
+        episodes: [
+          { episodeIndex: 0, title: 'Ep1', isEnding: true, scenePlan: [{ summary: 's' }], episodeChoices: [] },
+          { episodeIndex: 0, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }], episodeChoices: [] },
+        ],
+      })),
+      /Duplicate episodeIndex/
+    );
+  });
+
+  test('parseOutline validates episodeChoices references', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    await assert.rejects(
+      () => parseOutline(JSON.stringify({
+        title: 'T', synopsis: 'S',
+        episodes: [
+          { episodeIndex: 0, title: 'Ep1', scenePlan: [{ summary: 's' }],
+            episodeChoices: [{ text: 'A', nextEpisodeIndex: 99 }, { text: 'B', nextEpisodeIndex: 99 }, { text: 'C', nextEpisodeIndex: 99 }] },
+        ],
+      })),
+      /references invalid episodeIndex/
+    );
+  });
+
+  test('parseOutline rejects too few episodeChoices', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    await assert.rejects(
+      () => parseOutline(JSON.stringify({
+        title: 'T', synopsis: 'S',
+        episodes: [
+          { episodeIndex: 0, title: 'Ep1', scenePlan: [{ summary: 's' }],
+            episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }] },
+          { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+        ],
+      })),
+      /must have at least 3 episodeChoices/
+    );
+  });
+
+  test('parseOutline accepts valid branching structure', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    const result = await parseOutline(JSON.stringify({
+      title: 'Branching', synopsis: 'Test',
+      episodes: [
+        { episodeIndex: 0, title: 'Start', scenePlan: [{ summary: 's' }],
+          episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }, { text: 'B', nextEpisodeIndex: 2 }, { text: 'C', nextEpisodeIndex: 3 }] },
+        { episodeIndex: 1, title: 'Path A', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+        { episodeIndex: 2, title: 'Path B', isEnding: true, ending: 'BAD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+        { episodeIndex: 3, title: 'Path C', isEnding: true, ending: 'NEUTRAL', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+      ],
+    }));
+    assert.equal(result.episodes.length, 4);
+    assert.equal(result.episodes[0].episodeChoices.length, 3);
+  });
+
+  test('parseOutline rejects cycles in episode graph', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    await assert.rejects(
+      () => parseOutline(JSON.stringify({
+        title: 'T', synopsis: 'S',
+        episodes: [
+          { episodeIndex: 0, title: 'A', scenePlan: [{ summary: 's' }],
+            episodeChoices: [{ text: 'X', nextEpisodeIndex: 1 }, { text: 'Y', nextEpisodeIndex: 2 }, { text: 'Z', nextEpisodeIndex: 1 }] },
+          { episodeIndex: 1, title: 'B', scenePlan: [{ summary: 's' }],
+            episodeChoices: [{ text: 'X', nextEpisodeIndex: 0 }, { text: 'Y', nextEpisodeIndex: 2 }, { text: 'Z', nextEpisodeIndex: 2 }] },
+          { episodeIndex: 2, title: 'C', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+        ],
+      })),
+      /cycle/i
     );
   });
 
@@ -79,7 +170,7 @@ describe('writer', () => {
     const outline = {
       title: 'Fenced',
       synopsis: 'Test',
-      episodes: [{ title: 'E1', scenePlan: [{ summary: 's' }] }],
+      episodes: [{ episodeIndex: 0, title: 'E1', isEnding: true, scenePlan: [{ summary: 's' }], episodeChoices: [] }],
     };
     const wrapped = '```json\n' + JSON.stringify(outline) + '\n```';
     const result = await parseOutline(wrapped);

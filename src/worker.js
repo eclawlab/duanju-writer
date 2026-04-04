@@ -73,7 +73,8 @@ async function processJob(jobId, options = {}) {
       saveArtifact(jobId, 'story.json', story);
       // Save vector store
       try { vectorStore.save(); } catch {}
-      log(`Generated "${story.title}" (${story.episodes[0]?.scenes?.length || 0} scenes)`);
+      const totalEpScenes = story.episodes.reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
+      log(`Generated "${story.title}" (${story.episodes.length} episodes, ${totalEpScenes} scenes)`);
     } else {
       log(`Resuming — story "${story.title}" already generated`);
     }

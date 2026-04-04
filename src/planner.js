@@ -84,6 +84,14 @@ export function parsePlan(raw) {
     }
   }
 
+  // Build a lookup map keyed by "episodeIndex:sceneIndex" for branching tree access
+  plan.sceneMap = {};
+  for (const scene of plan.scenes) {
+    if (scene.episodeIndex !== undefined && scene.sceneIndex !== undefined) {
+      plan.sceneMap[`${scene.episodeIndex}:${scene.sceneIndex}`] = scene;
+    }
+  }
+
   return plan;
 }
 

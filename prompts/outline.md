@@ -1,4 +1,4 @@
-You are an interactive fiction author. Create a story OUTLINE for the AutoStory platform — an audio novel app where readers make choices that shape the narrative.
+You are an interactive fiction author. Create a BRANCHING STORY OUTLINE for the AutoStory platform — an audio novel app where readers make choices that shape the narrative across multiple episodes.
 
 ## Research Materials
 
@@ -8,7 +8,9 @@ Use these materials as inspiration (pick the BEST idea, don't try to combine eve
 
 ## Output Requirements
 
-Generate a story outline as a single JSON object. Do NOT write the full scene content — just plan the structure.
+Generate a branching story outline as a single JSON object. The story is a TREE of episodes — after each episode, the reader chooses from 3-5 options, each leading to a different next episode. Some paths are longer, some shorter. All paths eventually reach an ending.
+
+Do NOT write the full scene content — just plan the structure.
 
 ## JSON Structure
 
@@ -30,7 +32,9 @@ Return ONLY valid JSON (no markdown, no commentary):
   ],
   "episodes": [
     {
-      "title": "Episode 1 Title",
+      "episodeIndex": 0,
+      "title": "Episode 1: The Beginning",
+      "isEnding": false,
       "scenePlan": [
         {
           "summary": "Brief description of what happens in this scene",
@@ -39,25 +43,61 @@ Return ONLY valid JSON (no markdown, no commentary):
           "isConclusion": false
         },
         {
-          "summary": "A tense moment where the player must decide",
-          "sceneType": "CHOICE",
-          "hasChoices": true,
-          "choiceTexts": ["Option A", "Option B"],
+          "summary": "The episode builds to a critical decision point",
+          "sceneType": "NARRATIVE",
+          "hasChoices": false,
           "isConclusion": false
-        },
+        }
+      ],
+      "episodeChoices": [
+        { "text": "Take the mountain path", "nextEpisodeIndex": 1 },
+        { "text": "Follow the river south", "nextEpisodeIndex": 2 },
+        { "text": "Stay and defend the village", "nextEpisodeIndex": 3 }
+      ]
+    },
+    {
+      "episodeIndex": 1,
+      "title": "Episode 2A: The Mountain Path",
+      "isEnding": false,
+      "scenePlan": [ ... ],
+      "episodeChoices": [
+        { "text": "Enter the cave", "nextEpisodeIndex": 4 },
+        { "text": "Climb higher", "nextEpisodeIndex": 5 },
+        { "text": "Turn back", "nextEpisodeIndex": 6 }
+      ]
+    },
+    {
+      "episodeIndex": 6,
+      "title": "Ending: The Retreat",
+      "isEnding": true,
+      "ending": "NEUTRAL",
+      "scenePlan": [
         {
           "summary": "The story reaches its conclusion",
           "sceneType": "NARRATIVE",
           "hasChoices": false,
           "isConclusion": true,
-          "conclusionType": "EPISODE_END",
-          "ending": "GOOD"
+          "conclusionType": "STORY_END",
+          "ending": "NEUTRAL"
         }
-      ]
+      ],
+      "episodeChoices": []
     }
   ]
 }
 ```
+
+## Branching Structure Rules
+
+- Episode 0 is always the starting episode
+- Non-ending episodes MUST have 3-5 choices in `episodeChoices`, each pointing to a different `nextEpisodeIndex`
+- Ending episodes have `isEnding: true`, an `ending` field (GOOD/BAD/NEUTRAL/SPECIAL), and empty `episodeChoices`
+- All `nextEpisodeIndex` values must reference valid `episodeIndex` values in the episodes array
+- Episodes MAY be shared across branches (multiple choices can point to the same episode for convergence)
+- The tree should be 2-4 levels deep (2-4 choices before reaching an ending)
+- Plan 7-15 total episodes (mix of branching and ending episodes)
+- Include at least 2 GOOD endings, 1 BAD ending, and 1 NEUTRAL ending
+- Each episode has 3-5 scenes internally (linear within the episode)
 
 ## Audio Novel Design Principles
 
@@ -67,15 +107,15 @@ This story will be experienced as an AUDIO NOVEL — listeners hear it read alou
 - **Give characters phonetically distinct names** — Avoid names that sound similar (e.g., "Mark" and "Clark", or "李明" and "黎鸣"). Listeners must distinguish characters by ear.
 - **Front-load context** — Each scene should establish WHO, WHERE, and WHAT early. Don't make listeners wait to understand what's happening.
 - **Design for momentum** — Audio listeners can't pause easily. Plan scenes that build steadily toward hooks, choices, or emotional peaks. Avoid scenes that are purely expository.
-- **Make choices clear and memorable** — Choice text will be read aloud. Keep options short (under 15 words) and meaningfully distinct so listeners can decide quickly.
-- **Avoid complex branching** — Listeners can't easily navigate back. Keep the story structure linear with branching choices that reconverge or lead to clear endings.
+- **Make episode choices clear and memorable** — Choice text will be read aloud at the end of each episode. Keep options short (under 15 words) and meaningfully distinct so listeners can decide quickly.
+- **Each episode should feel complete** — Like a chapter that ends on a cliffhanger with choices. The listener should feel satisfied with the episode while eager to choose what happens next.
 
 ## Rules
 
-- Plan 1 episode with 5-8 scenes
-- Include at least 1 CHOICE scene with 2-3 options
-- Include at least 1 conclusion scene (EPISODE_END)
-- Every branch must eventually lead to a conclusion
+- Plan 7-15 episodes forming a branching tree
+- Each non-ending episode ends with 3-5 choices leading to different episodes
+- Each ending episode has a conclusion scene with STORY_END
 - Include 1-3 character customization questions
 - Make the story compelling with real tension and meaningful choices
+- Each choice should lead to genuinely different story paths, not superficial variations
 - Design every element for the LISTENING experience — clarity, momentum, and emotional impact

@@ -105,6 +105,19 @@ export async function parseOutline(raw) {
   if (!data.episodes || data.episodes.length === 0) {
     throw new Error('Outline must have at least 1 episode');
   }
+
+  // Build index of valid episodeIndex values and check for duplicates
+  const validIndices = new Set();
+  for (const ep of data.episodes) {
+    if (ep.episodeIndex === undefined) {
+      throw new Error(`Episode "${ep.title}" missing episodeIndex`);
+    }
+    if (validIndices.has(ep.episodeIndex)) {
+      throw new Error(`Duplicate episodeIndex ${ep.episodeIndex} found on episode "${ep.title}"`);
+    }
+    validIndices.add(ep.episodeIndex);
+  }
+
   for (const ep of data.episodes) {
     if (!ep.scenePlan || ep.scenePlan.length === 0) {
       throw new Error(`Episode "${ep.title}" must have at least 1 scene in scenePlan`);
@@ -113,6 +126,45 @@ export async function parseOutline(raw) {
       if (!ep.scenePlan[i].summary) {
         throw new Error(`Episode "${ep.title}" scene ${i} missing summary`);
       }
+    }
+    // Validate episodeChoices references
+    if (!ep.isEnding) {
+      if (!ep.episodeChoices || ep.episodeChoices.length < 3) {
+        throw new Error(`Non-ending episode "${ep.title}" must have at least 3 episodeChoices (got ${ep.episodeChoices?.length || 0})`);
+      }
+      if (ep.episodeChoices.length > 5) {
+        throw new Error(`Non-ending episode "${ep.title}" must have at most 5 episodeChoices (got ${ep.episodeChoices.length})`);
+      }
+      for (const choice of ep.episodeChoices) {
+        if (!choice.text) throw new Error(`Episode "${ep.title}" has a choice missing text`);
+        if (choice.nextEpisodeIndex === undefined || !validIndices.has(choice.nextEpisodeIndex)) {
+          throw new Error(`Episode "${ep.title}" choice "${choice.text}" references invalid episodeIndex ${choice.nextEpisodeIndex}`);
+        }
+      }
+    }
+  }
+
+  // Validate no cycles in the episode graph
+  const adjacency = {};
+  for (const ep of data.episodes) {
+    adjacency[ep.episodeIndex] = (ep.episodeChoices || []).map(c => c.nextEpisodeIndex);
+  }
+  const visited = new Set();
+  const inStack = new Set();
+  function hasCycle(node) {
+    if (inStack.has(node)) return true;
+    if (visited.has(node)) return false;
+    visited.add(node);
+    inStack.add(node);
+    for (const next of (adjacency[node] || [])) {
+      if (hasCycle(next)) return true;
+    }
+    inStack.delete(node);
+    return false;
+  }
+  for (const ep of data.episodes) {
+    if (hasCycle(ep.episodeIndex)) {
+      throw new Error('Episode graph contains a cycle — episodeChoices must form a tree (no loops)');
     }
   }
 
@@ -362,7 +414,10 @@ export async function generateStory(materials, options = {}) {
     : materials;
   const outline = await generateOutline(enrichedMaterials, { lang, style });
   if (options.onOutline) options.onOutline(outline);
-  log(`Outline: "${outline.title}" — ${outline.episodes[0].scenePlan.length} scenes planned`);
+  const totalEpisodes = outline.episodes.length;
+  const totalScenePlanned = outline.episodes.reduce((sum, ep) => sum + ep.scenePlan.length, 0);
+  const endingCount = outline.episodes.filter(ep => ep.isEnding).length;
+  log(`Outline: "${outline.title}" — ${totalEpisodes} episodes (${endingCount} endings), ${totalScenePlanned} scenes total`);
 
   // Step 2: Generate plan (planning agent) — optional, continues without if it fails
   let plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
@@ -375,38 +430,8 @@ export async function generateStory(materials, options = {}) {
     log(`[planning failed] ${planErr.message} — continuing without plan`);
   }
 
-  // Step 3: Initialize story state from plan
-  const state = initStateFromPlan(plan);
-
-  // Populate character arcs from snowflake
-  if (snowflake && snowflake.characters) {
-    for (const sc of snowflake.characters) {
-      if (sc.arc && state.characters[sc.name]) {
-        try { setCharacterArc(state, sc.name, sc.arc); } catch {}
-      }
-    }
-  }
-
-  // Populate plot arcs from plan
-  for (const arc of (plan.plotArcs || [])) {
-    try { addPlotArc(state, arc); } catch {}
-  }
-
-  // Populate foreshadowing from plan
-  for (const f of (plan.foreshadowing || [])) {
-    try { addForeshadowing(state, f); } catch {}
-  }
-
-  // Populate relationships from plan
-  for (const rel of (plan.relationships || [])) {
-    try { addRelationship(state, rel.char1, rel.char2, rel.type, rel.description); } catch {}
-  }
-
-  const motifTracker = {};
-  const compressedHistory = [];
-  let globalSummary = '';
-
-  // Step 4: Generate each scene with narrative intelligence
+  // Step 4: Generate each episode's scenes with narrative intelligence
+  // Episodes form a branching tree — each branch gets its own narrative context
   const story = {
     title: outline.title,
     synopsis: outline.synopsis,
@@ -417,29 +442,140 @@ export async function generateStory(materials, options = {}) {
     episodes: [],
   };
 
+  // Build parent map: childEpisodeIndex → parentEpisodeIndex
+  // This lets us reconstruct the ancestor path for each episode's narrative context
+  const parentMap = {};
+  for (const ep of outline.episodes) {
+    if (ep.episodeChoices) {
+      for (const choice of ep.episodeChoices) {
+        // Only set parent if not already set (first parent wins for shared episodes)
+        if (parentMap[choice.nextEpisodeIndex] === undefined) {
+          parentMap[choice.nextEpisodeIndex] = ep.episodeIndex;
+        }
+      }
+    }
+  }
+
+  // Get ancestor path from root to a given episode (inclusive)
+  function getAncestorPath(episodeIndex) {
+    const path = [episodeIndex];
+    const seen = new Set([episodeIndex]);
+    let current = episodeIndex;
+    while (parentMap[current] !== undefined) {
+      current = parentMap[current];
+      if (seen.has(current)) break; // safety: prevent infinite loop on cycles
+      seen.add(current);
+      path.unshift(current);
+    }
+    return path;
+  }
+
+  // Per-episode context snapshots (saved after each episode is generated)
+  // Keyed by episodeIndex
+  const episodeContexts = {};
+
+  // Sort episodes by episodeIndex for deterministic processing
+  const sortedEpisodes = [...outline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
+
   let globalSceneIndex = 0;
 
-  for (const ep of outline.episodes) {
-    const episode = { title: ep.title, scenes: [] };
+  for (const ep of sortedEpisodes) {
+    const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, scenes: [], episodeChoices: ep.episodeChoices || [] };
     const totalScenes = ep.scenePlan.length;
+
+    log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalScenes} scenes, ${ep.isEnding ? 'ending' : ep.episodeChoices?.length + ' choices'})...`);
+
+    // Reconstruct branch-local narrative context from ancestor path
+    const ancestorPath = getAncestorPath(ep.episodeIndex);
+    const branchHistory = [];
+    let branchSummary = '';
+    const branchMotifTracker = {};
+
+    // Rebuild state from initial plan state (fresh copy per branch)
+    const branchState = initStateFromPlan(plan);
+    if (snowflake && snowflake.characters) {
+      for (const sc of snowflake.characters) {
+        if (sc.arc && branchState.characters[sc.name]) {
+          try { setCharacterArc(branchState, sc.name, sc.arc); } catch {}
+        }
+      }
+    }
+    for (const arc of (plan.plotArcs || [])) {
+      try { addPlotArc(branchState, arc); } catch {}
+    }
+    for (const f of (plan.foreshadowing || [])) {
+      try { addForeshadowing(branchState, f); } catch {}
+    }
+    for (const rel of (plan.relationships || [])) {
+      try { addRelationship(branchState, rel.char1, rel.char2, rel.type, rel.description); } catch {}
+    }
+
+    // Apply ancestor episodes' context snapshots (everything except current episode)
+    for (const ancestorIdx of ancestorPath.slice(0, -1)) {
+      const ctx = episodeContexts[ancestorIdx];
+      if (ctx) {
+        branchHistory.push(...ctx.compressedHistory);
+        branchSummary = ctx.globalSummary;
+        // Merge motif tracker
+        for (const [key, val] of Object.entries(ctx.motifTracker)) {
+          branchMotifTracker[key] = val;
+        }
+        // Apply state changes from ancestor
+        for (const [name, char] of Object.entries(ctx.stateChanges.characters)) {
+          try { updateCharacter(branchState, name, char); } catch {}
+        }
+        for (const [name, item] of Object.entries(ctx.stateChanges.items)) {
+          try { updateItem(branchState, name, item); } catch {}
+        }
+        for (const revId of ctx.stateChanges.revealedIds) {
+          try { markRevealed(branchState, revId); } catch {}
+        }
+        for (const fId of ctx.stateChanges.reinforcedForeshadowing) {
+          try { reinforceForeshadowing(branchState, fId, 0); } catch {}
+        }
+        for (const fId of ctx.stateChanges.resolvedForeshadowing) {
+          try { resolveForeshadowing(branchState, fId, 0); } catch {}
+        }
+      }
+    }
+
+    // Compute branch-local scene count: total scenes from ancestor episodes
+    // This represents how many scenes the reader has seen before this episode on this path
+    let branchSceneCount = 0;
+    for (const ancestorIdx of ancestorPath.slice(0, -1)) {
+      const ancestorEp = sortedEpisodes.find(e => e.episodeIndex === ancestorIdx);
+      if (ancestorEp) branchSceneCount += ancestorEp.scenePlan.length;
+    }
+
+    // Track this episode's own state changes (to save in snapshot)
+    const episodeCharChanges = {};
+    const episodeItemChanges = {};
+    const episodeRevealedIds = [];
+    const episodeReinforcedForeshadowing = [];
+    const episodeResolvedForeshadowing = [];
+    const episodeCompressedHistory = [];
+    let episodeSummary = branchSummary;
+    const episodeMotifTracker = { ...branchMotifTracker };
 
     for (let i = 0; i < totalScenes; i++) {
       const plan_scene = ep.scenePlan[i];
-      log(`Writing scene ${globalSceneIndex + 1}: ${plan_scene.summary.slice(0, 60)}...`);
+      log(`  Scene ${i + 1}/${totalScenes}: ${plan_scene.summary.slice(0, 60)}...`);
 
-      // Build narrative context
-      const history = buildHistoryContext(compressedHistory);
-      const revelations = getAvailableRevelations(state, globalSceneIndex);
-      const stateContext = toPromptContext(state);
+      // Build narrative context from branch-local state
+      // Use branch-local scene position for revelation scheduling (not flat globalSceneIndex)
+      const branchLocalSceneIndex = branchSceneCount + i;
+      const history = buildHistoryContext([...branchHistory, ...episodeCompressedHistory]);
+      const revelations = getAvailableRevelations(branchState, branchLocalSceneIndex);
+      const stateContext = toPromptContext(branchState);
 
       // Validate state and log warnings
-      const stateWarnings = validate(state);
+      const stateWarnings = validate(branchState);
       for (const warning of stateWarnings) {
         log(`[state warning] ${warning}`);
       }
 
-      // Get plan scene data for events/pacing (flat array across all episodes)
-      const planScene = plan.scenes[globalSceneIndex] || {};
+      // Get plan scene data for events/pacing using composite key (episodeIndex:sceneIndex)
+      const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || plan.scenes[globalSceneIndex] || {};
 
       // Query vector store for relevant prior context
       let knowledgeContext = '';
@@ -471,18 +607,18 @@ export async function generateStory(materials, options = {}) {
             knowledgeContext,
             suspenseDensity: planScene.suspenseDensity,
             twistStrength: planScene.twistStrength,
-            globalSummary,
+            globalSummary: episodeSummary,
             sceneTypeRules,
           },
         });
       } catch (firstErr) {
-        log(`[scene ${globalSceneIndex + 1} failed] ${firstErr.message} — retrying with simplified prompt...`);
+        log(`[scene failed] ${firstErr.message} — retrying with simplified prompt...`);
         try {
           const retryPrompt = buildRetryScenePrompt(plan_scene, lang);
           const retryRaw = await callLLM(retryPrompt, 'scene');
           scene = await parseScene(retryRaw);
         } catch (retryErr) {
-          log(`[scene ${globalSceneIndex + 1} retry failed] ${retryErr.message} — using fallback scene`);
+          log(`[scene retry failed] ${retryErr.message} — using fallback scene`);
           scene = buildFallbackScene(plan_scene);
         }
       }
@@ -500,10 +636,10 @@ export async function generateStory(materials, options = {}) {
         }
       }
 
-      // Check and fix consistency issues
-      const consistencyResult = checkConsistency(scene.content, motifTracker, globalSceneIndex);
+      // Check and fix consistency issues (use branch-local index for cooldown accuracy)
+      const consistencyResult = checkConsistency(scene.content, episodeMotifTracker, branchLocalSceneIndex);
       if (consistencyResult.issues.length > 0) {
-        log(`Fixing ${consistencyResult.issues.length} consistency issue(s) in scene ${globalSceneIndex + 1}...`);
+        log(`Fixing ${consistencyResult.issues.length} consistency issue(s)...`);
         try {
           scene.content = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
         } catch (err) {
@@ -513,7 +649,7 @@ export async function generateStory(materials, options = {}) {
 
       // Enrich scene if below word count target
       if (needsEnrichment(scene.content, targetWordsPerScene)) {
-        log(`Scene ${globalSceneIndex + 1} below word target (${targetWordsPerScene}) — enriching...`);
+        log(`Scene below word target (${targetWordsPerScene}) — enriching...`);
         try {
           scene.content = await enrichScene(scene.content, targetWordsPerScene, lang);
         } catch (err) {
@@ -521,15 +657,15 @@ export async function generateStory(materials, options = {}) {
         }
       }
 
-      // Update global narrative summary
+      // Update branch-local narrative summary
       try {
-        globalSummary = await updateGlobalSummary(globalSummary, scene.content, lang);
+        episodeSummary = await updateGlobalSummary(episodeSummary, scene.content, lang);
       } catch (err) {
         log(`[global summary update failed] ${err.message}`);
       }
 
       // Update motif tracker
-      updateMotifTracker(motifTracker, scene.content, globalSceneIndex);
+      updateMotifTracker(episodeMotifTracker, scene.content, branchLocalSceneIndex);
 
       // Apply character changes from plan
       for (const cc of (planScene.characterChanges || [])) {
@@ -541,11 +677,12 @@ export async function generateStory(materials, options = {}) {
             if (parts.length === 2) updates.location = parts[1];
           }
           if (cc.learns && cc.learns.length > 0) {
-            const char = state.characters[cc.name];
+            const char = branchState.characters[cc.name];
             if (char) updates.knowledge = [...(char.knowledge || []), ...cc.learns];
           }
           if (Object.keys(updates).length > 0) {
-            updateCharacter(state, cc.name, updates);
+            updateCharacter(branchState, cc.name, updates);
+            episodeCharChanges[cc.name] = { ...(episodeCharChanges[cc.name] || {}), ...updates };
           }
         } catch (err) {
           log(`[state update skipped] ${err.message}`);
@@ -554,13 +691,14 @@ export async function generateStory(materials, options = {}) {
       // Apply item changes from plan
       for (const ic of (planScene.itemChanges || [])) {
         try {
-          if (ic.name && state.items[ic.name]) {
+          if (ic.name && branchState.items[ic.name]) {
             const updates = {};
             if (ic.status) updates.status = ic.status;
             if (ic.holder !== undefined) updates.holder = ic.holder;
             if (ic.location !== undefined) updates.location = ic.location;
             if (Object.keys(updates).length > 0) {
-              updateItem(state, ic.name, updates);
+              updateItem(branchState, ic.name, updates);
+              episodeItemChanges[ic.name] = { ...(episodeItemChanges[ic.name] || {}), ...updates };
             }
           }
         } catch (err) {
@@ -571,7 +709,8 @@ export async function generateStory(materials, options = {}) {
       // Mark revelations as revealed
       for (const revId of (planScene.revealIds || [])) {
         try {
-          markRevealed(state, revId);
+          markRevealed(branchState, revId);
+          episodeRevealedIds.push(revId);
         } catch (err) {
           log(`[revelation skipped] ${err.message}`);
         }
@@ -579,26 +718,65 @@ export async function generateStory(materials, options = {}) {
 
       // Handle foreshadowing operations from plan
       for (const fId of (planScene.reinforceForeshadowing || [])) {
-        try { reinforceForeshadowing(state, fId, globalSceneIndex); } catch {}
+        try { reinforceForeshadowing(branchState, fId, branchLocalSceneIndex); episodeReinforcedForeshadowing.push(fId); } catch {}
       }
       for (const fId of (planScene.resolveForeshadowing || [])) {
-        try { resolveForeshadowing(state, fId, globalSceneIndex); } catch {}
+        try { resolveForeshadowing(branchState, fId, branchLocalSceneIndex); episodeResolvedForeshadowing.push(fId); } catch {}
       }
 
       // Compress scene into history
       try {
         const compressed = await compressScenes([scene], lang);
-        compressedHistory.push(compressed);
+        episodeCompressedHistory.push(compressed);
       } catch (err) {
         log(`[compression failed] ${err.message}`);
-        compressedHistory.push({ summary: plan_scene.summary, characterActions: [], plotProgress: [], emotionalArc: '' });
+        episodeCompressedHistory.push({ summary: plan_scene.summary, characterActions: [], plotProgress: [], emotionalArc: '' });
       }
 
       // Notify caller of state update
-      if (options.onState) options.onState(state);
+      if (options.onState) options.onState(branchState);
 
       episode.scenes.push(scene);
       globalSceneIndex++;
+    }
+
+    // Save this episode's context snapshot for descendant episodes
+    episodeContexts[ep.episodeIndex] = {
+      compressedHistory: episodeCompressedHistory,
+      globalSummary: episodeSummary,
+      motifTracker: episodeMotifTracker,
+      stateChanges: {
+        characters: episodeCharChanges,
+        items: episodeItemChanges,
+        revealedIds: episodeRevealedIds,
+        reinforcedForeshadowing: episodeReinforcedForeshadowing,
+        resolvedForeshadowing: episodeResolvedForeshadowing,
+      },
+    };
+
+    // For ending episodes, ensure the last scene has a conclusion
+    if (ep.isEnding) {
+      const lastScene = episode.scenes[episode.scenes.length - 1];
+      if (!lastScene.conclusion) {
+        log(`  Ending episode "${ep.title}" missing conclusion — injecting fallback`);
+        lastScene.conclusion = {
+          title: ep.title,
+          overview: ep.scenePlan[ep.scenePlan.length - 1]?.summary || ep.title,
+          type: 'STORY_END',
+          ending: ep.ending || 'NEUTRAL',
+        };
+      }
+    }
+
+    // For non-ending episodes, attach episode-level choices to the last scene
+    // These will be resolved to cross-episode scene references during upload
+    if (!ep.isEnding && ep.episodeChoices && ep.episodeChoices.length > 0) {
+      const lastScene = episode.scenes[episode.scenes.length - 1];
+      // Append a [choice] block to the last scene content for audio playback
+      const choiceLines = ep.episodeChoices.map(c => `- "${c.text}"`).join('\n');
+      lastScene.content += `\n\n[choice]\n${choiceLines}`;
+      // Store episode choices on the last scene for upload
+      lastScene.episodeChoices = ep.episodeChoices;
     }
 
     story.episodes.push(episode);
