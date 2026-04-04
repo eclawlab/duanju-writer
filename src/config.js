@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { CONFIG_FILE } from './constants.js';
 
 const DEFAULTS = {
-  autostoryUrl: 'https://autostory-web.fly.dev',
+  autostoryUrl: 'https://usaduanju.com',
   aiApiKey: '',
   heartbeatInterval: 1800000,
   claudePath: 'claude',
