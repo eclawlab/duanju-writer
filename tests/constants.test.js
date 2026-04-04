@@ -11,13 +11,13 @@ describe('constants', () => {
 
   test('exports NAME', async () => {
     const { NAME } = await import('../src/constants.js');
-    assert.equal(NAME, 'story_writer');
+    assert.equal(NAME, 'story-writer');
   });
 
   test('DATA_DIR is under home directory', async () => {
     const { DATA_DIR } = await import('../src/constants.js');
     const home = process.env.HOME || homedir();
-    assert.equal(DATA_DIR, join(home, '.story_writer'));
+    assert.equal(DATA_DIR, join(home, '.story-writer'));
   });
 
   test('CONFIG_FILE is inside DATA_DIR', async () => {

@@ -1,17 +1,17 @@
 {
-  "name": "story_writer",
+  "name": "story-writer",
   "version": "0.0.3",
   "description": "Autonomous story generation daemon for autostory",
   "type": "module",
   "main": "src/constants.js",
   "bin": {
-    "story_writer": "bin/story_writer.js"
+    "story-writer": "bin/story-writer.js"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node bin/story_writer.js start",
+    "start": "node bin/story-writer.js start",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

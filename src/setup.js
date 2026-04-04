@@ -10,7 +10,7 @@ export async function setup(args) {
   const config = loadConfig();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  console.log(chalk.bold('\nstory_writer setup\n'));
+  console.log(chalk.bold('\nstory-writer setup\n'));
 
   try {
     // Step 1: Get autostory URL (or use CLI arg)
@@ -42,24 +42,54 @@ export async function setup(args) {
       process.exit(1);
     }
 
-    // Step 3: Generate API key
+    // Step 3: Generate API key (try bootstrap first, then authenticated endpoint)
     console.log(chalk.dim('\nGenerating AI API key...'));
-    const keyController = new AbortController();
-    const keyTimer = setTimeout(() => keyController.abort(), 15_000);
     let keyRes;
+
+    // Try bootstrap endpoint first (works when no keys exist yet)
+    const bootstrapController = new AbortController();
+    const bootstrapTimer = setTimeout(() => bootstrapController.abort(), 15_000);
     try {
-      keyRes = await fetch(`${autostoryUrl}/api/ai/keys`, {
+      keyRes = await fetch(`${autostoryUrl}/api/ai/keys/bootstrap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: 'story_writer' }),
-        signal: keyController.signal,
+        body: JSON.stringify({ label: 'story-writer' }),
+        signal: bootstrapController.signal,
       });
     } catch (err) {
       const msg = err.name === 'AbortError' ? 'Request timed out (15s)' : err.message;
       console.log(chalk.red(`  Failed to generate key: ${msg}`));
       process.exit(1);
     } finally {
-      clearTimeout(keyTimer);
+      clearTimeout(bootstrapTimer);
+    }
+
+    // If bootstrap is disabled (keys already exist), ask for existing key and use authenticated endpoint
+    if (keyRes.status === 403) {
+      const existingKey = await ask(rl, 'API keys already exist. Enter an existing API key to generate a new one: ');
+      if (!existingKey.trim()) {
+        console.log(chalk.red('  No key provided. Aborting.'));
+        process.exit(1);
+      }
+      const keyController = new AbortController();
+      const keyTimer = setTimeout(() => keyController.abort(), 15_000);
+      try {
+        keyRes = await fetch(`${autostoryUrl}/api/ai/keys`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Api-Key': existingKey.trim(),
+          },
+          body: JSON.stringify({ label: 'story-writer' }),
+          signal: keyController.signal,
+        });
+      } catch (err) {
+        const msg = err.name === 'AbortError' ? 'Request timed out (15s)' : err.message;
+        console.log(chalk.red(`  Failed to generate key: ${msg}`));
+        process.exit(1);
+      } finally {
+        clearTimeout(keyTimer);
+      }
     }
 
     if (!keyRes.ok) {
@@ -78,9 +108,9 @@ export async function setup(args) {
 
     console.log(chalk.green('\nSetup complete! Config saved.\n'));
     console.log(chalk.dim('Run a test:'));
-    console.log(chalk.dim('  node bin/story_writer.js run\n'));
+    console.log(chalk.dim('  node bin/story-writer.js run\n'));
     console.log(chalk.dim('Start the daemon:'));
-    console.log(chalk.dim('  node bin/story_writer.js start\n'));
+    console.log(chalk.dim('  node bin/story-writer.js start\n'));
   } finally {
     rl.close();
   }

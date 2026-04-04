@@ -65,7 +65,7 @@ callLLM(prompt, role)
 
 ## Config Structure
 
-Added to `~/.story_writer/config.json` alongside existing keys:
+Added to `~/.story-writer/config.json` alongside existing keys:
 
 ```json
 {
@@ -92,14 +92,14 @@ Added to `~/.story_writer/config.json` alongside existing keys:
 
 ```bash
 # Provider management
-story_writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key> [--temperature 0.7] [--max-tokens 8192] [--timeout 120000]
-story_writer provider list
-story_writer provider remove <name>
-story_writer provider test <name>
+story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key> [--temperature 0.7] [--max-tokens 8192] [--timeout 120000]
+story-writer provider list
+story-writer provider remove <name>
+story-writer provider test <name>
 
 # Role assignment
-story_writer role set <role> <provider>
-story_writer role list
+story-writer role set <role> <provider>
+story-writer role list
 ```
 
 `provider test` sends a simple prompt ("Say hello in one word.") and verifies a response is returned.
@@ -124,7 +124,7 @@ story_writer role list
 | `src/planner.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'plan')` |
 | `src/compressor.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'compress')` |
 | `src/consistency.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'consistency')` |
-| `bin/story_writer.js` | Add `provider` and `role` commands |
+| `bin/story-writer.js` | Add `provider` and `role` commands |
 
 ## Error Handling
 

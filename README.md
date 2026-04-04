@@ -114,41 +114,41 @@ An AI-powered daemon that researches trending fiction from 30 novel platforms wo
 ### 安装
 
 ```bash
-git clone https://github.com/eclawlab/story_writer.git
-cd story_writer
+git clone https://github.com/eclawlab/story-writer.git
+cd story-writer
 npm install
-npm link    # 全局安装 story_writer 命令
+npm link    # 全局安装 story-writer 命令
 ```
 
 ### 初始配置
 
 ```bash
 # 连接至 AutoStory 实例（交互式配置）
-story_writer setup https://your-autostory-server.com
+story-writer setup https://your-autostory-server.com
 ```
 
 ### 生成故事
 
 ```bash
 # 生成一个故事（自动选择风格）
-story_writer run
+story-writer run
 
 # 用莫言风格生成 3 个中文故事
-story_writer run 3 --style moyan --lang cn
+story-writer run 3 --style moyan --lang cn
 
 # 用托尔金风格生成
-story_writer run --style tolkien
+story-writer run --style tolkien
 ```
 
 ### 守护进程模式
 
 ```bash
 # 启动调度器 + 工作器（定时自动生成）
-story_writer start
+story-writer start
 
 # 或分别启动
-story_writer scheduler    # 定时创建任务
-story_writer worker       # 处理待执行任务
+story-writer scheduler    # 定时创建任务
+story-writer worker       # 处理待执行任务
 ```
 
 ---
@@ -159,15 +159,15 @@ story_writer worker       # 处理待执行任务
 
 | 命令 | 说明 |
 |------|------|
-| `story_writer setup [url]` | 配置 API 连接 |
-| `story_writer run [count] [options]` | 立即生成故事 |
-| `story_writer start` | 启动调度器 + 工作器守护进程 |
-| `story_writer scheduler` | 仅启动调度器 |
-| `story_writer worker` | 仅启动工作器 |
-| `story_writer jobs` | 查看所有任务及状态 |
-| `story_writer styles` | 列出可用写作风格 |
-| `story_writer config` | 显示当前配置 |
-| `story_writer config set <key> <value>` | 更新配置项 |
+| `story-writer setup [url]` | 配置 API 连接 |
+| `story-writer run [count] [options]` | 立即生成故事 |
+| `story-writer start` | 启动调度器 + 工作器守护进程 |
+| `story-writer scheduler` | 仅启动调度器 |
+| `story-writer worker` | 仅启动工作器 |
+| `story-writer jobs` | 查看所有任务及状态 |
+| `story-writer styles` | 列出可用写作风格 |
+| `story-writer config` | 显示当前配置 |
+| `story-writer config set <key> <value>` | 更新配置项 |
 
 ### 生成选项
 
@@ -180,26 +180,26 @@ story_writer worker       # 处理待执行任务
 ### 供应商管理
 
 ```bash
-story_writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
-story_writer provider list
-story_writer provider test <name>
-story_writer provider remove <name>
+story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
+story-writer provider list
+story-writer provider test <name>
+story-writer provider remove <name>
 ```
 
 ### 角色分配
 
 ```bash
-story_writer role set scene deepseek    # 将场景写作分配给 Deepseek
-story_writer role list                  # 查看角色分配
+story-writer role set scene deepseek    # 将场景写作分配给 Deepseek
+story-writer role list                  # 查看角色分配
 ```
 
 ### 知识库管理
 
 ```bash
-story_writer knowledge import ./worldbuilding.txt            # 导入文档
-story_writer knowledge import ./docs/ --job <jobId>          # 导入至特定任务
-story_writer knowledge info                                  # 查看知识库信息
-story_writer knowledge clear                                 # 清空知识库
+story-writer knowledge import ./worldbuilding.txt            # 导入文档
+story-writer knowledge import ./docs/ --job <jobId>          # 导入至特定任务
+story-writer knowledge info                                  # 查看知识库信息
+story-writer knowledge clear                                 # 清空知识库
 ```
 
 ---
@@ -285,7 +285,7 @@ story_writer knowledge clear                                 # 清空知识库
 
 ## 配置说明 {#配置说明-1}
 
-配置文件路径：`~/.story_writer/config.json`
+配置文件路径：`~/.story-writer/config.json`
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -305,9 +305,9 @@ story_writer knowledge clear                                 # 清空知识库
 ## 项目结构 {#项目结构-1}
 
 ```
-story_writer/
+story-writer/
 ├── bin/
-│   └── story_writer.js          # CLI 入口和命令路由
+│   └── story-writer.js          # CLI 入口和命令路由
 ├── src/                         # 24 个源文件
 │   ├── llm.js                   # 多供应商 LLM 抽象层
 │   ├── collector.js             # 全球 30 站网络调研 + 素材生成
@@ -344,8 +344,8 @@ story_writer/
 ### 添加新的 LLM 供应商
 
 ```bash
-story_writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
-story_writer role set <role> <provider>
+story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
+story-writer role set <role> <provider>
 ```
 
 ### 添加写作风格
@@ -462,41 +462,41 @@ Each step's output is saved to disk. If the process crashes, the next run resume
 ### Install
 
 ```bash
-git clone https://github.com/eclawlab/story_writer.git
-cd story_writer
+git clone https://github.com/eclawlab/story-writer.git
+cd story-writer
 npm install
-npm link    # makes 'story_writer' available globally
+npm link    # makes 'story-writer' available globally
 ```
 
 ### Setup
 
 ```bash
 # Connect to your AutoStory instance (interactive)
-story_writer setup https://your-autostory-server.com
+story-writer setup https://your-autostory-server.com
 ```
 
 ### Generate a Story
 
 ```bash
 # Generate one story (auto-picks style)
-story_writer run
+story-writer run
 
 # Generate 3 stories in Mo Yan's style, in Chinese
-story_writer run 3 --style moyan --lang cn
+story-writer run 3 --style moyan --lang cn
 
 # Generate in Tolkien's style
-story_writer run --style tolkien
+story-writer run --style tolkien
 ```
 
 ### Run as Daemon
 
 ```bash
 # Start scheduler + worker (generates stories on a timer)
-story_writer start
+story-writer start
 
 # Or run them separately
-story_writer scheduler    # creates jobs on a heartbeat
-story_writer worker       # processes pending jobs
+story-writer scheduler    # creates jobs on a heartbeat
+story-writer worker       # processes pending jobs
 ```
 
 ---
@@ -507,15 +507,15 @@ story_writer worker       # processes pending jobs
 
 | Command | Description |
 |---------|-------------|
-| `story_writer setup [url]` | Configure API connection |
-| `story_writer run [count] [options]` | Generate stories immediately |
-| `story_writer start` | Run scheduler + worker daemon |
-| `story_writer scheduler` | Run scheduler only |
-| `story_writer worker` | Run worker only |
-| `story_writer jobs` | List all jobs and their status |
-| `story_writer styles` | List available writing styles |
-| `story_writer config` | Show current configuration |
-| `story_writer config set <key> <value>` | Update a config value |
+| `story-writer setup [url]` | Configure API connection |
+| `story-writer run [count] [options]` | Generate stories immediately |
+| `story-writer start` | Run scheduler + worker daemon |
+| `story-writer scheduler` | Run scheduler only |
+| `story-writer worker` | Run worker only |
+| `story-writer jobs` | List all jobs and their status |
+| `story-writer styles` | List available writing styles |
+| `story-writer config` | Show current configuration |
+| `story-writer config set <key> <value>` | Update a config value |
 
 ### Run Options
 
@@ -528,26 +528,26 @@ story_writer worker       # processes pending jobs
 ### Provider Management
 
 ```bash
-story_writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
-story_writer provider list
-story_writer provider test <name>
-story_writer provider remove <name>
+story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
+story-writer provider list
+story-writer provider test <name>
+story-writer provider remove <name>
 ```
 
 ### Role Assignment
 
 ```bash
-story_writer role set scene deepseek    # Use Deepseek for scene writing
-story_writer role list                  # Show role assignments
+story-writer role set scene deepseek    # Use Deepseek for scene writing
+story-writer role list                  # Show role assignments
 ```
 
 ### Knowledge Base
 
 ```bash
-story_writer knowledge import ./worldbuilding.txt            # Import a document
-story_writer knowledge import ./docs/ --job <jobId>          # Import to a specific job
-story_writer knowledge info                                  # Show knowledge base info
-story_writer knowledge clear                                 # Clear knowledge base
+story-writer knowledge import ./worldbuilding.txt            # Import a document
+story-writer knowledge import ./docs/ --job <jobId>          # Import to a specific job
+story-writer knowledge info                                  # Show knowledge base info
+story-writer knowledge clear                                 # Clear knowledge base
 ```
 
 ---
@@ -747,13 +747,13 @@ Import reference documents into a built-in TF-IDF vector store. Relevant chunks 
 
 ```bash
 # Import worldbuilding docs
-story_writer knowledge import ./worldbuilding.txt
+story-writer knowledge import ./worldbuilding.txt
 
 # Import a full directory (.txt and .md files)
-story_writer knowledge import ./reference-docs/
+story-writer knowledge import ./reference-docs/
 
 # Target a specific job
-story_writer knowledge import ./plot-details.md --job <jobId>
+story-writer knowledge import ./plot-details.md --job <jobId>
 ```
 
 ---
@@ -831,7 +831,7 @@ Structured 4-step story planning that enriches the outline:
 
 ## Configuration
 
-Stored at `~/.story_writer/config.json`.
+Stored at `~/.story-writer/config.json`.
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -853,9 +853,9 @@ Stored at `~/.story_writer/config.json`.
 ## Project Structure
 
 ```
-story_writer/
+story-writer/
 ├── bin/
-│   └── story_writer.js          # CLI entry point and command router
+│   └── story-writer.js          # CLI entry point and command router
 ├── src/                         # 24 source files
 │   ├── llm.js                   # Multi-provider LLM abstraction (OpenAI + Claude CLI)
 │   ├── collector.js             # 30-site global web research + material generation
@@ -892,8 +892,8 @@ story_writer/
 ### Add a New LLM Provider
 
 ```bash
-story_writer provider add mymodel --type openai --base-url https://api.example.com/v1 --model model-name --api-key sk-...
-story_writer role set scene mymodel
+story-writer provider add mymodel --type openai --base-url https://api.example.com/v1 --model model-name --api-key sk-...
+story-writer role set scene mymodel
 ```
 
 ### Add a Writing Style

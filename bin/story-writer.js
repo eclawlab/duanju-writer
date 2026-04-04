@@ -133,8 +133,8 @@ switch (command) {
       }
       console.log();
     }
-    console.log('Usage: story_writer run --style moyan');
-    console.log('   or: story_writer config set style moyan');
+    console.log('Usage: story-writer run --style moyan');
+    console.log('   or: story-writer config set style moyan');
     break;
   }
   case 'setup': {
@@ -200,7 +200,7 @@ switch (command) {
       const usedBy = Object.entries(roles).filter(([, v]) => v === name).map(([k]) => k);
       if (usedBy.length > 0) {
         console.log(`Cannot remove "${name}" — used by roles: ${usedBy.join(', ')}`);
-        console.log('Reassign those roles first with: story_writer role set <role> <other-provider>');
+        console.log('Reassign those roles first with: story-writer role set <role> <other-provider>');
         process.exit(1);
       }
       delete config.providers[name];
@@ -227,12 +227,12 @@ switch (command) {
       }
 
     } else {
-      console.log('Usage: story_writer provider [add|list|remove|test] [name] [--flags]');
+      console.log('Usage: story-writer provider [add|list|remove|test] [name] [--flags]');
       console.log('\nExamples:');
-      console.log('  story_writer provider add deepseek --type openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...');
-      console.log('  story_writer provider list');
-      console.log('  story_writer provider test deepseek');
-      console.log('  story_writer provider remove deepseek');
+      console.log('  story-writer provider add deepseek --type openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...');
+      console.log('  story-writer provider list');
+      console.log('  story-writer provider test deepseek');
+      console.log('  story-writer provider remove deepseek');
     }
     break;
   }
@@ -252,7 +252,7 @@ switch (command) {
       const config = loadConfig();
       const providers = config.providers || {};
       if (!providers[provider]) {
-        console.log(`Provider "${provider}" not found. Add it first with: story_writer provider add ${provider} ...`);
+        console.log(`Provider "${provider}" not found. Add it first with: story-writer provider add ${provider} ...`);
         process.exit(1);
       }
       if (!config.roles) config.roles = {};
@@ -269,10 +269,10 @@ switch (command) {
       }
 
     } else {
-      console.log('Usage: story_writer role [set|list]');
+      console.log('Usage: story-writer role [set|list]');
       console.log('\nExamples:');
-      console.log('  story_writer role list');
-      console.log('  story_writer role set scene deepseek');
+      console.log('  story-writer role list');
+      console.log('  story-writer role set scene deepseek');
     }
     break;
   }
@@ -352,17 +352,17 @@ switch (command) {
     console.log(`Store path: ${storePath}`);
 
   } else {
-    console.log('Usage: story_writer knowledge [import|clear|info] [path] [--job jobId]');
+    console.log('Usage: story-writer knowledge [import|clear|info] [path] [--job jobId]');
     console.log('\nExamples:');
-    console.log('  story_writer knowledge import ./my-worldbuilding.txt');
-    console.log('  story_writer knowledge import ./reference-docs/');
-    console.log('  story_writer knowledge info');
-    console.log('  story_writer knowledge clear');
+    console.log('  story-writer knowledge import ./my-worldbuilding.txt');
+    console.log('  story-writer knowledge import ./reference-docs/');
+    console.log('  story-writer knowledge info');
+    console.log('  story-writer knowledge clear');
   }
   break;
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: story_writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
+    console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
     process.exit(1);
 }
