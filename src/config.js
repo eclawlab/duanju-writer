@@ -12,7 +12,7 @@ const DEFAULTS = {
   maxConcurrentJobs: 1,
   publishOnUpload: true,
   targetWordsPerScene: 0,  // 0 = disabled, set to e.g. 200 to enable
-  lang: 'en',
+  lang: 'cn',
   style: 'default',
   providers: {
     claude: { type: 'claude-cli', claudePath: 'claude', timeout: 300000 },
