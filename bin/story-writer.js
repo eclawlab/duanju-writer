@@ -31,16 +31,20 @@ switch (command) {
   case 'run': {
     const { runOnce } = await import('../src/worker.js');
     const { createJob } = await import('../src/queue.js');
-    // Parse count, lang, and style from args: run [count] [--lang cn|en] [--style moyan]
+    // Parse count, lang, style, and type from args: run [count] [--lang cn|en] [--style moyan] [--type 玄幻]
     let count = 1;
     let lang;
     let style;
+    let novelType;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
         a++;
       } else if (args[a] === '--style' && args[a + 1]) {
         style = args[a + 1].toLowerCase();
+        a++;
+      } else if (args[a] === '--type' && args[a + 1]) {
+        novelType = args[a + 1];
         a++;
       } else if (!isNaN(args[a]) && args[a].trim() !== '') {
         count = Math.max(0, parseInt(args[a], 10));
@@ -59,7 +63,7 @@ switch (command) {
     for (let i = 0; i < count; i++) {
       const job = createJob();
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style });
+      await runOnce(job.id, { lang, style, novelType });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -81,8 +85,8 @@ switch (command) {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
-      'maxRetries', 'maxConcurrentJobs', 'publishOnUpload', 'lang', 'style',
-      'targetWordsPerScene',
+      'maxRetries', 'maxConcurrentJobs', 'publishOnUpload', 'lang', 'novelType',
+      'style', 'targetWordsPerScene',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
@@ -361,8 +365,67 @@ switch (command) {
   }
   break;
 }
+  case 'verify': {
+    const { existsSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { fetchStory, verifyChoices } = await import('../src/uploader.js');
+    const { listJobs } = await import('../src/queue.js');
+    const chalk = (await import('chalk')).default;
+
+    // Determine which job to verify: argument or latest done job
+    let jobId = args[0];
+    if (!jobId) {
+      const jobs = listJobs();
+      const doneJobs = jobs.filter(j => j.status === 'done' && j.storyId).sort((a, b) => b.completedAt?.localeCompare(a.completedAt));
+      if (doneJobs.length === 0) {
+        console.log('No completed jobs to verify. Run a job first or pass a job ID.');
+        process.exit(1);
+      }
+      jobId = doneJobs[0].id;
+    }
+
+    const storyPath = join(JOBS_DIR, jobId, 'story.json');
+    const resultPath = join(JOBS_DIR, jobId, 'result.json');
+    if (!existsSync(storyPath) || !existsSync(resultPath)) {
+      console.log(`Job ${jobId} missing story.json or result.json`);
+      process.exit(1);
+    }
+
+    const localStory = JSON.parse(readFileSync(storyPath, 'utf8'));
+    const result = JSON.parse(readFileSync(resultPath, 'utf8'));
+    const storyId = result.storyId;
+
+    console.log(`Verifying job ${jobId}`);
+    console.log(`Story: "${localStory.title}" (${storyId})\n`);
+
+    console.log('Fetching story from server...');
+    const remoteStory = await fetchStory(storyId);
+
+    const report = verifyChoices(localStory, remoteStory);
+
+    for (const ep of report.episodes) {
+      const icon = ep.status === 'OK' ? chalk.green('✓') : chalk.red('✗');
+      const counts = ep.localCount !== undefined ? ` (local=${ep.localCount}, remote=${ep.remoteCount})` : '';
+      console.log(`  ${icon} [${ep.episodeIndex}] "${ep.title}" — ${ep.detail}${counts}`);
+      if (ep.mismatches) {
+        for (const m of ep.mismatches) {
+          console.log(chalk.red(`      choice[${m.index}] ${m.field}: local="${m.local}" ≠ remote="${m.remote}"`));
+        }
+      }
+    }
+
+    console.log();
+    if (report.ok) {
+      console.log(chalk.green('All choices verified ✓'));
+    } else {
+      console.log(chalk.red('Verification failed — mismatches found'));
+      process.exit(1);
+    }
+    break;
+  }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
+    console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|verify]');
+    console.log('\nRun options: story-writer run [count] [--lang cn|en] [--style moyan] [--type 玄幻]');
     process.exit(1);
 }

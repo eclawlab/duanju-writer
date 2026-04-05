@@ -17,7 +17,7 @@ describe('config', () => {
   test('loadConfigFrom returns defaults when no file exists', async () => {
     const { loadConfigFrom } = await import('../src/config.js');
     const config = loadConfigFrom(join(TEST_DIR, 'config.json'));
-    assert.equal(config.autostoryUrl, 'https://autostory-web.fly.dev');
+    assert.equal(config.autostoryUrl, 'https://usaduanju.com');
     assert.equal(config.heartbeatInterval, 1800000);
     assert.equal(config.claudePath, 'claude');
     assert.equal(config.maxRetries, 3);
@@ -43,7 +43,7 @@ describe('config', () => {
     const file = join(TEST_DIR, 'bad.json');
     writeFileSync(file, 'not valid json!!!', 'utf8');
     const config = loadConfigFrom(file);
-    assert.equal(config.autostoryUrl, 'https://autostory-web.fly.dev');
+    assert.equal(config.autostoryUrl, 'https://usaduanju.com');
     assert.equal(config.claudePath, 'claude');
   });
 
@@ -73,7 +73,7 @@ describe('config', () => {
     assert.equal(config.maxRetries, 10);
     assert.equal(config.heartbeatInterval, 60000);
     // Untouched defaults remain
-    assert.equal(config.autostoryUrl, 'https://autostory-web.fly.dev');
+    assert.equal(config.autostoryUrl, 'https://usaduanju.com');
     assert.equal(config.claudePath, 'claude');
   });
 

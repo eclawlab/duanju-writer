@@ -87,12 +87,18 @@ async function parseJsonWithRepair(raw, label) {
 
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
-export function buildOutlinePrompt(materials, lang = 'en', styleKey) {
+export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType = '') {
   const templateFile = lang === 'cn' ? OUTLINE_PATH_CN : OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyle(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.outline}\n`;
+  }
+  if (novelType) {
+    const section = lang === 'cn'
+      ? `\n\n## 小说类型要求\n\n这个故事必须是**${novelType}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。\n`
+      : `\n\n## Novel Type Requirement\n\nThis story MUST be a **${novelType}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.\n`;
+    template += section;
   }
   return template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
 }
@@ -174,7 +180,8 @@ export async function parseOutline(raw) {
 export async function generateOutline(materials, options = {}) {
   const lang = options.lang || 'en';
   const style = options.style;
-  const prompt = buildOutlinePrompt(materials, lang, style);
+  const novelType = options.novelType || '';
+  const prompt = buildOutlinePrompt(materials, lang, style, novelType);
   const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }
@@ -381,8 +388,10 @@ export async function pickStyle(materials) {
 
 export async function generateStory(materials, options = {}) {
   const lang = options.lang || 'en';
+  const novelType = options.novelType || '';
   let style = options.style;
   const log = options.log || (() => {});
+  const wlog = options.wlog || (() => {});
   const { targetWordsPerScene } = loadConfig();
 
   // Auto-pick style if not specified
@@ -397,37 +406,51 @@ export async function generateStory(materials, options = {}) {
   }
 
   // Step 0: Snowflake architecture (optional, enriches outline)
-  let snowflake = null;
-  try {
-    log('Building story architecture (Snowflake method)...');
-    snowflake = await generateSnowflake(materials, { lang, log });
-    if (options.onSnowflake) options.onSnowflake(snowflake);
-    log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
-  } catch (err) {
-    log(`[snowflake failed] ${err.message} — continuing with standard outline`);
+  let snowflake = options.savedSnowflake || null;
+  if (!snowflake) {
+    try {
+      log('Building story architecture (Snowflake method)...');
+      snowflake = await generateSnowflake(materials, { lang, log });
+      if (options.onSnowflake) options.onSnowflake(snowflake);
+      log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
+    } catch (err) {
+      log(`[snowflake failed] ${err.message} — continuing with standard outline`);
+    }
+  } else {
+    log('Resuming — snowflake architecture already generated');
   }
 
   // Step 1: Generate outline (enriched with snowflake if available)
-  log('Generating story outline...');
-  const enrichedMaterials = snowflake
-    ? { ...materials, snowflake }
-    : materials;
-  const outline = await generateOutline(enrichedMaterials, { lang, style });
-  if (options.onOutline) options.onOutline(outline);
+  let outline = options.savedOutline || null;
+  if (!outline) {
+    log('Generating story outline...');
+    const enrichedMaterials = snowflake
+      ? { ...materials, snowflake }
+      : materials;
+    outline = await generateOutline(enrichedMaterials, { lang, style, novelType });
+    if (options.onOutline) options.onOutline(outline);
+  } else {
+    log('Resuming — outline already generated');
+  }
   const totalEpisodes = outline.episodes.length;
   const totalScenePlanned = outline.episodes.reduce((sum, ep) => sum + ep.scenePlan.length, 0);
   const endingCount = outline.episodes.filter(ep => ep.isEnding).length;
   log(`Outline: "${outline.title}" — ${totalEpisodes} episodes (${endingCount} endings), ${totalScenePlanned} scenes total`);
 
   // Step 2: Generate plan (planning agent) — optional, continues without if it fails
-  let plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
-  try {
-    log('Planning scene details, events, and revelations...');
-    plan = await generatePlan(outline, { lang });
-    if (options.onPlan) options.onPlan(plan);
-    log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
-  } catch (planErr) {
-    log(`[planning failed] ${planErr.message} — continuing without plan`);
+  let plan = options.savedPlan || null;
+  if (!plan) {
+    plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
+    try {
+      log('Planning scene details, events, and revelations...');
+      plan = await generatePlan(outline, { lang });
+      if (options.onPlan) options.onPlan(plan);
+      log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
+    } catch (planErr) {
+      log(`[planning failed] ${planErr.message} — continuing without plan`);
+    }
+  } else {
+    log('Resuming — plan already generated');
   }
 
   // Step 4: Generate each episode's scenes with narrative intelligence
@@ -479,11 +502,36 @@ export async function generateStory(materials, options = {}) {
 
   let globalSceneIndex = 0;
 
+  // Restore progress from a previous interrupted run
+  const progress = options.progress;
+  const completedEpisodeIndices = new Set();
+  if (progress) {
+    // Restore completed episodes
+    for (const ep of (progress.episodes || [])) {
+      story.episodes.push(ep);
+      completedEpisodeIndices.add(ep.episodeIndex);
+    }
+    // Restore episode contexts for branch narrative continuity
+    for (const [key, ctx] of Object.entries(progress.episodeContexts || {})) {
+      episodeContexts[Number(key)] = ctx;
+    }
+    // Restore global scene index
+    globalSceneIndex = progress.globalSceneIndex || 0;
+    log(`Resuming writing — ${completedEpisodeIndices.size} episode(s) already completed, starting from scene index ${globalSceneIndex}`);
+    wlog('writing_resumed_partial', { completedEpisodes: [...completedEpisodeIndices], globalSceneIndex });
+  }
+
   for (const ep of sortedEpisodes) {
+    // Skip episodes completed in a previous run
+    if (completedEpisodeIndices.has(ep.episodeIndex)) {
+      globalSceneIndex += ep.scenePlan.length;
+      continue;
+    }
     const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, scenes: [], episodeChoices: ep.episodeChoices || [] };
     const totalScenes = ep.scenePlan.length;
 
     log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalScenes} scenes, ${ep.isEnding ? 'ending' : ep.episodeChoices?.length + ' choices'})...`);
+    wlog('episode_start', { episodeIndex: ep.episodeIndex, title: ep.title, scenes: totalScenes, isEnding: !!ep.isEnding, choices: ep.isEnding ? 0 : ep.episodeChoices?.length || 0 });
 
     // Reconstruct branch-local narrative context from ancestor path
     const ancestorPath = getAncestorPath(ep.episodeIndex);
@@ -613,12 +661,14 @@ export async function generateStory(materials, options = {}) {
         });
       } catch (firstErr) {
         log(`[scene failed] ${firstErr.message} — retrying with simplified prompt...`);
+        wlog('scene_retry', { episodeIndex: ep.episodeIndex, sceneIndex: i, error: firstErr.message });
         try {
           const retryPrompt = buildRetryScenePrompt(plan_scene, lang);
           const retryRaw = await callLLM(retryPrompt, 'scene');
           scene = await parseScene(retryRaw);
         } catch (retryErr) {
           log(`[scene retry failed] ${retryErr.message} — using fallback scene`);
+          wlog('scene_fallback', { episodeIndex: ep.episodeIndex, sceneIndex: i, error: retryErr.message });
           scene = buildFallbackScene(plan_scene);
         }
       }
@@ -736,6 +786,18 @@ export async function generateStory(materials, options = {}) {
       // Notify caller of state update
       if (options.onState) options.onState(branchState);
 
+      const sceneWords = scene.content?.split(/\s+/).length || 0;
+      const sceneChoices = (scene.choices?.length || 0);
+      wlog('scene_done', {
+        episodeIndex: ep.episodeIndex,
+        sceneIndex: i,
+        sceneOf: totalScenes,
+        words: sceneWords,
+        choices: sceneChoices,
+        sceneType: scene.sceneType || plan_scene.sceneType || 'NARRATIVE',
+        hasConclusion: !!scene.conclusion,
+      });
+
       episode.scenes.push(scene);
       globalSceneIndex++;
     }
@@ -780,6 +842,15 @@ export async function generateStory(materials, options = {}) {
     }
 
     story.episodes.push(episode);
+
+    // Save progress after each completed episode for resume capability
+    if (options.onEpisode) {
+      options.onEpisode({
+        episodes: story.episodes,
+        episodeContexts: { ...episodeContexts },
+        globalSceneIndex,
+      });
+    }
   }
 
   // Validate final story

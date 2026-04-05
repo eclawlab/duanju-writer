@@ -224,12 +224,18 @@ export function clearWebResearchCache() {
   webResearchCacheLang = null;
 }
 
-export function buildResearchPrompt(history, webResearch, lang = 'en') {
+export function buildResearchPrompt(history, webResearch, lang = 'en', novelType = '') {
   const templateFile = lang === 'cn' ? PROMPT_PATH_CN : PROMPT_PATH;
-  const template = readFileSync(templateFile, 'utf8');
+  let template = readFileSync(templateFile, 'utf8');
   const historyText = history.length > 0
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')
     : lang === 'cn' ? '（无——这是首次运行）' : '(none — this is the first run)';
+  if (novelType) {
+    const section = lang === 'cn'
+      ? `\n\n## 小说类型要求\n\n你必须专注于以下小说类型：**${novelType}**。所有研究主题、情节灵感和角色设定都必须围绕这个类型。不要偏离此类型。\n`
+      : `\n\n## Novel Type Requirement\n\nYou MUST focus exclusively on the following novel type: **${novelType}**. All research topics, plot hooks, and character ideas must be within this genre/type. Do not deviate from this type.\n`;
+    template += section;
+  }
   return template
     .replace('{{webResearch}}', () => webResearch || (lang === 'cn' ? '（无网络研究数据）' : '(no web research available)'))
     .replace('{{history}}', () => historyText);
@@ -292,8 +298,9 @@ export async function parseMaterials(raw) {
 
 export async function collect(history, options = {}) {
   const lang = options.lang || 'en';
+  const novelType = options.novelType || '';
   const webResearch = await gatherWebResearch(lang);
-  const prompt = buildResearchPrompt(history, webResearch, lang);
+  const prompt = buildResearchPrompt(history, webResearch, lang, novelType);
   const raw = await callLLM(prompt, 'research');
   return await parseMaterials(raw);
 }

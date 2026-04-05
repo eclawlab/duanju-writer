@@ -76,13 +76,13 @@ export function createOpenAIAdapter(config) {
  * Creates a Claude CLI adapter using execFile.
  * @param {object} config
  * @param {string} [config.claudePath='claude']
- * @param {number} [config.timeout=300000]
+ * @param {number} [config.timeout=1500000]
  * @returns {{ call(prompt: string): Promise<string> }}
  */
 export function createClaudeCliAdapter(config) {
   const {
     claudePath = 'claude',
-    timeout = 300000,
+    timeout = 1500000,
   } = config;
 
   return {
@@ -174,7 +174,7 @@ export async function callLLM(prompt, role) {
       // No providers configured — fall back to claude-cli using claudePath
       provider = createClaudeCliAdapter({
         claudePath: config.claudePath || 'claude',
-        timeout: 300000,
+        timeout: 1500000,
       });
     } else {
       const providerConfig = config.providers[providerName];
