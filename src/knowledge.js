@@ -100,22 +100,29 @@ export async function importDirectory(store, dirPath, metadata = {}) {
 
 /**
  * Query the knowledge base, filtering out scene entries that are temporally
- * close to the current scene (within 3 scenes).
+ * close to the current scene (within 3 scenes) and scenes from non-ancestor
+ * episodes (cross-branch pollution).
  *
  * @param {object} store
  * @param {string} query
  * @param {number} k        - number of results to return
  * @param {number|null} currentSceneIndex
+ * @param {Set|null} ancestorEpisodeIndices - if provided, only include scenes from these episodes
  * @returns {{ id: string, text: string, score: number, metadata: object }[]}
  */
-export async function queryKnowledge(store, query, k = 5, currentSceneIndex = null) {
-  const raw = store.search(query, k * 2);
+export async function queryKnowledge(store, query, k = 5, currentSceneIndex = null, ancestorEpisodeIndices = null) {
+  const raw = store.search(query, k * 3);
 
   const filtered = raw.filter(result => {
-    const { sceneIndex } = result.metadata || {};
+    const { sceneIndex, episodeIndex } = result.metadata || {};
 
     // Knowledge entries (no sceneIndex) are always included
     if (sceneIndex === undefined || sceneIndex === null) return true;
+
+    // Filter out scenes from non-ancestor episodes (prevents cross-branch leakage)
+    if (ancestorEpisodeIndices && episodeIndex !== undefined) {
+      if (!ancestorEpisodeIndices.has(episodeIndex)) return false;
+    }
 
     // If we have no reference scene, include all
     if (currentSceneIndex === null || currentSceneIndex === undefined) return true;

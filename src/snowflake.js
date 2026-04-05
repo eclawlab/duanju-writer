@@ -26,7 +26,7 @@ const PARTS = [
   },
 ];
 
-export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en') {
+export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', novelType = '') {
   const templateFile = lang === 'cn' ? TEMPLATE_PATH_CN : TEMPLATE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const part = PARTS[partIndex];
@@ -39,6 +39,19 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
   if (priorParts.length > 0) {
     instructions = 'Previous parts for context:\n' + JSON.stringify(priorParts, null, 2) + '\n\n' + instructions;
   }
+  if (novelType) {
+    const constraint = lang === 'cn'
+      ? `\n\n重要：这个故事必须是**${novelType}**类型。所有角色、世界观、情节都必须符合此类型。`
+      : `\n\nIMPORTANT: This story MUST be a **${novelType}** novel. All characters, world-building, and plot must align with this genre/type.`;
+    instructions += constraint;
+  }
+  if (materials.newsSource) {
+    const ns = materials.newsSource;
+    const newsNote = lang === 'cn'
+      ? `\n\n新闻灵感：本故事基于真实新闻事件创作。主题：${ns.theme}。情感内核：${ns.emotionalCore}。不要照搬新闻，而是以此为灵感进行艺术加工。`
+      : `\n\nNews Inspiration: This story is inspired by a real news event. Theme: ${ns.theme}. Emotional core: ${ns.emotionalCore}. Do NOT retell the news — use it as creative inspiration.`;
+    instructions += newsNote;
+  }
   template = template.replace('{{partInstructions}}', () => instructions);
 
   return template;
@@ -46,12 +59,13 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
 
 export async function generateSnowflake(materials, options = {}) {
   const lang = options.lang || 'en';
+  const novelType = options.novelType || '';
   const log = options.log || (() => {});
   const parts = [];
 
   for (let i = 0; i < PARTS.length; i++) {
     log(`Snowflake step ${i + 1}/4: ${PARTS[i].title}...`);
-    const prompt = buildSnowflakePrompt(materials, i, parts, lang);
+    const prompt = buildSnowflakePrompt(materials, i, parts, lang, novelType);
     const raw = await callLLM(prompt, 'outline');
     // Try to parse JSON, fall back to raw text
     try {

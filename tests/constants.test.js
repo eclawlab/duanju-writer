@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 describe('constants', () => {
   test('exports VERSION', async () => {
     const { VERSION } = await import('../src/constants.js');
-    assert.equal(VERSION, '0.0.2');
+    assert.equal(VERSION, '0.1.6');
   });
 
   test('exports NAME', async () => {

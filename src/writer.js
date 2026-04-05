@@ -13,7 +13,7 @@ import { generateSnowflake } from './snowflake.js';
 import { updateGlobalSummary } from './compressor.js';
 import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc } from './story-state.js';
 import { getSceneTypeRules } from './scene-types.js';
-import { needsEnrichment, enrichScene } from './enrichment.js';
+import { needsEnrichment, enrichScene, countWords } from './enrichment.js';
 import { loadConfig } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,6 +22,65 @@ const OUTLINE_PATH = join(__dirname, '..', 'prompts', 'outline.md');
 const OUTLINE_PATH_CN = join(__dirname, '..', 'prompts', 'outline-cn.md');
 const SCENES_PATH = join(__dirname, '..', 'prompts', 'scenes.md');
 const SCENES_PATH_CN = join(__dirname, '..', 'prompts', 'scenes-cn.md');
+
+// ─── Scene content sanitization ──────────────────────────────────────────────
+
+const SCENE_TAG_RE = /\[(narrator|character:[^\]]*|player|choice)\]/i;
+
+/**
+ * Sanitize raw LLM output that should be scene content.
+ * Strips leading preamble (explanations before the first scene tag),
+ * trailing commentary after the last meaningful content,
+ * and markdown code fences.
+ *
+ * If the output doesn't contain any scene tags, returns it as-is
+ * (better to keep imperfect content than lose it entirely).
+ */
+export function sanitizeSceneContent(raw, originalContent) {
+  if (!raw || typeof raw !== 'string') return originalContent;
+
+  let text = raw.trim();
+
+  // Strip markdown code fences
+  if (text.startsWith('```')) {
+    text = text.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
+  }
+
+  // If it looks like JSON (LLM wrapped it in an object), try to extract content field
+  if (text.startsWith('{')) {
+    try {
+      const obj = JSON.parse(text);
+      if (obj.content && typeof obj.content === 'string') {
+        return obj.content;
+      }
+    } catch {
+      // Not valid JSON — continue with text processing
+    }
+  }
+
+  // Find the first scene tag and strip any preamble before it
+  const tagMatch = text.match(SCENE_TAG_RE);
+  if (tagMatch) {
+    const tagStart = text.indexOf(tagMatch[0]);
+    // Only strip preamble if the tag isn't at the very start
+    // and the text before it looks like explanation (no scene tags in it)
+    if (tagStart > 0) {
+      const preamble = text.slice(0, tagStart);
+      // If preamble has no scene tags, it's likely LLM explanation — strip it
+      if (!SCENE_TAG_RE.test(preamble)) {
+        text = text.slice(tagStart);
+      }
+    }
+  }
+
+  // If the result is substantially shorter than the original (>50% loss),
+  // the sanitization likely went wrong — keep the original
+  if (text.length < originalContent.length * 0.5) {
+    return originalContent;
+  }
+
+  return text.trim();
+}
 
 // ─── JSON extraction and repair ───────────────────────────────────────────────
 
@@ -98,6 +157,13 @@ export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType =
     const section = lang === 'cn'
       ? `\n\n## 小说类型要求\n\n这个故事必须是**${novelType}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。\n`
       : `\n\n## Novel Type Requirement\n\nThis story MUST be a **${novelType}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.\n`;
+    template += section;
+  }
+  if (materials.newsSource) {
+    const ns = materials.newsSource;
+    const section = lang === 'cn'
+      ? `\n\n## 新闻灵感\n\n这个故事基于一条真实新闻事件创作。\n- 来源: ${ns.url}\n- 主题: ${ns.theme}\n- 情感内核: ${ns.emotionalCore}\n\n重要：不要直接照搬新闻，而是以新闻为灵感进行艺术加工和戏剧化处理。人物和情节应是虚构的，但核心冲突和情感应与新闻事件呼应。\n`
+      : `\n\n## News Inspiration\n\nThis story is inspired by a real breaking news event.\n- Source: ${ns.url}\n- Theme: ${ns.theme}\n- Emotional core: ${ns.emotionalCore}\n\nIMPORTANT: Do NOT retell the news literally. Use it as creative inspiration — fictionalize characters and plot, but let the core conflict and emotions echo the real event.\n`;
     template += section;
   }
   return template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
@@ -410,7 +476,7 @@ export async function generateStory(materials, options = {}) {
   if (!snowflake) {
     try {
       log('Building story architecture (Snowflake method)...');
-      snowflake = await generateSnowflake(materials, { lang, log });
+      snowflake = await generateSnowflake(materials, { lang, novelType, log });
       if (options.onSnowflake) options.onSnowflake(snowflake);
       log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
     } catch (err) {
@@ -443,7 +509,7 @@ export async function generateStory(materials, options = {}) {
     plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
     try {
       log('Planning scene details, events, and revelations...');
-      plan = await generatePlan(outline, { lang });
+      plan = await generatePlan(outline, { lang, novelType });
       if (options.onPlan) options.onPlan(plan);
       log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
     } catch (planErr) {
@@ -578,11 +644,16 @@ export async function generateStory(materials, options = {}) {
         for (const revId of ctx.stateChanges.revealedIds) {
           try { markRevealed(branchState, revId); } catch {}
         }
-        for (const fId of ctx.stateChanges.reinforcedForeshadowing) {
-          try { reinforceForeshadowing(branchState, fId, 0); } catch {}
+        for (const f of ctx.stateChanges.reinforcedForeshadowing) {
+          // Support both old format (plain id string) and new format ({ id, sceneIndex })
+          const fId = typeof f === 'string' ? f : f.id;
+          const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
+          try { reinforceForeshadowing(branchState, fId, fScene); } catch {}
         }
-        for (const fId of ctx.stateChanges.resolvedForeshadowing) {
-          try { resolveForeshadowing(branchState, fId, 0); } catch {}
+        for (const f of ctx.stateChanges.resolvedForeshadowing) {
+          const fId = typeof f === 'string' ? f : f.id;
+          const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
+          try { resolveForeshadowing(branchState, fId, fScene); } catch {}
         }
       }
     }
@@ -599,11 +670,12 @@ export async function generateStory(materials, options = {}) {
     const episodeCharChanges = {};
     const episodeItemChanges = {};
     const episodeRevealedIds = [];
-    const episodeReinforcedForeshadowing = [];
-    const episodeResolvedForeshadowing = [];
+    const episodeReinforcedForeshadowing = []; // { id, sceneIndex }
+    const episodeResolvedForeshadowing = [];  // { id, sceneIndex }
     const episodeCompressedHistory = [];
     let episodeSummary = branchSummary;
     const episodeMotifTracker = { ...branchMotifTracker };
+    const recentConsistencyNotes = [];
 
     for (let i = 0; i < totalScenes; i++) {
       const plan_scene = ep.scenePlan[i];
@@ -613,7 +685,8 @@ export async function generateStory(materials, options = {}) {
       // Use branch-local scene position for revelation scheduling (not flat globalSceneIndex)
       const branchLocalSceneIndex = branchSceneCount + i;
       const history = buildHistoryContext([...branchHistory, ...episodeCompressedHistory]);
-      const revelations = getAvailableRevelations(branchState, branchLocalSceneIndex);
+      const ancestorSet = new Set(ancestorPath);
+      const revelations = getAvailableRevelations(branchState, branchLocalSceneIndex, ancestorSet);
       const stateContext = toPromptContext(branchState);
 
       // Validate state and log warnings
@@ -623,14 +696,15 @@ export async function generateStory(materials, options = {}) {
       }
 
       // Get plan scene data for events/pacing using composite key (episodeIndex:sceneIndex)
-      const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || plan.scenes[globalSceneIndex] || {};
+      const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || {};
 
       // Query vector store for relevant prior context
+      // Only include scenes from ancestor episodes to prevent cross-branch leakage
       let knowledgeContext = '';
       if (options.vectorStore) {
         try {
           const query = plan_scene.summary + ' ' + (planScene.events || []).join(' ');
-          const results = await queryKnowledge(options.vectorStore, query, 3, globalSceneIndex);
+          const results = await queryKnowledge(options.vectorStore, query, 3, branchLocalSceneIndex, ancestorSet);
           if (results.length > 0) {
             knowledgeContext = results.map(r => r.text).join('\n\n');
           }
@@ -656,6 +730,7 @@ export async function generateStory(materials, options = {}) {
             suspenseDensity: planScene.suspenseDensity,
             twistStrength: planScene.twistStrength,
             globalSummary: episodeSummary,
+            consistencyNotes: recentConsistencyNotes.length > 0 ? recentConsistencyNotes : undefined,
             sceneTypeRules,
           },
         });
@@ -677,9 +752,9 @@ export async function generateStory(materials, options = {}) {
       if (options.vectorStore) {
         try {
           options.vectorStore.add(
-            `scene_${globalSceneIndex}`,
+            `scene_ep${ep.episodeIndex}_s${i}`,
             scene.content,
-            { sceneIndex: globalSceneIndex, episodeTitle: ep.title }
+            { sceneIndex: branchLocalSceneIndex, episodeIndex: ep.episodeIndex, episodeTitle: ep.title }
           );
         } catch (err) {
           log(`[scene indexing failed] ${err.message}`);
@@ -690,8 +765,13 @@ export async function generateStory(materials, options = {}) {
       const consistencyResult = checkConsistency(scene.content, episodeMotifTracker, branchLocalSceneIndex);
       if (consistencyResult.issues.length > 0) {
         log(`Fixing ${consistencyResult.issues.length} consistency issue(s)...`);
+        // Feed issues forward so future scenes avoid the same patterns
+        recentConsistencyNotes.push(...consistencyResult.issues);
+        // Keep only the most recent issues (last 2 scenes worth)
+        while (recentConsistencyNotes.length > 10) recentConsistencyNotes.shift();
         try {
-          scene.content = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
+          const rewritten = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
+          scene.content = sanitizeSceneContent(rewritten, scene.content);
         } catch (err) {
           log(`[consistency rewrite failed] ${err.message}`);
         }
@@ -701,7 +781,8 @@ export async function generateStory(materials, options = {}) {
       if (needsEnrichment(scene.content, targetWordsPerScene)) {
         log(`Scene below word target (${targetWordsPerScene}) — enriching...`);
         try {
-          scene.content = await enrichScene(scene.content, targetWordsPerScene, lang);
+          const enriched = await enrichScene(scene.content, targetWordsPerScene, lang);
+          scene.content = sanitizeSceneContent(enriched, scene.content);
         } catch (err) {
           log(`[enrichment failed] ${err.message}`);
         }
@@ -768,10 +849,10 @@ export async function generateStory(materials, options = {}) {
 
       // Handle foreshadowing operations from plan
       for (const fId of (planScene.reinforceForeshadowing || [])) {
-        try { reinforceForeshadowing(branchState, fId, branchLocalSceneIndex); episodeReinforcedForeshadowing.push(fId); } catch {}
+        try { reinforceForeshadowing(branchState, fId, branchLocalSceneIndex); episodeReinforcedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex }); } catch {}
       }
       for (const fId of (planScene.resolveForeshadowing || [])) {
-        try { resolveForeshadowing(branchState, fId, branchLocalSceneIndex); episodeResolvedForeshadowing.push(fId); } catch {}
+        try { resolveForeshadowing(branchState, fId, branchLocalSceneIndex); episodeResolvedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex }); } catch {}
       }
 
       // Compress scene into history
@@ -786,7 +867,7 @@ export async function generateStory(materials, options = {}) {
       // Notify caller of state update
       if (options.onState) options.onState(branchState);
 
-      const sceneWords = scene.content?.split(/\s+/).length || 0;
+      const sceneWords = countWords(scene.content);
       const sceneChoices = (scene.choices?.length || 0);
       wlog('scene_done', {
         episodeIndex: ep.episodeIndex,

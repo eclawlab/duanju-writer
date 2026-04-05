@@ -10,6 +10,7 @@ import { generateStory } from './writer.js';
 import { createStore, getStoreDir } from './vectorstore.js';
 import { upload, fetchStory, verifyChoices } from './uploader.js';
 import { logEntry, writeSummary } from './worklog.js';
+import { countWords } from './enrichment.js';
 
 export function getStatusTransitions() {
   return [
@@ -37,21 +38,22 @@ async function processJob(jobId, options = {}) {
   const maxRetries = config.maxRetries || MAX_RETRIES;
   const lang = options.lang || config.lang || 'en';
   const novelType = options.novelType || config.novelType || '';
+  const newsUrl = options.newsUrl || '';
   const style = options.style || config.style || 'default';
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
-  wlog('job_start', { lang, style, novelType });
+  wlog('job_start', { lang, style, novelType, newsUrl });
 
   try {
     // Step 1: Collect (resume if materials already saved)
     let materials = loadArtifact(jobId, 'materials.json');
     if (!materials) {
       updateJob(jobId, { status: 'collecting', startedAt: new Date().toISOString() });
-      log('Collecting research materials...');
-      wlog('collecting_start');
+      log(newsUrl ? `Collecting news-based research from ${newsUrl}...` : 'Collecting research materials...');
+      wlog('collecting_start', newsUrl ? { newsUrl } : {});
       const history = getHistory();
-      materials = await collect(history, { lang, novelType });
+      materials = await collect(history, { lang, novelType, newsUrl });
       saveArtifact(jobId, 'materials.json', materials);
       const topicCount = materials.topics.length;
       const hookCount = materials.plotHooks?.length ?? 0;
@@ -127,7 +129,7 @@ async function processJob(jobId, options = {}) {
       try { vectorStore.save(); } catch {}
       const totalEpScenes = story.episodes.reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
       const totalWords = story.episodes.reduce((sum, ep) =>
-        sum + ep.scenes.reduce((s, sc) => s + (sc.content?.split(/\s+/).length || 0), 0), 0);
+        sum + ep.scenes.reduce((s, sc) => s + countWords(sc.content), 0), 0);
       const totalChoicesGenerated = story.episodes.reduce((sum, ep) =>
         sum + ep.scenes.reduce((s, sc) => s + (sc.choices?.length || 0) + (sc.episodeChoices?.length || 0), 0), 0);
       log(`Generated "${story.title}" (${story.episodes.length} episodes, ${totalEpScenes} scenes)`);
@@ -142,7 +144,7 @@ async function processJob(jobId, options = {}) {
           title: ep.title,
           isEnding: ep.isEnding,
           scenes: ep.scenes.length,
-          words: ep.scenes.reduce((s, sc) => s + (sc.content?.split(/\s+/).length || 0), 0),
+          words: ep.scenes.reduce((s, sc) => s + countWords(sc.content), 0),
           choices: ep.episodeChoices?.length || 0,
         })),
       });
@@ -218,7 +220,7 @@ async function processJob(jobId, options = {}) {
     // Write human-readable summary
     const totalScenes = story.episodes.reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
     const totalWords = story.episodes.reduce((sum, ep) =>
-      sum + ep.scenes.reduce((s, sc) => s + (sc.content?.split(/\s+/).length || 0), 0), 0);
+      sum + ep.scenes.reduce((s, sc) => s + countWords(sc.content), 0), 0);
     const totalChoices = story.episodes.reduce((sum, ep) =>
       sum + ep.scenes.reduce((s, sc) => s + (sc.choices?.length || 0) + (sc.episodeChoices?.length || 0), 0), 0);
     writeSummary(jobId, [
@@ -228,6 +230,7 @@ async function processJob(jobId, options = {}) {
       `Story ID:  ${result.storyId}`,
       `Language:  ${lang}`,
       `Type:      ${novelType || '(any)'}`,
+      `News:      ${newsUrl || '(none)'}`,
       `Style:     ${style}`,
       ``,
       `--- Statistics ---`,
@@ -238,7 +241,7 @@ async function processJob(jobId, options = {}) {
       ``,
       `--- Episodes ---`,
       ...story.episodes.map(ep => {
-        const epWords = ep.scenes.reduce((s, sc) => s + (sc.content?.split(/\s+/).length || 0), 0);
+        const epWords = ep.scenes.reduce((s, sc) => s + countWords(sc.content), 0);
         const epChoices = ep.episodeChoices?.length || 0;
         return `  [${ep.episodeIndex}] "${ep.title}" — ${ep.scenes.length} scenes, ${epWords} words, ${epChoices} choices${ep.isEnding ? ' (ending: ' + ep.ending + ')' : ''}`;
       }),

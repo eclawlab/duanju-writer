@@ -31,11 +31,13 @@ switch (command) {
   case 'run': {
     const { runOnce } = await import('../src/worker.js');
     const { createJob } = await import('../src/queue.js');
-    // Parse count, lang, style, and type from args: run [count] [--lang cn|en] [--style moyan] [--type 玄幻]
+    // Parse count, lang, style, type, and news from args
+    // run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL]
     let count = 1;
     let lang;
     let style;
     let novelType;
+    let newsUrl;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
@@ -45,6 +47,9 @@ switch (command) {
         a++;
       } else if (args[a] === '--type' && args[a + 1]) {
         novelType = args[a + 1];
+        a++;
+      } else if (args[a] === '--news' && args[a + 1]) {
+        newsUrl = args[a + 1];
         a++;
       } else if (!isNaN(args[a]) && args[a].trim() !== '') {
         count = Math.max(0, parseInt(args[a], 10));
@@ -63,7 +68,7 @@ switch (command) {
     for (let i = 0; i < count; i++) {
       const job = createJob();
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, novelType });
+      await runOnce(job.id, { lang, style, novelType, newsUrl });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -426,6 +431,6 @@ switch (command) {
   default:
     console.log(`Unknown command: ${command}`);
     console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|verify]');
-    console.log('\nRun options: story-writer run [count] [--lang cn|en] [--style moyan] [--type 玄幻]');
+    console.log('\nRun options: story-writer run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL]');
     process.exit(1);
 }

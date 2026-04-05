@@ -39,10 +39,16 @@ function extractJsonObject(text) {
  * @param {string} lang - 'en' or 'cn'
  * @returns {string}
  */
-export function buildPlanPrompt(outline, lang = 'en') {
+export function buildPlanPrompt(outline, lang = 'en', novelType = '') {
   const templateFile = lang === 'cn' ? 'plan-cn.md' : 'plan.md';
   const templatePath = join(__dirname, '..', 'prompts', templateFile);
-  const template = readFileSync(templatePath, 'utf8');
+  let template = readFileSync(templatePath, 'utf8');
+  if (novelType) {
+    const section = lang === 'cn'
+      ? `\n\n## 小说类型要求\n\n这个故事是**${novelType}**类型的小说。所有场景规划、角色行为、事件设计都必须符合此类型的特征。\n`
+      : `\n\n## Novel Type Requirement\n\nThis story is a **${novelType}** novel. All scene planning, character behavior, and event design must align with this genre/type.\n`;
+    template += section;
+  }
   return template.replace('{{outline}}', () => JSON.stringify(outline, null, 2));
 }
 
@@ -134,7 +140,8 @@ export function initStateFromPlan(plan) {
  */
 export async function generatePlan(outline, options = {}) {
   const lang = options.lang || 'en';
-  const prompt = buildPlanPrompt(outline, lang);
+  const novelType = options.novelType || '';
+  const prompt = buildPlanPrompt(outline, lang, novelType);
   const raw = await callLLM(prompt, 'plan');
   return parsePlan(raw);
 }

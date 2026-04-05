@@ -103,10 +103,10 @@ export function updateLocation(state, name, updates) {
 /**
  * Push a revelation onto state.revelations with revealed: false.
  * @param {object} state
- * @param {{ id: string, info: string, visibility: string, revealInScene: number }} revelation
+ * @param {{ id: string, info: string, visibility: string, revealInScene: number, revealInEpisode?: number }} revelation
  */
-export function addRevelation(state, { id, info, visibility, revealInScene }) {
-  state.revelations.push({ id, info, visibility, revealInScene, revealed: false });
+export function addRevelation(state, { id, info, visibility, revealInScene, revealInEpisode }) {
+  state.revelations.push({ id, info, visibility, revealInScene, revealInEpisode: revealInEpisode ?? null, revealed: false });
 }
 
 /**
@@ -126,17 +126,23 @@ export function markRevealed(state, id) {
  * Rules:
  *  - Always include `public` visibility (regardless of revealInScene).
  *  - Include `hidden` and `delayed` when revealInScene <= sceneIndex.
+ *  - If `revealInEpisode` is set, only include if that episode is on the current branch.
  *  - Never include `never_explicit`.
  *  - Never include already-revealed entries.
  *
  * @param {object} state
  * @param {number} sceneIndex
+ * @param {Set|null} [ancestorEpisodeIndices] - episodes on the current branch path
  * @returns {object[]}
  */
-export function getAvailableRevelations(state, sceneIndex) {
+export function getAvailableRevelations(state, sceneIndex, ancestorEpisodeIndices = null) {
   return state.revelations.filter(r => {
     if (r.revealed) return false;
     if (r.visibility === 'never_explicit') return false;
+    // If revelation is tied to a specific episode, only show on that branch
+    if (r.revealInEpisode != null && ancestorEpisodeIndices) {
+      if (!ancestorEpisodeIndices.has(r.revealInEpisode)) return false;
+    }
     if (r.visibility === 'public') return true;
     if (r.visibility === 'hidden' || r.visibility === 'delayed') {
       return r.revealInScene <= sceneIndex;
