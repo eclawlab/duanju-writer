@@ -4,6 +4,15 @@ import { loadConfig } from './config.js';
 // Module-level cache for provider instances
 const providerCache = new Map();
 
+// ─── LLM usage stats accumulator ────────────────────────────────────────────
+const stats = { calls: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, costUsd: 0 };
+
+export function getLLMStats() { return { ...stats }; }
+export function resetLLMStats() {
+  stats.calls = 0; stats.inputTokens = 0; stats.outputTokens = 0;
+  stats.totalMs = 0; stats.costUsd = 0;
+}
+
 /**
  * Creates an OpenAI-compatible HTTP adapter.
  * @param {object} config
@@ -67,6 +76,12 @@ export function createOpenAIAdapter(config) {
         throw new Error('LLM returned empty response');
       }
 
+      // Accumulate token usage if available
+      if (data.usage) {
+        stats.inputTokens += data.usage.prompt_tokens || 0;
+        stats.outputTokens += data.usage.completion_tokens || 0;
+      }
+
       return content;
     },
   };
@@ -120,6 +135,11 @@ export function createClaudeCliAdapter(config) {
                 throw new Error(`Claude CLI error: ${parsed.result}`);
               }
 
+              // Accumulate cost if available
+              if (parsed.cost_usd) stats.costUsd += parsed.cost_usd;
+              if (parsed.num_input_tokens) stats.inputTokens += parsed.num_input_tokens;
+              if (parsed.num_output_tokens) stats.outputTokens += parsed.num_output_tokens;
+
               resolve(parsed.result ?? stdout);
             } catch (parseErr) {
               reject(parseErr);
@@ -153,6 +173,11 @@ export function createProvider(providerConfig) {
   throw new Error(`Unknown provider type: ${type}`);
 }
 
+// Module-level model override — when set, all roles use this provider
+let _modelOverride = null;
+export function setModelOverride(providerName) { _modelOverride = providerName; }
+export function getModelOverride() { return _modelOverride; }
+
 /**
  * Calls the LLM for a given prompt and role, using config-defined providers.
  * Provider instances are cached by provider name.
@@ -164,7 +189,7 @@ export async function callLLM(prompt, role) {
   const config = loadConfig();
 
   // Determine which provider name to use for this role
-  const providerName = config.roles?.[role] ?? 'claude';
+  const providerName = _modelOverride || config.roles?.[role] || 'claude';
 
   // Check cache first
   if (!providerCache.has(providerName)) {
@@ -188,7 +213,11 @@ export async function callLLM(prompt, role) {
   }
 
   const provider = providerCache.get(providerName);
-  return provider.call(prompt);
+  const start = Date.now();
+  const result = await provider.call(prompt);
+  stats.totalMs += Date.now() - start;
+  stats.calls += 1;
+  return result;
 }
 
 /**

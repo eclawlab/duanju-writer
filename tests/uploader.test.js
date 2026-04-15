@@ -131,4 +131,42 @@ describe('uploader', () => {
     const result = handleResponse({ ok: true, status: 201, body });
     assert.deepEqual(result.data, body);
   });
+
+  test('buildRequest includes variationGroupId when provided', async () => {
+    const { buildRequest } = await import('../src/uploader.js');
+    const story = { title: 'Test', synopsis: 'A test', episodes: [] };
+    const config = { autostoryUrl: 'http://localhost:3001', aiApiKey: 'key' };
+    const req = buildRequest(story, config, { variationGroupId: 'group-123' });
+    const body = JSON.parse(req.options.body);
+    assert.equal(body.variationGroupId, 'group-123');
+  });
+
+  test('buildRequest includes variationLabel when provided', async () => {
+    const { buildRequest } = await import('../src/uploader.js');
+    const story = { title: 'Test', synopsis: 'A test', episodes: [] };
+    const config = { autostoryUrl: 'http://localhost:3001', aiApiKey: 'key' };
+    const req = buildRequest(story, config, { variationLabel: 'Path 1 · Good Ending' });
+    const body = JSON.parse(req.options.body);
+    assert.equal(body.variationLabel, 'Path 1 · Good Ending');
+  });
+
+  test('buildRequest omits variation fields when not provided', async () => {
+    const { buildRequest } = await import('../src/uploader.js');
+    const story = { title: 'Test', synopsis: 'A test', episodes: [] };
+    const config = { autostoryUrl: 'http://localhost:3001', aiApiKey: 'key' };
+    const req = buildRequest(story, config);
+    const body = JSON.parse(req.options.body);
+    assert.equal(body.variationGroupId, undefined);
+    assert.equal(body.variationLabel, undefined);
+  });
+
+  test('buildRequest omits variation fields with empty options', async () => {
+    const { buildRequest } = await import('../src/uploader.js');
+    const story = { title: 'Test', synopsis: 'A test', episodes: [] };
+    const config = { autostoryUrl: 'http://localhost:3001', aiApiKey: 'key' };
+    const req = buildRequest(story, config, {});
+    const body = JSON.parse(req.options.body);
+    assert.equal(body.variationGroupId, undefined);
+    assert.equal(body.variationLabel, undefined);
+  });
 });

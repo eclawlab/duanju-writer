@@ -65,6 +65,7 @@ Return ONLY valid JSON (no markdown, no commentary):
 - Characters should only learn things when they're present in the scene
 - Track location changes explicitly
 - Each scene must have suspenseDensity (compact/gradual/explosive) and twistStrength (1-5)
-- Follow the "2 tense, 1 buffer" pattern: every 3 scenes should have 2 high-tension + 1 lower-tension
-- twistStrength 4-5 should be reserved for major reveals or climactic moments
+- Pacing requirement: ALL scenes should maintain high tension. No pure setup or pure transition low-tension scenes. Every scene must have twistStrength of at least 2
+- twistStrength 4-5 MUST appear at least once per episode (every episode needs a twist)
+- The last scene of every episode MUST end on a cliffhanger hook, with pacing marked as "climactic"
 - Scenes on different branches are independent — do NOT assume events from one branch occur in another

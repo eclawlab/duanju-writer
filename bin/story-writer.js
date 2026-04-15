@@ -1,7 +1,25 @@
 #!/usr/bin/env node
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { DATA_DIR, JOBS_DIR } from '../src/constants.js';
+
+// Load .env file if present (no dependency needed)
+const envPath = new URL('../.env', import.meta.url).pathname;
+if (existsSync(envPath)) {
+  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    // Strip surrounding quotes
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
 
 // Ensure data directories exist
 mkdirSync(DATA_DIR, { recursive: true });
@@ -31,13 +49,14 @@ switch (command) {
   case 'run': {
     const { runOnce } = await import('../src/worker.js');
     const { createJob } = await import('../src/queue.js');
-    // Parse count, lang, style, type, and news from args
-    // run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL]
+    // Parse count, lang, style, type, news, and model from args
+    // run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL] [--model claude|openai|<provider>]
     let count = 1;
     let lang;
     let style;
     let novelType;
     let newsUrl;
+    let model;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
@@ -50,6 +69,9 @@ switch (command) {
         a++;
       } else if (args[a] === '--news' && args[a + 1]) {
         newsUrl = args[a + 1];
+        a++;
+      } else if (args[a] === '--model' && args[a + 1]) {
+        model = args[a + 1];
         a++;
       } else if (!isNaN(args[a]) && args[a].trim() !== '') {
         count = Math.max(0, parseInt(args[a], 10));
@@ -64,6 +86,27 @@ switch (command) {
         console.log(err.message);
         process.exit(1);
       }
+    }
+    // Validate and set model override
+    if (model) {
+      const { loadConfig } = await import('../src/config.js');
+      const config = loadConfig();
+      if (!config.providers || !config.providers[model]) {
+        console.log(`Provider "${model}" not found.`);
+        console.log(`Available providers: ${Object.keys(config.providers || {}).join(', ')}`);
+        console.log('Add one with: story-writer provider add <name> --type openai ...');
+        process.exit(1);
+      }
+      // Check OpenAI providers have an API key configured
+      const providerCfg = config.providers[model];
+      if (providerCfg.type === 'openai' && !providerCfg.apiKey) {
+        console.log(`Provider "${model}" has no API key configured.`);
+        console.log(`Set it with: story-writer provider add ${model} --type openai --base-url ${providerCfg.baseUrl} --model ${providerCfg.model} --api-key <your-key>`);
+        process.exit(1);
+      }
+      const { setModelOverride } = await import('../src/llm.js');
+      setModelOverride(model);
+      console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
       const job = createJob();
@@ -431,6 +474,6 @@ switch (command) {
   default:
     console.log(`Unknown command: ${command}`);
     console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|verify]');
-    console.log('\nRun options: story-writer run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL]');
+    console.log('\nRun options: story-writer run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL] [--model claude|openai]');
     process.exit(1);
 }

@@ -89,13 +89,21 @@ This content will be READ ALOUD by text-to-speech voices. Write specifically for
 - Build suspense through pacing: slow the narration before a revelation, speed up during action
 - Let silence and pauses carry weight — a [narrator] block of "The room went quiet." is powerful in audio
 
+## Pacing & Hook Requirements
+
+- **Lean and punchy** — Scenes must be concise and impactful. Every sentence must advance the plot. Cut all unnecessary description, transitions, and setup.
+- **Fast turns** — Every scene must contain plot progression or information reveals. No "static" scenes allowed.
+- **Last scene of episode must end on a cliffhanger** — If this is the final scene of an episode, you MUST create a suspense hook that makes the listener unable to stop (sudden danger, shocking revelation, unexpected betrayal, etc.).
+- **Start with action** — Don't open scenes slowly. The first sentence should already have something happening or tension present.
+
 ## Rules
 
-- Write 100-300 words of scene content
+- Write 80-200 words of scene content (keep it lean — shorter is better)
 - Use diverse voice assignments for different characters
 - nextSceneIndex is 0-based within the episode's scenes array
 - Include at least one [player] block if this is a dialogue scene
 - Make the scene vivid, engaging, and emotionally resonant
+- Every scene must push the plot forward — no pure description or pure setup allowed
 - Remember: every word you write will be HEARD, not read — write for the ear
 
 ## IMPORTANT: JSON formatting

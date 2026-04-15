@@ -97,7 +97,14 @@ Return ONLY valid JSON (no markdown, no commentary):
 - The tree should be 2-4 levels deep (2-4 choices before reaching an ending)
 - Plan 7-15 total episodes (mix of branching and ending episodes)
 - Include at least 2 GOOD endings, 1 BAD ending, and 1 NEUTRAL ending
-- Each episode has 3-5 scenes internally (linear within the episode)
+- Each episode has 2-3 scenes internally (linear within the episode, keep it tight)
+
+## Pacing & Hook Requirements
+
+- **Fast-paced progression** — Every episode must be concise and information-dense. No filler transitions or slow buildups. Jump straight into conflict and turning points.
+- **Every episode needs a twist** — Each episode MUST contain at least one unexpected plot twist (a revelation, betrayal, sudden crisis, identity reversal, etc.). No flat or uneventful episodes allowed.
+- **Strong cliffhanger hooks** — Every non-ending episode MUST end with a powerful suspense moment or shocking event that makes the listener desperate to choose what happens next. Hooks must be specific plot suspense, not vague "what happens next" feelings.
+- **Lean scenes** — Cut everything that doesn't advance the plot. No pure description scenes, no pure flashback scenes. Every scene must push the story forward.
 
 ## Audio Novel Design Principles
 
@@ -109,6 +116,7 @@ This story will be experienced as an AUDIO NOVEL — listeners hear it read alou
 - **Design for momentum** — Audio listeners can't pause easily. Plan scenes that build steadily toward hooks, choices, or emotional peaks. Avoid scenes that are purely expository.
 - **Make episode choices clear and memorable** — Choice text will be read aloud at the end of each episode. Keep options short (under 15 words) and meaningfully distinct so listeners can decide quickly.
 - **Each episode should feel complete** — Like a chapter that ends on a cliffhanger with choices. The listener should feel satisfied with the episode while eager to choose what happens next.
+- **Jump into conflict fast** — Don't spend extensive time on background setup. The first scene should already have something happening. Reveal the world and characters through conflict, not exposition.
 
 ## Rules
 
@@ -119,3 +127,5 @@ This story will be experienced as an AUDIO NOVEL — listeners hear it read alou
 - Make the story compelling with real tension and meaningful choices
 - Each choice should lead to genuinely different story paths, not superficial variations
 - Design every element for the LISTENING experience — clarity, momentum, and emotional impact
+- Every episode MUST contain at least one unexpected plot twist
+- Every non-ending episode MUST end with a cliffhanger hook that makes the listener unable to stop

@@ -1,6 +1,6 @@
 import { loadConfig } from './config.js';
 
-export function buildRequest(story, config) {
+export function buildRequest(story, config, variationOptions = {}) {
   const url = `${config.autostoryUrl}/api/ai/stories`;
   // Deep-copy episodes to avoid mutating the original story object
   const body = {
@@ -10,6 +10,13 @@ export function buildRequest(story, config) {
       scenes: ep.scenes?.map(scene => ({ ...scene })),
     })),
   };
+  // Add variation metadata if provided
+  if (variationOptions.variationGroupId) {
+    body.variationGroupId = variationOptions.variationGroupId;
+  }
+  if (variationOptions.variationLabel) {
+    body.variationLabel = variationOptions.variationLabel;
+  }
   if (config.publishOnUpload !== undefined) {
     body.publish = config.publishOnUpload;
   }
@@ -59,9 +66,9 @@ export function handleResponse(res) {
   };
 }
 
-export async function upload(story) {
+export async function upload(story, variationOptions = {}) {
   const config = loadConfig();
-  const { url, options } = buildRequest(story, config);
+  const { url, options } = buildRequest(story, config, variationOptions);
   const res = await fetch(url, options);
   const body = await res.json().catch(() => ({}));
   return handleResponse({ ok: res.ok, status: res.status, body });
@@ -119,7 +126,10 @@ export function verifyChoices(localStory, remoteStory) {
     const localChoices = localEp.episodeChoices || [];
 
     // Get remote choices: from the last scene of the remote episode
-    const remoteLastScene = remoteEp.scenes?.reduce((a, b) => (b.sortOrder > a.sortOrder ? b : a), remoteEp.scenes[0]);
+    const remoteScenes = remoteEp.scenes || [];
+    const remoteLastScene = remoteScenes.length > 0
+      ? remoteScenes.reduce((a, b) => (b.sortOrder > a.sortOrder ? b : a), remoteScenes[0])
+      : null;
     const remoteChoices = remoteLastScene?.choices || [];
 
     if (localChoices.length === 0 && remoteChoices.length === 0) {
@@ -149,7 +159,13 @@ export function verifyChoices(localStory, remoteStory) {
 
       // Verify the remote nextSceneId points to the correct target episode's first scene
       const expectedTargetSceneId = firstSceneIdByEpIndex[local.nextEpisodeIndex];
-      if (expectedTargetSceneId && remote.nextSceneId !== expectedTargetSceneId) {
+      if (!expectedTargetSceneId) {
+        mismatches.push({
+          index: i, field: 'target',
+          local: `episode ${local.nextEpisodeIndex} (no first scene found on server)`,
+          remote: `scene ${remote.nextSceneId}`,
+        });
+      } else if (remote.nextSceneId !== expectedTargetSceneId) {
         mismatches.push({
           index: i, field: 'target',
           local: `episode ${local.nextEpisodeIndex} → scene ${expectedTargetSceneId}`,
