@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { loadConfig } from './config.js';
+import { registerChild as defaultRegisterChild, unregisterChild as defaultUnregisterChild } from './pidfile.js';
 
 // Module-level cache for provider instances
 const providerCache = new Map();
@@ -66,7 +67,10 @@ export function createOpenAIAdapter(config) {
       clearTimeout(timer);
 
       if (!response.ok) {
-        throw new Error(`LLM request failed: HTTP ${response.status}`);
+        // Drain the body so the underlying socket isn't held until GC
+        const errBody = await response.text().catch(() => '');
+        const snippet = errBody ? ` - ${errBody.slice(0, 200)}` : '';
+        throw new Error(`LLM request failed: HTTP ${response.status}${snippet}`);
       }
 
       const data = await response.json();
@@ -98,11 +102,22 @@ export function createClaudeCliAdapter(config) {
   const {
     claudePath = 'claude',
     timeout = 1500000,
+    registerChild = defaultRegisterChild,
+    unregisterChild = defaultUnregisterChild,
   } = config;
 
   return {
     call(prompt) {
       return new Promise((resolve, reject) => {
+        let trackedPid = null;
+        const done = (fn, value) => {
+          if (trackedPid !== null) {
+            try { unregisterChild(trackedPid); } catch {}
+            trackedPid = null;
+          }
+          fn(value);
+        };
+
         const child = execFile(
           claudePath,
           ['-p', '--output-format', 'json', '--no-session-persistence'],
@@ -114,9 +129,9 @@ export function createClaudeCliAdapter(config) {
           (err, stdout, stderr) => {
             if (err) {
               if (err.killed) {
-                reject(new Error(`Claude CLI timed out after ${timeout}ms`));
+                done(reject, new Error(`Claude CLI timed out after ${timeout}ms`));
               } else {
-                reject(new Error(`Claude CLI failed: ${err.message}\n${stderr}`));
+                done(reject, new Error(`Claude CLI failed: ${err.message}\n${stderr}`));
               }
               return;
             }
@@ -127,7 +142,7 @@ export function createClaudeCliAdapter(config) {
                 parsed = JSON.parse(stdout);
               } catch {
                 // Not JSON — return raw stdout
-                resolve(stdout);
+                done(resolve, stdout);
                 return;
               }
 
@@ -140,12 +155,17 @@ export function createClaudeCliAdapter(config) {
               if (parsed.num_input_tokens) stats.inputTokens += parsed.num_input_tokens;
               if (parsed.num_output_tokens) stats.outputTokens += parsed.num_output_tokens;
 
-              resolve(parsed.result ?? stdout);
+              done(resolve, parsed.result ?? stdout);
             } catch (parseErr) {
-              reject(parseErr);
+              done(reject, parseErr);
             }
           }
         );
+
+        if (child.pid) {
+          trackedPid = child.pid;
+          try { registerChild(trackedPid); } catch {}
+        }
 
         child.stdin.write(prompt);
         child.stdin.end();

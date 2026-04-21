@@ -135,7 +135,7 @@ export function initStateFromPlan(plan) {
 /**
  * Calls Claude to generate a plan from an outline, then parses and returns it.
  * @param {object} outline
- * @param {object} options - passed to callClaude
+ * @param {object} options - { lang, novelType }
  * @returns {Promise<object>}
  */
 export async function generatePlan(outline, options = {}) {

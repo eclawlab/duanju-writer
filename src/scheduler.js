@@ -30,5 +30,11 @@ export function startScheduler() {
   tick();
 
   // Then on interval
-  setInterval(tick, interval);
+  const handle = setInterval(tick, interval);
+
+  return {
+    stop() {
+      clearInterval(handle);
+    },
+  };
 }

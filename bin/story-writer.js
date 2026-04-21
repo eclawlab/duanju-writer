@@ -2,6 +2,7 @@
 
 import { mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { DATA_DIR, JOBS_DIR } from '../src/constants.js';
+import { cleanupStale, registerParent, unregisterParent } from '../src/pidfile.js';
 
 // Load .env file if present (no dependency needed)
 const envPath = new URL('../.env', import.meta.url).pathname;
@@ -28,29 +29,67 @@ mkdirSync(JOBS_DIR, { recursive: true });
 const command = process.argv[2] || 'start';
 const args = process.argv.slice(3);
 
+function installShutdown(services) {
+  let shuttingDown = false;
+  const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\nReceived ${signal} — shutting down...`);
+    for (const svc of services) {
+      try { svc?.stop?.(); } catch {}
+    }
+    try { unregisterParent(process.pid); } catch {}
+    process.exit(0);
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+async function startupCleanup() {
+  const { resetJobs } = await import('../src/queue.js');
+  const result = cleanupStale();
+  if (result.killed.length > 0) {
+    console.log(`Terminated ${result.killed.length} orphan process(es) from prior run: ${result.killed.join(', ')}`);
+  }
+  if (result.skipped.length > 0) {
+    console.log(`Skipped ${result.skipped.length} stale PID(s) that no longer match expected signature: ${result.skipped.join(', ')}`);
+  }
+  const { priorCount } = resetJobs();
+  if (priorCount > 0) {
+    console.log(`Fresh start — cleared ${priorCount} prior job(s) and their artifacts.`);
+  }
+  registerParent(process.pid);
+}
+
 switch (command) {
   case 'start': {
+    await startupCleanup();
     const { startScheduler } = await import('../src/scheduler.js');
     const { startWorker } = await import('../src/worker.js');
-    startScheduler();
-    startWorker();
+    const scheduler = startScheduler();
+    const worker = startWorker();
+    installShutdown([scheduler, worker]);
     break;
   }
   case 'scheduler': {
+    await startupCleanup();
     const { startScheduler } = await import('../src/scheduler.js');
-    startScheduler();
+    const scheduler = startScheduler();
+    installShutdown([scheduler]);
     break;
   }
   case 'worker': {
+    await startupCleanup();
     const { startWorker } = await import('../src/worker.js');
-    startWorker();
+    const worker = startWorker();
+    installShutdown([worker]);
     break;
   }
   case 'run': {
     const { runOnce } = await import('../src/worker.js');
     const { createJob } = await import('../src/queue.js');
     // Parse count, lang, style, type, news, and model from args
-    // run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL] [--model claude|openai|<provider>]
+    // run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--model claude|openai|<provider>]
     let count = 1;
     let lang;
     let style;
@@ -60,6 +99,10 @@ switch (command) {
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
+        if (lang !== 'cn' && lang !== 'en') {
+          console.log(`Invalid --lang "${args[a + 1]}". Supported: cn, en.`);
+          process.exit(1);
+        }
         a++;
       } else if (args[a] === '--style' && args[a + 1]) {
         style = args[a + 1].toLowerCase();
@@ -109,7 +152,7 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob();
+      const job = createJob({ lang, style, novelType, newsUrl });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
       await runOnce(job.id, { lang, style, novelType, newsUrl });
     }
@@ -133,7 +176,7 @@ switch (command) {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
-      'maxRetries', 'maxConcurrentJobs', 'publishOnUpload', 'lang', 'novelType',
+      'maxRetries', 'publishOnUpload', 'lang', 'novelType',
       'style', 'targetWordsPerScene',
     ];
     if (args[0] === 'set' && args[1]) {
@@ -157,6 +200,11 @@ switch (command) {
           console.log(err.message);
           process.exit(1);
         }
+      }
+      // Validate lang values
+      if (args[1] === 'lang' && value !== 'cn' && value !== 'en') {
+        console.log(`Invalid lang "${value}". Supported: cn, en.`);
+        process.exit(1);
       }
       config[args[1]] = value;
       saveConfig(config);
@@ -185,8 +233,8 @@ switch (command) {
       }
       console.log();
     }
-    console.log('Usage: story-writer run --style moyan');
-    console.log('   or: story-writer config set style moyan');
+    console.log('Usage: story-writer run --style sanderson');
+    console.log('   or: story-writer config set style sanderson');
     break;
   }
   case 'setup': {
@@ -413,67 +461,9 @@ switch (command) {
   }
   break;
 }
-  case 'verify': {
-    const { existsSync, readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const { fetchStory, verifyChoices } = await import('../src/uploader.js');
-    const { listJobs } = await import('../src/queue.js');
-    const chalk = (await import('chalk')).default;
-
-    // Determine which job to verify: argument or latest done job
-    let jobId = args[0];
-    if (!jobId) {
-      const jobs = listJobs();
-      const doneJobs = jobs.filter(j => j.status === 'done' && j.storyId).sort((a, b) => b.completedAt?.localeCompare(a.completedAt));
-      if (doneJobs.length === 0) {
-        console.log('No completed jobs to verify. Run a job first or pass a job ID.');
-        process.exit(1);
-      }
-      jobId = doneJobs[0].id;
-    }
-
-    const storyPath = join(JOBS_DIR, jobId, 'story.json');
-    const resultPath = join(JOBS_DIR, jobId, 'result.json');
-    if (!existsSync(storyPath) || !existsSync(resultPath)) {
-      console.log(`Job ${jobId} missing story.json or result.json`);
-      process.exit(1);
-    }
-
-    const localStory = JSON.parse(readFileSync(storyPath, 'utf8'));
-    const result = JSON.parse(readFileSync(resultPath, 'utf8'));
-    const storyId = result.storyId;
-
-    console.log(`Verifying job ${jobId}`);
-    console.log(`Story: "${localStory.title}" (${storyId})\n`);
-
-    console.log('Fetching story from server...');
-    const remoteStory = await fetchStory(storyId);
-
-    const report = verifyChoices(localStory, remoteStory);
-
-    for (const ep of report.episodes) {
-      const icon = ep.status === 'OK' ? chalk.green('✓') : chalk.red('✗');
-      const counts = ep.localCount !== undefined ? ` (local=${ep.localCount}, remote=${ep.remoteCount})` : '';
-      console.log(`  ${icon} [${ep.episodeIndex}] "${ep.title}" — ${ep.detail}${counts}`);
-      if (ep.mismatches) {
-        for (const m of ep.mismatches) {
-          console.log(chalk.red(`      choice[${m.index}] ${m.field}: local="${m.local}" ≠ remote="${m.remote}"`));
-        }
-      }
-    }
-
-    console.log();
-    if (report.ok) {
-      console.log(chalk.green('All choices verified ✓'));
-    } else {
-      console.log(chalk.red('Verification failed — mismatches found'));
-      process.exit(1);
-    }
-    break;
-  }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|verify]');
-    console.log('\nRun options: story-writer run [count] [--lang cn|en] [--style moyan] [--type 玄幻] [--news URL] [--model claude|openai]');
+    console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
+    console.log('\nRun options: story-writer run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--model claude|openai]');
     process.exit(1);
 }

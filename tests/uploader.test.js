@@ -79,26 +79,20 @@ describe('uploader', () => {
     assert.ok(result.data);
   });
 
-  test('handleResponse returns null storyId when body has no story', async () => {
+  test('handleResponse throws when 2xx body has no story.id', async () => {
     const { handleResponse } = await import('../src/uploader.js');
-    const result = handleResponse({
-      ok: true,
-      status: 200,
-      body: {},
-    });
-    assert.equal(result.success, true);
-    assert.equal(result.storyId, null);
+    assert.throws(
+      () => handleResponse({ ok: true, status: 200, body: {}, bodyText: '{}' }),
+      /no story\.id in response/,
+    );
   });
 
-  test('handleResponse returns null storyId when body is null', async () => {
+  test('handleResponse throws when 2xx body is null', async () => {
     const { handleResponse } = await import('../src/uploader.js');
-    const result = handleResponse({
-      ok: true,
-      status: 200,
-      body: null,
-    });
-    assert.equal(result.success, true);
-    assert.equal(result.storyId, null);
+    assert.throws(
+      () => handleResponse({ ok: true, status: 200, body: null, bodyText: '' }),
+      /no story\.id in response/,
+    );
   });
 
   test('handleResponse throws on HTTP error with error message', async () => {

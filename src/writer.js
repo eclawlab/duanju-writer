@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
-import { getStyle, listStyles } from './styles.js';
+import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
 import { compressScenes, buildHistoryContext } from './compressor.js';
 import { updateCharacter, updateItem, getAvailableRevelations, markRevealed, toPromptContext, validate } from './story-state.js';
@@ -22,6 +22,9 @@ const OUTLINE_PATH = join(__dirname, '..', 'prompts', 'outline.md');
 const OUTLINE_PATH_CN = join(__dirname, '..', 'prompts', 'outline-cn.md');
 const SCENES_PATH = join(__dirname, '..', 'prompts', 'scenes.md');
 const SCENES_PATH_CN = join(__dirname, '..', 'prompts', 'scenes-cn.md');
+const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
+
+export const VALID_TAIL_ENDINGS = ['GOOD', 'BITTERSWEET', 'SPECIAL'];
 
 // ─── Scene content sanitization ──────────────────────────────────────────────
 
@@ -149,7 +152,7 @@ async function parseJsonWithRepair(raw, label) {
 export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType = '') {
   const templateFile = lang === 'cn' ? OUTLINE_PATH_CN : OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
-  const style = getStyle(styleKey);
+  const style = getStyleSafe(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.outline}\n`;
   }
@@ -199,46 +202,18 @@ export async function parseOutline(raw) {
         throw new Error(`Episode "${ep.title}" scene ${i} missing summary`);
       }
     }
-    // Validate episodeChoices references
-    if (!ep.isEnding) {
-      if (!ep.episodeChoices || ep.episodeChoices.length < 3) {
-        throw new Error(`Non-ending episode "${ep.title}" must have at least 3 episodeChoices (got ${ep.episodeChoices?.length || 0})`);
-      }
-      if (ep.episodeChoices.length > 5) {
-        throw new Error(`Non-ending episode "${ep.title}" must have at most 5 episodeChoices (got ${ep.episodeChoices.length})`);
-      }
-      for (const choice of ep.episodeChoices) {
-        if (!choice.text) throw new Error(`Episode "${ep.title}" has a choice missing text`);
-        if (choice.nextEpisodeIndex === undefined || !validIndices.has(choice.nextEpisodeIndex)) {
-          throw new Error(`Episode "${ep.title}" choice "${choice.text}" references invalid episodeIndex ${choice.nextEpisodeIndex}`);
-        }
-      }
-    }
+    // Linear stories have no branching — strip any stray episodeChoices the LLM emits.
+    ep.episodeChoices = [];
   }
 
-  // Validate no cycles in the episode graph
-  const adjacency = {};
-  for (const ep of data.episodes) {
-    adjacency[ep.episodeIndex] = (ep.episodeChoices || []).map(c => c.nextEpisodeIndex);
+  // Linear stories require exactly one ending episode (the last one)
+  const endingCount = data.episodes.filter(ep => ep.isEnding).length;
+  if (endingCount === 0) {
+    throw new Error('Linear outline must have exactly one ending episode (isEnding: true)');
   }
-  const visited = new Set();
-  const inStack = new Set();
-  function hasCycle(node) {
-    if (inStack.has(node)) return true;
-    if (visited.has(node)) return false;
-    visited.add(node);
-    inStack.add(node);
-    for (const next of (adjacency[node] || [])) {
-      if (hasCycle(next)) return true;
-    }
-    inStack.delete(node);
-    return false;
-  }
-  for (const ep of data.episodes) {
-    if (hasCycle(ep.episodeIndex)) {
-      throw new Error('Episode graph contains a cycle — episodeChoices must form a tree (no loops)');
-    }
-  }
+
+  // Always produce empty characterQuestions — the player skips that step.
+  data.characterQuestions = [];
 
   return data;
 }
@@ -252,12 +227,113 @@ export async function generateOutline(materials, options = {}) {
   return await parseOutline(raw);
 }
 
+// ─── Tail outline: regenerate back-half with a divergent ending ──────────────
+
+function summarizeEpisodeForTail(ep) {
+  const scenes = (ep.scenePlan || [])
+    .map((s, i) => `    Scene ${i}: ${s.summary}`)
+    .join('\n');
+  return `- Episode ${ep.episodeIndex} "${ep.title}"\n${scenes}`;
+}
+
+function summarizeSnowflakeForTail(snowflake) {
+  if (!snowflake) return '(not available)';
+  const lines = [];
+  if (snowflake.seed) lines.push(`Seed: ${snowflake.seed}`);
+  if (snowflake.characters?.length) {
+    lines.push('Characters:');
+    for (const c of snowflake.characters) {
+      const arc = c.arc ? ` — arc: ${c.arc}` : '';
+      lines.push(`  - ${c.name}${c.role ? ` (${c.role})` : ''}${arc}`);
+    }
+  }
+  if (snowflake.setting) lines.push(`Setting: ${snowflake.setting}`);
+  return lines.join('\n') || '(none)';
+}
+
+export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake) {
+  const template = readFileSync(TAIL_OUTLINE_PATH, 'utf8');
+  const sorted = [...baseOutline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
+  const totalEpisodes = sorted.length;
+  const lastIdx = totalEpisodes - 1;
+  const tailCount = totalEpisodes - splitIdx;
+  const prior = sorted.slice(0, splitIdx);
+  const priorEpisodes = prior.map(summarizeEpisodeForTail).join('\n\n');
+  const priorLastIdx = splitIdx - 1;
+
+  return template
+    .replace(/\{\{splitIdx\}\}/g, String(splitIdx))
+    .replace(/\{\{splitIdxPlus1\}\}/g, String(splitIdx + 1))
+    .replace(/\{\{lastIdx\}\}/g, String(lastIdx))
+    .replace(/\{\{priorLastIdx\}\}/g, String(priorLastIdx))
+    .replace(/\{\{tailCount\}\}/g, String(tailCount))
+    .replace(/\{\{targetEnding\}\}/g, targetEnding)
+    .replace(/\{\{title\}\}/g, baseOutline.title || '')
+    .replace(/\{\{synopsis\}\}/g, baseOutline.synopsis || '')
+    .replace(/\{\{genres\}\}/g, (baseOutline.genres || []).join(', ') || '(none)')
+    .replace(/\{\{priorEpisodes\}\}/g, () => priorEpisodes)
+    .replace(/\{\{snowflakeSummary\}\}/g, () => summarizeSnowflakeForTail(snowflake));
+}
+
+export async function parseTailOutline(raw, splitIdx, totalEpisodes, targetEnding) {
+  if (!VALID_TAIL_ENDINGS.includes(targetEnding)) {
+    throw new Error(`Invalid tail ending "${targetEnding}" — must be one of ${VALID_TAIL_ENDINGS.join('/')}`);
+  }
+  const data = await parseJsonWithRepair(raw, 'tail-outline');
+  if (!data.episodes || !Array.isArray(data.episodes) || data.episodes.length === 0) {
+    throw new Error('Tail outline must contain a non-empty episodes array');
+  }
+
+  const lastIdx = totalEpisodes - 1;
+  const expectedCount = totalEpisodes - splitIdx;
+  if (data.episodes.length !== expectedCount) {
+    throw new Error(`Tail outline must have exactly ${expectedCount} episodes (got ${data.episodes.length})`);
+  }
+
+  const sorted = [...data.episodes].sort((a, b) => (a.episodeIndex ?? 0) - (b.episodeIndex ?? 0));
+  for (let i = 0; i < sorted.length; i++) {
+    const ep = sorted[i];
+    const expectedIdx = splitIdx + i;
+    if (ep.episodeIndex !== expectedIdx) {
+      // Coerce to expected index rather than fail — LLMs frequently misnumber.
+      ep.episodeIndex = expectedIdx;
+    }
+    if (!ep.title) throw new Error(`Tail episode ${expectedIdx} missing title`);
+    if (!ep.scenePlan || ep.scenePlan.length === 0) {
+      throw new Error(`Tail episode "${ep.title}" must have at least 1 scene in scenePlan`);
+    }
+    for (let j = 0; j < ep.scenePlan.length; j++) {
+      if (!ep.scenePlan[j].summary) {
+        throw new Error(`Tail episode "${ep.title}" scene ${j} missing summary`);
+      }
+    }
+    // No branching in tail outlines
+    ep.episodeChoices = [];
+    if (ep.episodeIndex === lastIdx) {
+      ep.isEnding = true;
+      ep.ending = targetEnding;
+    } else {
+      ep.isEnding = false;
+      delete ep.ending;
+    }
+  }
+
+  return { episodes: sorted };
+}
+
+export async function generateTailOutline(baseOutline, splitIdx, targetEnding, options = {}) {
+  const snowflake = options.snowflake || null;
+  const prompt = buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake);
+  const raw = await callLLM(prompt, 'tail-outline');
+  return await parseTailOutline(raw, splitIdx, baseOutline.episodes.length, targetEnding);
+}
+
 // ─── Step 2: Generate scenes one at a time ────────────────────────────────────
 
 export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang = 'en', styleKey, narrativeContext) {
   const templateFile = lang === 'cn' ? SCENES_PATH_CN : SCENES_PATH;
   let template = readFileSync(templateFile, 'utf8');
-  const style = getStyle(styleKey);
+  const style = getStyleSafe(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.scene}\n`;
   }
@@ -384,7 +460,7 @@ export function buildRetryScenePrompt(scenePlan, lang = 'en') {
   ].join('\n');
 }
 
-export function buildFallbackScene(scenePlan) {
+export function buildFallbackScene(scenePlan, sceneIndex) {
   const summary = scenePlan.summary || 'The story continues.';
   const sceneType = scenePlan.sceneType || 'NARRATIVE';
   const scene = {
@@ -402,10 +478,14 @@ export function buildFallbackScene(scenePlan) {
     };
   }
   if (scenePlan.hasChoices && scenePlan.choiceTexts) {
-    scene.choices = scenePlan.choiceTexts.map((text, idx) => ({
-      text,
-      nextSceneIndex: idx + 1,
-    }));
+    // Fallback scenes can't branch meaningfully; converge every choice to the
+    // next scene (if a sceneIndex is known). Without an index, omit the target
+    // rather than emit a bogus one.
+    scene.choices = scenePlan.choiceTexts.map((text) => (
+      typeof sceneIndex === 'number'
+        ? { text, nextSceneIndex: sceneIndex + 1 }
+        : { text }
+    ));
   }
   return scene;
 }
@@ -433,7 +513,7 @@ export function buildPickStylePrompt(materials) {
     '## Instructions',
     '',
     'Consider the genres, themes, setting, and tone of the materials. Pick the style whose strengths best complement this story.',
-    'Return ONLY the style key as a single word (e.g. "moyan"). No explanation, no quotes, no punctuation.',
+    'Return ONLY the style key as a single word (e.g. "sanderson"). No explanation, no quotes, no punctuation.',
   ].join('\n');
 }
 
@@ -544,6 +624,17 @@ export async function generateStory(materials, options = {}) {
       }
     }
   }
+  // Linear fallback: for episodes not linked via episodeChoices (purely linear
+  // stories, or tail-only variants), each episode inherits context from the
+  // previous one by episodeIndex order. Without this, linear episodes would
+  // be generated in isolation with no prior-episode context.
+  const sortedIdxList = [...outline.episodes].map(e => e.episodeIndex).sort((a, b) => a - b);
+  for (let i = 1; i < sortedIdxList.length; i++) {
+    const idx = sortedIdxList[i];
+    if (parentMap[idx] === undefined) {
+      parentMap[idx] = sortedIdxList[i - 1];
+    }
+  }
 
   // Get ancestor path from root to a given episode (inclusive)
   function getAncestorPath(episodeIndex) {
@@ -581,10 +672,12 @@ export async function generateStory(materials, options = {}) {
     for (const [key, ctx] of Object.entries(progress.episodeContexts || {})) {
       episodeContexts[Number(key)] = ctx;
     }
-    // Restore global scene index
-    globalSceneIndex = progress.globalSceneIndex || 0;
-    log(`Resuming writing — ${completedEpisodeIndices.size} episode(s) already completed, starting from scene index ${globalSceneIndex}`);
-    wlog('writing_resumed_partial', { completedEpisodes: [...completedEpisodeIndices], globalSceneIndex });
+    // Global scene index is rebuilt by the skip loop below (which adds
+    // scenePlan.length for every completed episode), so we start from 0 here
+    // to avoid double-counting.
+    globalSceneIndex = 0;
+    log(`Resuming writing — ${completedEpisodeIndices.size} episode(s) already completed`);
+    wlog('writing_resumed_partial', { completedEpisodes: [...completedEpisodeIndices] });
   }
 
   for (const ep of sortedEpisodes) {
@@ -596,8 +689,8 @@ export async function generateStory(materials, options = {}) {
     const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, scenes: [], episodeChoices: ep.episodeChoices || [] };
     const totalScenes = ep.scenePlan.length;
 
-    log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalScenes} scenes, ${ep.isEnding ? 'ending' : ep.episodeChoices?.length + ' choices'})...`);
-    wlog('episode_start', { episodeIndex: ep.episodeIndex, title: ep.title, scenes: totalScenes, isEnding: !!ep.isEnding, choices: ep.isEnding ? 0 : ep.episodeChoices?.length || 0 });
+    log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalScenes} scenes${ep.isEnding ? ', ending' : ''})...`);
+    wlog('episode_start', { episodeIndex: ep.episodeIndex, title: ep.title, scenes: totalScenes, isEnding: !!ep.isEnding });
 
     // Reconstruct branch-local narrative context from ancestor path
     const ancestorPath = getAncestorPath(ep.episodeIndex);
@@ -628,29 +721,30 @@ export async function generateStory(materials, options = {}) {
     for (const ancestorIdx of ancestorPath.slice(0, -1)) {
       const ctx = episodeContexts[ancestorIdx];
       if (ctx) {
-        branchHistory.push(...ctx.compressedHistory);
-        branchSummary = ctx.globalSummary;
+        branchHistory.push(...(ctx.compressedHistory || []));
+        if (ctx.globalSummary) branchSummary = ctx.globalSummary;
         // Merge motif tracker
-        for (const [key, val] of Object.entries(ctx.motifTracker)) {
+        for (const [key, val] of Object.entries(ctx.motifTracker || {})) {
           branchMotifTracker[key] = val;
         }
-        // Apply state changes from ancestor
-        for (const [name, char] of Object.entries(ctx.stateChanges.characters)) {
+        // Apply state changes from ancestor (older snapshots may lack some fields)
+        const sc = ctx.stateChanges || {};
+        for (const [name, char] of Object.entries(sc.characters || {})) {
           try { updateCharacter(branchState, name, char); } catch {}
         }
-        for (const [name, item] of Object.entries(ctx.stateChanges.items)) {
+        for (const [name, item] of Object.entries(sc.items || {})) {
           try { updateItem(branchState, name, item); } catch {}
         }
-        for (const revId of ctx.stateChanges.revealedIds) {
+        for (const revId of sc.revealedIds || []) {
           try { markRevealed(branchState, revId); } catch {}
         }
-        for (const f of ctx.stateChanges.reinforcedForeshadowing) {
+        for (const f of sc.reinforcedForeshadowing || []) {
           // Support both old format (plain id string) and new format ({ id, sceneIndex })
           const fId = typeof f === 'string' ? f : f.id;
           const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
           try { reinforceForeshadowing(branchState, fId, fScene); } catch {}
         }
-        for (const f of ctx.stateChanges.resolvedForeshadowing) {
+        for (const f of sc.resolvedForeshadowing || []) {
           const fId = typeof f === 'string' ? f : f.id;
           const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
           try { resolveForeshadowing(branchState, fId, fScene); } catch {}
@@ -744,7 +838,7 @@ export async function generateStory(materials, options = {}) {
         } catch (retryErr) {
           log(`[scene retry failed] ${retryErr.message} — using fallback scene`);
           wlog('scene_fallback', { episodeIndex: ep.episodeIndex, sceneIndex: i, error: retryErr.message });
-          scene = buildFallbackScene(plan_scene);
+          scene = buildFallbackScene(plan_scene, i);
         }
       }
 
@@ -911,17 +1005,6 @@ export async function generateStory(materials, options = {}) {
       }
     }
 
-    // For non-ending episodes, attach episode-level choices to the last scene
-    // These will be resolved to cross-episode scene references during upload
-    if (!ep.isEnding && ep.episodeChoices && ep.episodeChoices.length > 0) {
-      const lastScene = episode.scenes[episode.scenes.length - 1];
-      // Append a [choice] block to the last scene content for audio playback
-      const choiceLines = ep.episodeChoices.map(c => `- "${c.text}"`).join('\n');
-      lastScene.content += `\n\n[choice]\n${choiceLines}`;
-      // Store episode choices on the last scene for upload
-      lastScene.episodeChoices = ep.episodeChoices;
-    }
-
     story.episodes.push(episode);
 
     // Save progress after each completed episode for resume capability
@@ -931,6 +1014,18 @@ export async function generateStory(materials, options = {}) {
         episodeContexts: { ...episodeContexts },
         globalSceneIndex,
       });
+    }
+
+    // Persist vector-store embeddings after each episode so a crash mid-run
+    // doesn't strand the indexed scenes (the caller's outer save() would
+    // otherwise only fire after the whole generation completes).
+    if (options.vectorStore?.save) {
+      try {
+        options.vectorStore.save();
+      } catch (err) {
+        log(`[vector store save failed] ${err.message} — indexed scenes not persisted for this episode`);
+        wlog('vector_store_save_failed', { episodeIndex: ep.episodeIndex, error: err.message });
+      }
     }
   }
 

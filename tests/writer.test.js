@@ -20,7 +20,7 @@ describe('writer', () => {
     const { buildOutlinePrompt } = await import('../src/writer.js');
     const materials = { topics: [{ title: '测试' }], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'cn');
-    assert.ok(prompt.includes('互动小说作家'));
+    assert.ok(prompt.includes('音频小说作家'));
   });
 
   test('parseOutline validates required structure', async () => {
@@ -83,7 +83,7 @@ describe('writer', () => {
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
-        episodes: [{ episodeIndex: 0, title: 'Ep1', scenePlan: [] }],
+        episodes: [{ episodeIndex: 0, title: 'Ep1', isEnding: true, scenePlan: [] }],
       })),
       /at least 1 scene in scenePlan/
     );
@@ -95,74 +95,63 @@ describe('writer', () => {
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: true, scenePlan: [{ summary: 's' }], episodeChoices: [] },
-          { episodeIndex: 0, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }], episodeChoices: [] },
+          { episodeIndex: 0, title: 'Ep1', isEnding: true, scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }] },
         ],
       })),
       /Duplicate episodeIndex/
     );
   });
 
-  test('parseOutline validates episodeChoices references', async () => {
-    const { parseOutline } = await import('../src/writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [
-          { episodeIndex: 0, title: 'Ep1', scenePlan: [{ summary: 's' }],
-            episodeChoices: [{ text: 'A', nextEpisodeIndex: 99 }, { text: 'B', nextEpisodeIndex: 99 }, { text: 'C', nextEpisodeIndex: 99 }] },
-        ],
-      })),
-      /references invalid episodeIndex/
-    );
-  });
-
-  test('parseOutline rejects too few episodeChoices', async () => {
-    const { parseOutline } = await import('../src/writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [
-          { episodeIndex: 0, title: 'Ep1', scenePlan: [{ summary: 's' }],
-            episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }] },
-          { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
-        ],
-      })),
-      /must have at least 3 episodeChoices/
-    );
-  });
-
-  test('parseOutline accepts valid branching structure', async () => {
+  test('parseOutline accepts linear multi-episode structure', async () => {
     const { parseOutline } = await import('../src/writer.js');
     const result = await parseOutline(JSON.stringify({
-      title: 'Branching', synopsis: 'Test',
+      title: 'Linear', synopsis: 'Test',
       episodes: [
-        { episodeIndex: 0, title: 'Start', scenePlan: [{ summary: 's' }],
-          episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }, { text: 'B', nextEpisodeIndex: 2 }, { text: 'C', nextEpisodeIndex: 3 }] },
-        { episodeIndex: 1, title: 'Path A', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
-        { episodeIndex: 2, title: 'Path B', isEnding: true, ending: 'BAD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
-        { episodeIndex: 3, title: 'Path C', isEnding: true, ending: 'NEUTRAL', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'Middle', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 2, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
       ],
     }));
-    assert.equal(result.episodes.length, 4);
-    assert.equal(result.episodes[0].episodeChoices.length, 3);
+    assert.equal(result.episodes.length, 3);
+    assert.equal(result.episodes[2].isEnding, true);
   });
 
-  test('parseOutline rejects cycles in episode graph', async () => {
+  test('parseOutline requires at least one ending episode', async () => {
     const { parseOutline } = await import('../src/writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { episodeIndex: 0, title: 'A', scenePlan: [{ summary: 's' }],
-            episodeChoices: [{ text: 'X', nextEpisodeIndex: 1 }, { text: 'Y', nextEpisodeIndex: 2 }, { text: 'Z', nextEpisodeIndex: 1 }] },
-          { episodeIndex: 1, title: 'B', scenePlan: [{ summary: 's' }],
-            episodeChoices: [{ text: 'X', nextEpisodeIndex: 0 }, { text: 'Y', nextEpisodeIndex: 2 }, { text: 'Z', nextEpisodeIndex: 2 }] },
-          { episodeIndex: 2, title: 'C', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }], episodeChoices: [] },
+          { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 1, title: 'Ep2', isEnding: false, scenePlan: [{ summary: 's' }] },
         ],
       })),
-      /cycle/i
+      /ending episode/
     );
+  });
+
+  test('parseOutline strips episodeChoices from LLM output', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    const result = await parseOutline(JSON.stringify({
+      title: 'T', synopsis: 'S',
+      episodes: [
+        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }],
+          episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+      ],
+    }));
+    assert.deepEqual(result.episodes[0].episodeChoices, []);
+  });
+
+  test('parseOutline forces characterQuestions to empty array', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    const result = await parseOutline(JSON.stringify({
+      title: 'T', synopsis: 'S',
+      characterQuestions: [{ key: 'name', label: 'Name?' }],
+      episodes: [{ episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] }],
+    }));
+    assert.deepEqual(result.characterQuestions, []);
   });
 
   test('parseOutline strips markdown code fences', async () => {
@@ -170,7 +159,7 @@ describe('writer', () => {
     const outline = {
       title: 'Fenced',
       synopsis: 'Test',
-      episodes: [{ episodeIndex: 0, title: 'E1', isEnding: true, scenePlan: [{ summary: 's' }], episodeChoices: [] }],
+      episodes: [{ episodeIndex: 0, title: 'E1', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] }],
     };
     const wrapped = '```json\n' + JSON.stringify(outline) + '\n```';
     const result = await parseOutline(wrapped);
@@ -305,5 +294,127 @@ describe('writer', () => {
     assert.equal(scene.choices.length, 2);
     assert.equal(scene.choices[0].text, 'Go left');
     assert.equal(scene.choices[1].text, 'Go right');
+  });
+
+  // ─── Tail outline tests (variant endings) ─────────────────────────────────
+
+  function makeBaseOutline(episodeCount = 6) {
+    const episodes = [];
+    for (let i = 0; i < episodeCount; i++) {
+      episodes.push({
+        episodeIndex: i,
+        title: `Ep ${i}`,
+        isEnding: i === episodeCount - 1,
+        ending: i === episodeCount - 1 ? 'GOOD' : undefined,
+        scenePlan: [
+          { summary: `Ep${i} scene 0`, sceneType: 'NARRATIVE' },
+          { summary: `Ep${i} scene 1`, sceneType: 'NARRATIVE' },
+        ],
+      });
+    }
+    return {
+      title: 'Shared Story',
+      synopsis: 'Premise',
+      genres: ['drama'],
+      episodes,
+    };
+  }
+
+  test('buildTailOutlinePrompt injects split point, target ending, and prior episodes', async () => {
+    const { buildTailOutlinePrompt } = await import('../src/writer.js');
+    const base = makeBaseOutline(6);
+    const prompt = buildTailOutlinePrompt(base, 3, 'BITTERSWEET', null);
+    assert.ok(prompt.includes('BITTERSWEET'));
+    assert.ok(prompt.includes('Shared Story'));
+    // Prior episodes 0..2 should appear in the rendered prompt
+    assert.ok(prompt.includes('Episode 0 "Ep 0"'));
+    assert.ok(prompt.includes('Episode 2 "Ep 2"'));
+    // The tail window metadata
+    assert.ok(prompt.includes('Produce exactly 3 episodes'));
+  });
+
+  test('parseTailOutline accepts valid tail and sets ending on last episode', async () => {
+    const { parseTailOutline } = await import('../src/writer.js');
+    const raw = JSON.stringify({
+      episodes: [
+        { episodeIndex: 3, title: 'T1', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 4, title: 'T2', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 5, title: 'T3 Finale', isEnding: true, ending: 'SPECIAL', scenePlan: [{ summary: 's' }] },
+      ],
+    });
+    const result = await parseTailOutline(raw, 3, 6, 'SPECIAL');
+    assert.equal(result.episodes.length, 3);
+    assert.equal(result.episodes[0].episodeIndex, 3);
+    assert.equal(result.episodes[2].isEnding, true);
+    assert.equal(result.episodes[2].ending, 'SPECIAL');
+    assert.equal(result.episodes[0].isEnding, false);
+    assert.equal(result.episodes[0].ending, undefined);
+  });
+
+  test('parseTailOutline coerces the last episode to target ending even if LLM emits a different one', async () => {
+    const { parseTailOutline } = await import('../src/writer.js');
+    const raw = JSON.stringify({
+      episodes: [
+        { episodeIndex: 2, title: 'T1', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 3, title: 'Finale', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+      ],
+    });
+    const result = await parseTailOutline(raw, 2, 4, 'BITTERSWEET');
+    assert.equal(result.episodes[1].ending, 'BITTERSWEET');
+  });
+
+  test('parseTailOutline rejects wrong episode count', async () => {
+    const { parseTailOutline } = await import('../src/writer.js');
+    const raw = JSON.stringify({
+      episodes: [
+        { episodeIndex: 3, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+      ],
+    });
+    await assert.rejects(
+      () => parseTailOutline(raw, 3, 6, 'GOOD'),
+      /exactly 3 episodes/
+    );
+  });
+
+  test('parseTailOutline rejects invalid target ending', async () => {
+    const { parseTailOutline } = await import('../src/writer.js');
+    const raw = JSON.stringify({ episodes: [] });
+    await assert.rejects(
+      () => parseTailOutline(raw, 3, 6, 'TRAGIC'),
+      /Invalid tail ending/
+    );
+  });
+
+  test('parseTailOutline coerces misnumbered episodeIndex to expected range', async () => {
+    const { parseTailOutline } = await import('../src/writer.js');
+    const raw = JSON.stringify({
+      episodes: [
+        { episodeIndex: 0, title: 'T1', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'T2', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 2, title: 'T3', scenePlan: [{ summary: 's' }] },
+      ],
+    });
+    const result = await parseTailOutline(raw, 4, 7, 'GOOD');
+    assert.deepEqual(result.episodes.map(e => e.episodeIndex), [4, 5, 6]);
+    assert.equal(result.episodes[2].isEnding, true);
+  });
+
+  test('parseTailOutline strips any episodeChoices the LLM emits', async () => {
+    const { parseTailOutline } = await import('../src/writer.js');
+    const raw = JSON.stringify({
+      episodes: [
+        { episodeIndex: 2, title: 'T1', scenePlan: [{ summary: 's' }], episodeChoices: [{ text: 'X' }] },
+        { episodeIndex: 3, title: 'T2', scenePlan: [{ summary: 's' }], episodeChoices: [{ text: 'Y' }] },
+      ],
+    });
+    const result = await parseTailOutline(raw, 2, 4, 'GOOD');
+    for (const ep of result.episodes) {
+      assert.deepEqual(ep.episodeChoices, []);
+    }
+  });
+
+  test('VALID_TAIL_ENDINGS exposes the three supported endings', async () => {
+    const { VALID_TAIL_ENDINGS } = await import('../src/writer.js');
+    assert.deepEqual([...VALID_TAIL_ENDINGS].sort(), ['BITTERSWEET', 'GOOD', 'SPECIAL']);
   });
 });

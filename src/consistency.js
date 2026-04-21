@@ -20,16 +20,37 @@ function splitSentences(text) {
     .filter(s => s.length > 0);
 }
 
-// Extract the first word of a sentence
+// Extract the first "word" of a sentence. For Latin text, take the leading alphabetic run.
+// For CJK text (no whitespace word boundaries) take the first 2 characters — enough to
+// distinguish common openers like "然后" / "接着" / "她看" without over-collapsing to a single
+// very-common character.
 function firstWord(sentence) {
-  const match = sentence.match(/^([A-Za-z\u4e00-\u9fff]+)/);
-  return match ? match[1] : null;
+  const latin = sentence.match(/^[A-Za-z]+/);
+  if (latin) return latin[0];
+  if (/^[一-鿿]/.test(sentence)) return sentence.slice(0, 2);
+  return null;
 }
 
-// Extract n-word phrases from a sentence
+// Extract n-unit phrases from a sentence. For Latin, n = words. For CJK, n = characters
+// (since CJK prose has no whitespace word boundaries). Mixed-script sentences fall through
+// to the word-based path.
 function extractPhrases(sentence, minLen, maxLen) {
-  const words = sentence.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  const lower = sentence.toLowerCase();
   const phrases = [];
+  const hasCJK = /[一-鿿]/.test(lower);
+  const hasLatin = /[a-z]/.test(lower);
+
+  if (hasCJK && !hasLatin) {
+    const chars = Array.from(lower.replace(/[\s\p{P}]+/gu, ''));
+    for (let n = minLen; n <= maxLen; n++) {
+      for (let i = 0; i <= chars.length - n; i++) {
+        phrases.push(chars.slice(i, i + n).join(''));
+      }
+    }
+    return phrases;
+  }
+
+  const words = lower.split(/\s+/).filter(w => w.length > 0);
   for (let n = minLen; n <= maxLen; n++) {
     for (let i = 0; i <= words.length - n; i++) {
       phrases.push(words.slice(i, i + n).join(' '));
@@ -86,13 +107,13 @@ export function findOverusedPhrases(content) {
 
 /**
  * Checks if any tracked motif phrase appears in content within the cooldown window.
- * Cooldown: (sceneIndex - lastScene) < 3. If elapsed (4+ scenes later), no issue.
+ * Cooldown: (sceneIndex - lastScene) <= 3. If elapsed (4+ scenes later), no issue.
  */
 export function checkMotifCooldown(content, tracker, sceneIndex) {
   const lowerContent = content.toLowerCase();
   const issues = [];
   for (const [phrase, lastScene] of Object.entries(tracker)) {
-    if (lowerContent.includes(phrase) && (sceneIndex - lastScene) < 3) {
+    if (lowerContent.includes(phrase) && (sceneIndex - lastScene) <= 3) {
       issues.push(`Motif cooldown: "${phrase}" was used ${sceneIndex - lastScene} scene(s) ago (cooldown: 3 scenes)`);
     }
   }
@@ -106,7 +127,7 @@ export function checkMotifCooldown(content, tracker, sceneIndex) {
 export function updateMotifTracker(tracker, content, sceneIndex) {
   // Prune entries outside the cooldown window
   for (const phrase of Object.keys(tracker)) {
-    if (sceneIndex - tracker[phrase] >= 3) {
+    if (sceneIndex - tracker[phrase] > 3) {
       delete tracker[phrase];
     }
   }

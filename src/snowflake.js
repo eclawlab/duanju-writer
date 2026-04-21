@@ -26,10 +26,30 @@ const PARTS = [
   },
 ];
 
+const PARTS_CN = [
+  {
+    title: '核心种子',
+    instructions: '生成一句话故事精髓，涵盖：主角、核心事件、关键行动、隐藏的危机。\n\n返回：{"coreSeed": "一句话故事精髓"}',
+  },
+  {
+    title: '人物动力',
+    instructions: '基于核心种子设计 3-6 位复杂角色。\n\n每位角色需包含：\n- name（姓名）、role（角色定位）、background（背景）\n- motivation（动机）：{ surface（表层物质目标）、deep（深层情感需求）、soul（灵魂层面的哲学追求）}\n- arc（人物弧光）：{ initial（初始状态）、trigger（触发点）、dissonance（内心挣扎）、transformation（蜕变）、final（终局）}\n- secrets（秘密）：隐藏的弱点或潜在的背叛可能\n\n返回：{"characters": [{"name":"...","role":"...","background":"...","motivation":{"surface":"...","deep":"...","soul":"..."},"arc":{"initial":"...","trigger":"...","dissonance":"...","transformation":"...","final":"..."},"secrets":["..."]}]}',
+  },
+  {
+    title: '世界观构建',
+    instructions: '基于核心种子与人物，从三个维度设计故事世界。\n\n1. 物理（physical）：地理、时代、体系规则（物理/魔法/社会）及可利用的漏洞\n2. 社会（social）：权力结构、文化禁忌、经济压力\n3. 象征（symbolic）：反复出现的视觉符号、气候/环境与心理状态的映射\n\n返回：{"world":{"physical":{"geography":"...","timePeriod":"...","rules":"...","loopholes":"..."},"social":{"powerStructure":"...","taboos":"...","economics":"..."},"symbolic":{"symbols":["..."],"climateMood":"...","architectureTheme":"..."}}}',
+  },
+  {
+    title: '情节架构',
+    instructions: '设计三幕式情节结构。\n\n第一幕（触发）：催化事件、主角的错误反应、确立赌注\n第二幕（对抗）：升级、双重压力、虚假胜利、最黑暗时刻的揭示\n第三幕（解决）：代价揭露、情节反转、带有开放式尾声可能的解决\n\n返回：{"plot":{"act1":{"catalyst":"...","reaction":"...","stakes":"..."},"act2":{"escalation":"...","pressure":"...","falseVictory":"...","darkestMoment":"..."},"act3":{"cost":"...","twist":"...","resolution":"...","epilogue":"..."}}}',
+  },
+];
+
 export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', novelType = '') {
   const templateFile = lang === 'cn' ? TEMPLATE_PATH_CN : TEMPLATE_PATH;
   let template = readFileSync(templateFile, 'utf8');
-  const part = PARTS[partIndex];
+  const parts = lang === 'cn' ? PARTS_CN : PARTS;
+  const part = parts[partIndex];
 
   template = template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
   template = template.replace('{{partNumber}}', () => String(partIndex + 1));
@@ -62,9 +82,10 @@ export async function generateSnowflake(materials, options = {}) {
   const novelType = options.novelType || '';
   const log = options.log || (() => {});
   const parts = [];
+  const localized = lang === 'cn' ? PARTS_CN : PARTS;
 
-  for (let i = 0; i < PARTS.length; i++) {
-    log(`Snowflake step ${i + 1}/4: ${PARTS[i].title}...`);
+  for (let i = 0; i < localized.length; i++) {
+    log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
     const prompt = buildSnowflakePrompt(materials, i, parts, lang, novelType);
     const raw = await callLLM(prompt, 'outline');
     // Try to parse JSON, fall back to raw text

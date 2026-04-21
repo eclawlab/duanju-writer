@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 describe('constants', () => {
   test('exports VERSION', async () => {
     const { VERSION } = await import('../src/constants.js');
-    assert.equal(VERSION, '0.1.6');
+    assert.equal(VERSION, '0.1.9');
   });
 
   test('exports NAME', async () => {
@@ -38,6 +38,11 @@ describe('constants', () => {
   test('JOBS_DIR is inside DATA_DIR', async () => {
     const { JOBS_DIR, DATA_DIR } = await import('../src/constants.js');
     assert.equal(JOBS_DIR, join(DATA_DIR, 'jobs'));
+  });
+
+  test('PIDFILE is inside DATA_DIR', async () => {
+    const { PIDFILE, DATA_DIR } = await import('../src/constants.js');
+    assert.equal(PIDFILE, join(DATA_DIR, 'daemon.pids'));
   });
 
   test('DEFAULT_HEARTBEAT_INTERVAL is 30 minutes', async () => {

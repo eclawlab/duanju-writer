@@ -90,6 +90,21 @@ export function getStyle(key) {
   return style;
 }
 
+const _warnedMissing = new Set();
+export function getStyleSafe(key) {
+  if (!key || key === 'default') return null;
+  const styles = getStyles();
+  const style = styles[key.toLowerCase()];
+  if (!style) {
+    if (!_warnedMissing.has(key)) {
+      _warnedMissing.add(key);
+      console.warn(`[styles] Unknown style "${key}" — falling back to default. Run 'story-writer styles' to see available styles.`);
+    }
+    return null;
+  }
+  return style;
+}
+
 export function listStyles() {
   const styles = getStyles();
   return Object.entries(styles).map(([key, style]) => ({
