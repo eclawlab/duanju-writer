@@ -41,7 +41,12 @@ function loadArtifact(jobId, filename) {
   const filePath = join(JOBS_DIR, jobId, filename);
   if (!existsSync(filePath)) return null;
   try { return JSON.parse(readFileSync(filePath, 'utf8')); }
-  catch { return null; }
+  catch (err) {
+    // Corrupt artifact (e.g., half-written after process kill). Log loudly so it's
+    // not silently skipped, and return null so the caller re-runs that stage.
+    console.log(chalk.yellow(`  [${jobId}] Artifact "${filename}" is corrupt (${err.message}) — will regenerate`));
+    return null;
+  }
 }
 
 async function processJob(jobId, options = {}) {
@@ -51,12 +56,35 @@ async function processJob(jobId, options = {}) {
   const novelType = options.novelType || config.novelType || '';
   const newsUrl = options.newsUrl || '';
   const style = options.style || config.style || 'default';
+  // Reference character/event: prefer snapshotted content from job options; otherwise read config path.
+  let referenceCharacter = options.referenceCharacter || '';
+  if (!referenceCharacter && config.referenceCharacter) {
+    try {
+      referenceCharacter = readFileSync(config.referenceCharacter, 'utf8');
+    } catch (err) {
+      console.log(chalk.yellow(`  [${jobId}] Reference character file "${config.referenceCharacter}" unreadable: ${err.message} — continuing without`));
+      referenceCharacter = '';
+    }
+  }
+  let referenceEvent = options.referenceEvent || '';
+  if (!referenceEvent && config.referenceEvent) {
+    try {
+      referenceEvent = readFileSync(config.referenceEvent, 'utf8');
+    } catch (err) {
+      console.log(chalk.yellow(`  [${jobId}] Reference event file "${config.referenceEvent}" unreadable: ${err.message} — continuing without`));
+      referenceEvent = '';
+    }
+  }
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
   const jobStartTime = Date.now();
   resetLLMStats();
-  wlog('job_start', { lang, style, novelType, newsUrl });
+  wlog('job_start', {
+    lang, style, novelType, newsUrl,
+    referenceCharacter: referenceCharacter ? `${referenceCharacter.length} chars` : '(none)',
+    referenceEvent: referenceEvent ? `${referenceEvent.length} chars` : '(none)',
+  });
 
   try {
     // ─── Step 1: Collect materials ─────────────────────────────────────────
@@ -84,7 +112,7 @@ async function processJob(jobId, options = {}) {
     if (!snowflake) {
       try {
         log('Building story architecture (Snowflake method)...');
-        snowflake = await generateSnowflake(materials, { lang, novelType, log });
+        snowflake = await generateSnowflake(materials, { lang, novelType, referenceCharacter, referenceEvent, log });
         saveArtifact(jobId, 'snowflake.json', snowflake);
       } catch (err) {
         log(`[snowflake failed] ${err.message} — continuing without`);
@@ -97,7 +125,7 @@ async function processJob(jobId, options = {}) {
     if (!baseOutline) {
       log('Generating base story outline...');
       const enrichedMaterials = snowflake ? { ...materials, snowflake } : materials;
-      baseOutline = await generateOutline(enrichedMaterials, { lang, style, novelType });
+      baseOutline = await generateOutline(enrichedMaterials, { lang, style, novelType, referenceCharacter, referenceEvent });
       saveArtifact(jobId, 'outline.json', baseOutline);
     } else {
       log('Resuming — outline already generated');
@@ -105,14 +133,18 @@ async function processJob(jobId, options = {}) {
 
     let basePlan = loadArtifact(jobId, 'plan.json');
     if (!basePlan) {
+      let planSucceeded = false;
       try {
         log('Generating base scene plan...');
-        basePlan = await generatePlan(baseOutline, { lang, novelType });
+        basePlan = await generatePlan(baseOutline, { lang, novelType, referenceCharacter, referenceEvent });
+        planSucceeded = true;
       } catch (err) {
-        log(`[planning failed] ${err.message} — continuing without plan`);
+        log(`[planning failed] ${err.message} — continuing without plan for this attempt; will retry on next run`);
         basePlan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
       }
-      saveArtifact(jobId, 'plan.json', basePlan);
+      // Only persist successful plans — a saved skeleton would poison all retries
+      // by short-circuiting the "plan already generated" branch below.
+      if (planSucceeded) saveArtifact(jobId, 'plan.json', basePlan);
     } else {
       log('Resuming — plan already generated');
     }
@@ -121,8 +153,15 @@ async function processJob(jobId, options = {}) {
     const sortedEpisodes = [...baseOutline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
     const totalEpisodes = sortedEpisodes.length;
     const splitIdx = Math.ceil(totalEpisodes / 2);
+    const tailCount = totalEpisodes - splitIdx;
+    // Defensive guard: parseOutline already enforces >=2 episodes, but a resumed
+    // job could load a stale outline.json predating that check. Fail loud rather
+    // than silently producing 3 identical "variants" with empty tails.
+    if (tailCount < 1) {
+      throw new Error(`Outline has ${totalEpisodes} episode(s); variant pipeline requires tailCount >= 1 (got ${tailCount}). Delete outline.json to regenerate.`);
+    }
     const frontEpisodes = sortedEpisodes.slice(0, splitIdx);
-    log(`Split: ${splitIdx}/${totalEpisodes} episodes shared as front half; remaining ${totalEpisodes - splitIdx} diverge per variant.`);
+    log(`Split: ${splitIdx}/${totalEpisodes} episodes shared as front half; remaining ${tailCount} diverge per variant.`);
 
     // ─── Step 4: Shared front-half scene generation ────────────────────────
     // The front is generated by calling generateStory with a truncated outline
@@ -139,7 +178,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = null;
       const frontStory = await generateStory(materials, {
-        lang, novelType, style, log, wlog,
+        lang, novelType, referenceCharacter, referenceEvent, style, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -191,7 +230,14 @@ async function processJob(jobId, options = {}) {
       if (!tailOutline) {
         log(`Variant ${v.key}: generating ${v.ending} tail outline...`);
         wlog('tail_outline_start', { variant: v.key, ending: v.ending });
-        tailOutline = await generateTailOutline(baseOutline, splitIdx, v.ending, { snowflake });
+        tailOutline = await generateTailOutline(baseOutline, splitIdx, v.ending, {
+          snowflake,
+          lang,
+          novelType,
+          referenceCharacter,
+          referenceEvent,
+          newsSource: materials?.newsSource || null,
+        });
         saveArtifact(jobId, `tail-outline.${v.key}.json`, tailOutline);
         wlog('tail_outline_done', { variant: v.key, episodes: tailOutline.episodes.length });
       }
@@ -206,14 +252,21 @@ async function processJob(jobId, options = {}) {
       // Variant plan — regenerate so it covers the new tail episodes
       let variantPlan = loadArtifact(jobId, `plan.${v.key}.json`);
       if (!variantPlan) {
+        let variantPlanSucceeded = false;
         try {
           log(`Variant ${v.key}: planning tail scenes...`);
-          variantPlan = await generatePlan(variantOutline, { lang, novelType });
+          variantPlan = await generatePlan(variantOutline, { lang, novelType, referenceCharacter, referenceEvent });
+          variantPlanSucceeded = true;
         } catch (err) {
-          log(`[variant ${v.key} planning failed] ${err.message} — falling back to base plan`);
+          log(`[variant ${v.key} planning failed] ${err.message} — using base plan as in-memory fallback for this attempt; will retry on next run`);
+          // basePlan was generated for the original outline (different ending). Using it
+          // here gives partial guidance for shared front-half scenes but is wrong for
+          // the variant's tail. We keep it in memory so the current run can still produce
+          // output, but DO NOT persist it as plan.vN.json — that would (a) poison retries
+          // and (b) commit the wrong-ending plan into the variant artifact.
           variantPlan = basePlan;
         }
-        saveArtifact(jobId, `plan.${v.key}.json`, variantPlan);
+        if (variantPlanSucceeded) saveArtifact(jobId, `plan.${v.key}.json`, variantPlan);
       }
 
       // Fork the front vector store so variants don't cross-contaminate retrieval
@@ -249,7 +302,7 @@ async function processJob(jobId, options = {}) {
           globalSceneIndex: 0,
         };
         variantStory = await generateStory(materials, {
-          lang, novelType, style, log, wlog,
+          lang, novelType, referenceCharacter, referenceEvent, style, log, wlog,
           vectorStore: variantStore,
           savedSnowflake: snowflake,
           savedOutline: variantOutline,
@@ -343,6 +396,8 @@ async function processJob(jobId, options = {}) {
       `Language:        ${lang}`,
       `Type:            ${novelType || '(any)'}`,
       `News:            ${newsUrl || '(none)'}`,
+      `Ref character:   ${referenceCharacter ? `${referenceCharacter.length} chars` : '(none)'}`,
+      `Ref event:       ${referenceEvent ? `${referenceEvent.length} chars` : '(none)'}`,
       `Style:           ${style}`,
       `Variation Group: ${variationGroupId}`,
       ``,
@@ -427,6 +482,8 @@ export function startWorker() {
           style: opts.style || undefined,
           novelType: opts.novelType || undefined,
           newsUrl: opts.newsUrl || undefined,
+          referenceCharacter: opts.referenceCharacter || undefined,
+          referenceEvent: opts.referenceEvent || undefined,
         });
       }
     } catch (err) {

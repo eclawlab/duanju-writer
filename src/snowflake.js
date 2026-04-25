@@ -45,7 +45,7 @@ const PARTS_CN = [
   },
 ];
 
-export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', novelType = '') {
+export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', novelType = '', referenceCharacter = '', referenceEvent = '') {
   const templateFile = lang === 'cn' ? TEMPLATE_PATH_CN : TEMPLATE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const parts = lang === 'cn' ? PARTS_CN : PARTS;
@@ -65,6 +65,22 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
       : `\n\nIMPORTANT: This story MUST be a **${novelType}** novel. All characters, world-building, and plot must align with this genre/type.`;
     instructions += constraint;
   }
+  if (referenceCharacter) {
+    // Character dynamics step (index 1) needs the strongest injection — the model must use this character verbatim rather than invent one.
+    const isCharStep = partIndex === 1;
+    const block = lang === 'cn'
+      ? `\n\n## 参考角色（必须使用）\n\n本故事必须包含以下预先定义的角色。请完整保留该角色的姓名、身份、性格、背景、动机与弧光；可在其周围虚构其他角色。${isCharStep ? '在本步骤的 characters 数组中，必须将此角色作为其中一项（按所需的 motivation/arc/secrets 结构填充），不得替换姓名或身份。' : ''}\n\n---\n${referenceCharacter}\n---\n`
+      : `\n\n## Reference Character (REQUIRED)\n\nThis story MUST feature the following predefined character. Preserve their name, identity, traits, background, motivations, and arc exactly as described. Other characters may be invented around them.${isCharStep ? ' In this step\'s characters array, include this character as one of the entries (fill in the required motivation/arc/secrets structure) — do NOT rename or replace them.' : ''}\n\n---\n${referenceCharacter}\n---\n`;
+    instructions += block;
+  }
+  if (referenceEvent) {
+    // Plot architecture step (index 3) needs the strongest injection — the event must be load-bearing in the plot structure.
+    const isPlotStep = partIndex === 3;
+    const block = lang === 'cn'
+      ? `\n\n## 参考事件（必须使用）\n\n本故事必须围绕以下预定义事件展开。请完整保留该事件的事实、情感分量与后果；不要淡化或偏离。${isPlotStep ? '在本步骤的三幕式结构中，必须将此事件作为核心承重节点（催化事件、升级点或最黑暗时刻的揭示），不得用其他情节替代。' : ''}\n\n---\n${referenceEvent}\n---\n`
+      : `\n\n## Reference Event (REQUIRED)\n\nThis story MUST be built around the following predefined event. Preserve its facts, emotional weight, and consequences — do not sanitize, dilute, or drift from it.${isPlotStep ? ' In this step\'s three-act structure, this event MUST be a load-bearing beat (catalyst, escalation point, or darkest-moment revelation) — do NOT substitute a different plot beat.' : ''}\n\n---\n${referenceEvent}\n---\n`;
+    instructions += block;
+  }
   if (materials.newsSource) {
     const ns = materials.newsSource;
     const newsNote = lang === 'cn'
@@ -80,13 +96,15 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
 export async function generateSnowflake(materials, options = {}) {
   const lang = options.lang || 'en';
   const novelType = options.novelType || '';
+  const referenceCharacter = options.referenceCharacter || '';
+  const referenceEvent = options.referenceEvent || '';
   const log = options.log || (() => {});
   const parts = [];
   const localized = lang === 'cn' ? PARTS_CN : PARTS;
 
   for (let i = 0; i < localized.length; i++) {
     log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
-    const prompt = buildSnowflakePrompt(materials, i, parts, lang, novelType);
+    const prompt = buildSnowflakePrompt(materials, i, parts, lang, novelType, referenceCharacter, referenceEvent);
     const raw = await callLLM(prompt, 'outline');
     // Try to parse JSON, fall back to raw text
     try {

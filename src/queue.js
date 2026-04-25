@@ -76,6 +76,8 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         style: options.style ?? null,
         novelType: options.novelType ?? null,
         newsUrl: options.newsUrl ?? null,
+        referenceCharacter: options.referenceCharacter ?? null,
+        referenceEvent: options.referenceEvent ?? null,
       },
     };
     mkdirSync(join(jobsDir, job.id), { recursive: true });

@@ -14,6 +14,8 @@ const DEFAULTS = {
   targetWordsPerScene: 0,  // 0 = disabled, set to e.g. 200 to enable
   lang: 'cn',
   novelType: '',
+  referenceCharacter: '',
+  referenceEvent: '',
   style: 'default',
   providers: {
     claude: { type: 'claude-cli', claudePath: 'claude', timeout: 1500000 },

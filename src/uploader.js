@@ -1,5 +1,11 @@
 import { loadConfig } from './config.js';
 
+// Upper bound on a single upload attempt. Without this, a hung AutoStory API
+// (overloaded, deadlocked, network black hole) blocks the worker indefinitely
+// because fetch() has no built-in timeout. Job-level retry won't help if the
+// job never returns. Configurable via config.uploadTimeout.
+const DEFAULT_UPLOAD_TIMEOUT_MS = 60_000;
+
 export function buildRequest(story, config, variationOptions = {}) {
   const url = `${config.autostoryUrl}/api/ai/stories`;
   // Deep-copy episodes to avoid mutating the original story object
@@ -21,6 +27,10 @@ export function buildRequest(story, config, variationOptions = {}) {
     body.publish = config.publishOnUpload;
   }
 
+  const timeoutMs = Number.isFinite(config.uploadTimeout) && config.uploadTimeout > 0
+    ? config.uploadTimeout
+    : DEFAULT_UPLOAD_TIMEOUT_MS;
+
   return {
     url,
     options: {
@@ -30,7 +40,9 @@ export function buildRequest(story, config, variationOptions = {}) {
         'X-Api-Key': config.aiApiKey,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     },
+    timeoutMs,
   };
 }
 
@@ -65,8 +77,18 @@ async function readBody(res) {
 
 export async function upload(story, variationOptions = {}) {
   const config = loadConfig();
-  const { url, options } = buildRequest(story, config, variationOptions);
-  const res = await fetch(url, options);
+  const { url, options, timeoutMs } = buildRequest(story, config, variationOptions);
+  let res;
+  try {
+    res = await fetch(url, options);
+  } catch (err) {
+    // AbortSignal.timeout produces a TimeoutError (DOMException). Surface this
+    // distinctly so the worker's job-level retry can react to it cleanly.
+    if (err?.name === 'TimeoutError' || err?.code === 23) {
+      throw new Error(`Upload timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
   const { body, bodyText } = await readBody(res);
   return handleResponse({ ok: res.ok, status: res.status, body, bodyText });
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import chalk from 'chalk';
 import { callLLM } from './llm.js';
 import { search } from './websearch.js';
 import { fetchPage } from './webfetch.js';
@@ -161,6 +162,7 @@ function tryParseJson(raw) {
 }
 
 async function repairJson(broken) {
+  console.log(chalk.dim('  [json-repair] materials: primary parse failed, invoking LLM repair pass'));
   const prompt = [
     'The following text was supposed to be valid JSON but has syntax errors.',
     'Common issues: unescaped quotes, missing commas, trailing commas, unescaped newlines in strings.',

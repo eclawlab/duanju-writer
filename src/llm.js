@@ -80,10 +80,14 @@ export function createOpenAIAdapter(config) {
         throw new Error('LLM returned empty response');
       }
 
-      // Accumulate token usage if available
+      // Accumulate token usage if available. Coerce via Number() because some
+      // OpenAI-compatible providers return token counts as strings — without
+      // the coercion, += would do string concat and pollute stats permanently.
       if (data.usage) {
-        stats.inputTokens += data.usage.prompt_tokens || 0;
-        stats.outputTokens += data.usage.completion_tokens || 0;
+        const inTok = Number(data.usage.prompt_tokens);
+        const outTok = Number(data.usage.completion_tokens);
+        if (Number.isFinite(inTok)) stats.inputTokens += inTok;
+        if (Number.isFinite(outTok)) stats.outputTokens += outTok;
       }
 
       return content;
@@ -150,10 +154,14 @@ export function createClaudeCliAdapter(config) {
                 throw new Error(`Claude CLI error: ${parsed.result}`);
               }
 
-              // Accumulate cost if available
-              if (parsed.cost_usd) stats.costUsd += parsed.cost_usd;
-              if (parsed.num_input_tokens) stats.inputTokens += parsed.num_input_tokens;
-              if (parsed.num_output_tokens) stats.outputTokens += parsed.num_output_tokens;
+              // Accumulate cost / tokens if available. Coerce numerics in case
+              // a future Claude CLI version returns these as strings.
+              const cost = Number(parsed.cost_usd);
+              const inTok = Number(parsed.num_input_tokens);
+              const outTok = Number(parsed.num_output_tokens);
+              if (Number.isFinite(cost)) stats.costUsd += cost;
+              if (Number.isFinite(inTok)) stats.inputTokens += inTok;
+              if (Number.isFinite(outTok)) stats.outputTokens += outTok;
 
               done(resolve, parsed.result ?? stdout);
             } catch (parseErr) {

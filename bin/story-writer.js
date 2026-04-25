@@ -88,13 +88,15 @@ switch (command) {
   case 'run': {
     const { runOnce } = await import('../src/worker.js');
     const { createJob } = await import('../src/queue.js');
-    // Parse count, lang, style, type, news, and model from args
-    // run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--model claude|openai|<provider>]
+    // Parse count, lang, style, type, news, character, event, and model from args
+    // run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--character path.md] [--event path.md] [--model claude|openai|<provider>]
     let count = 1;
     let lang;
     let style;
     let novelType;
     let newsUrl;
+    let characterPath;
+    let eventPath;
     let model;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
@@ -113,11 +115,52 @@ switch (command) {
       } else if (args[a] === '--news' && args[a + 1]) {
         newsUrl = args[a + 1];
         a++;
+      } else if (args[a] === '--character' && args[a + 1]) {
+        characterPath = args[a + 1];
+        a++;
+      } else if (args[a] === '--event' && args[a + 1]) {
+        eventPath = args[a + 1];
+        a++;
       } else if (args[a] === '--model' && args[a + 1]) {
         model = args[a + 1];
         a++;
       } else if (!isNaN(args[a]) && args[a].trim() !== '') {
         count = Math.max(0, parseInt(args[a], 10));
+      }
+    }
+    // Resolve reference character + event: CLI flag takes precedence, else config path
+    let referenceCharacter;
+    let referenceEvent;
+    {
+      const { loadConfig } = await import('../src/config.js');
+      const config = loadConfig();
+      const charRefPath = characterPath || config.referenceCharacter;
+      if (charRefPath) {
+        try {
+          referenceCharacter = readFileSync(charRefPath, 'utf8');
+          if (!referenceCharacter.trim()) {
+            console.log(`Reference character file "${charRefPath}" is empty.`);
+            process.exit(1);
+          }
+          console.log(`Using reference character from: ${charRefPath} (${referenceCharacter.length} chars)`);
+        } catch (err) {
+          console.log(`Failed to read character file "${charRefPath}": ${err.message}`);
+          process.exit(1);
+        }
+      }
+      const eventRefPath = eventPath || config.referenceEvent;
+      if (eventRefPath) {
+        try {
+          referenceEvent = readFileSync(eventRefPath, 'utf8');
+          if (!referenceEvent.trim()) {
+            console.log(`Reference event file "${eventRefPath}" is empty.`);
+            process.exit(1);
+          }
+          console.log(`Using reference event from: ${eventRefPath} (${referenceEvent.length} chars)`);
+        } catch (err) {
+          console.log(`Failed to read event file "${eventRefPath}": ${err.message}`);
+          process.exit(1);
+        }
       }
     }
     // Validate style before creating any jobs
@@ -152,9 +195,9 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, novelType, newsUrl });
+      const job = createJob({ lang, style, novelType, newsUrl, referenceCharacter, referenceEvent });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, novelType, newsUrl });
+      await runOnce(job.id, { lang, style, novelType, newsUrl, referenceCharacter, referenceEvent });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -177,7 +220,7 @@ switch (command) {
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
       'maxRetries', 'publishOnUpload', 'lang', 'novelType',
-      'style', 'targetWordsPerScene',
+      'referenceCharacter', 'referenceEvent', 'style', 'targetWordsPerScene',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
@@ -464,6 +507,6 @@ switch (command) {
   default:
     console.log(`Unknown command: ${command}`);
     console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
-    console.log('\nRun options: story-writer run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--model claude|openai]');
+    console.log('\nRun options: story-writer run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--character path.md] [--event path.md] [--model claude|openai]');
     process.exit(1);
 }

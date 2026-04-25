@@ -39,7 +39,7 @@ function extractJsonObject(text) {
  * @param {string} lang - 'en' or 'cn'
  * @returns {string}
  */
-export function buildPlanPrompt(outline, lang = 'en', novelType = '') {
+export function buildPlanPrompt(outline, lang = 'en', novelType = '', referenceCharacter = '', referenceEvent = '') {
   const templateFile = lang === 'cn' ? 'plan-cn.md' : 'plan.md';
   const templatePath = join(__dirname, '..', 'prompts', templateFile);
   let template = readFileSync(templatePath, 'utf8');
@@ -47,6 +47,18 @@ export function buildPlanPrompt(outline, lang = 'en', novelType = '') {
     const section = lang === 'cn'
       ? `\n\n## 小说类型要求\n\n这个故事是**${novelType}**类型的小说。所有场景规划、角色行为、事件设计都必须符合此类型的特征。\n`
       : `\n\n## Novel Type Requirement\n\nThis story is a **${novelType}** novel. All scene planning, character behavior, and event design must align with this genre/type.\n`;
+    template += section;
+  }
+  if (referenceCharacter) {
+    const section = lang === 'cn'
+      ? `\n\n## 参考角色（必须使用）\n\n以下角色已预先定义并必须出现在本故事中。在 characters 数组中请以其姓名、身份、动机与背景填入一项，并确保其行为、情绪、弧光在所有 scenes.events 中与以下描述一致。不得改名或替换。\n\n---\n${referenceCharacter}\n---\n`
+      : `\n\n## Reference Character (REQUIRED)\n\nThe following character is predefined and MUST appear in this story. Include them in the characters array using their exact name, identity, motivations, and background, and ensure their behavior, emotions, and arc across all scenes.events remain consistent with the description below. Do NOT rename or replace them.\n\n---\n${referenceCharacter}\n---\n`;
+    template += section;
+  }
+  if (referenceEvent) {
+    const section = lang === 'cn'
+      ? `\n\n## 参考事件（必须使用）\n\n以下事件已预先定义并必须在本故事中发生。请将其编入 scenes.events 中具体的场景节点，确保相关角色的情绪、revelations（揭示）与后续情节弧线都与该事件及其后果保持一致。不要淡化或改写事件的核心事实。\n\n---\n${referenceEvent}\n---\n`
+      : `\n\n## Reference Event (REQUIRED)\n\nThe following event is predefined and MUST occur in this story. Schedule it into specific scenes.events entries, and ensure the emotional states, revelations, and subsequent plot arcs of affected characters remain consistent with this event and its aftermath. Do NOT sanitize or rewrite its core facts.\n\n---\n${referenceEvent}\n---\n`;
     template += section;
   }
   return template.replace('{{outline}}', () => JSON.stringify(outline, null, 2));
@@ -135,13 +147,15 @@ export function initStateFromPlan(plan) {
 /**
  * Calls Claude to generate a plan from an outline, then parses and returns it.
  * @param {object} outline
- * @param {object} options - { lang, novelType }
+ * @param {object} options - { lang, novelType, referenceCharacter, referenceEvent }
  * @returns {Promise<object>}
  */
 export async function generatePlan(outline, options = {}) {
   const lang = options.lang || 'en';
   const novelType = options.novelType || '';
-  const prompt = buildPlanPrompt(outline, lang, novelType);
+  const referenceCharacter = options.referenceCharacter || '';
+  const referenceEvent = options.referenceEvent || '';
+  const prompt = buildPlanPrompt(outline, lang, novelType, referenceCharacter, referenceEvent);
   const raw = await callLLM(prompt, 'plan');
   return parsePlan(raw);
 }

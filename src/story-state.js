@@ -29,11 +29,16 @@ export function createState() {
 // ---------------------------------------------------------------------------
 
 /**
- * Add a character to state.characters keyed by name.
+ * Add a character to state.characters keyed by name. Warns on duplicate-name
+ * overwrite so LLM-emitted duplicate entries (which silently lose the prior
+ * character's knowledge / status / location) are at least visible in logs.
  * @param {object} state
  * @param {{ name: string, status: string, location: string, knowledge: string[], emotional: string }} char
  */
 export function addCharacter(state, { name, status, location, knowledge, emotional }) {
+  if (state.characters[name]) {
+    console.warn(`[story-state] addCharacter: overwriting existing character "${name}" (prior knowledge/status will be lost)`);
+  }
   state.characters[name] = { name, status, location, knowledge, emotional };
 }
 
@@ -53,11 +58,14 @@ export function updateCharacter(state, name, updates) {
 // ---------------------------------------------------------------------------
 
 /**
- * Add an item to state.items keyed by name.
+ * Add an item to state.items keyed by name. Warns on duplicate-name overwrite.
  * @param {object} state
  * @param {{ name: string, status: string, holder: string|null, location: string|null }} item
  */
 export function addItem(state, { name, status, holder, location }) {
+  if (state.items[name]) {
+    console.warn(`[story-state] addItem: overwriting existing item "${name}"`);
+  }
   state.items[name] = { name, status, holder, location };
 }
 
@@ -77,11 +85,14 @@ export function updateItem(state, name, updates) {
 // ---------------------------------------------------------------------------
 
 /**
- * Add a location to state.locations keyed by name.
+ * Add a location to state.locations keyed by name. Warns on duplicate-name overwrite.
  * @param {object} state
  * @param {{ name: string, status: string }} location
  */
 export function addLocation(state, { name, status }) {
+  if (state.locations[name]) {
+    console.warn(`[story-state] addLocation: overwriting existing location "${name}"`);
+  }
   state.locations[name] = { name, status };
 }
 
@@ -101,11 +112,16 @@ export function updateLocation(state, name, updates) {
 // ---------------------------------------------------------------------------
 
 /**
- * Push a revelation onto state.revelations with revealed: false.
+ * Push a revelation onto state.revelations with revealed: false. Warns if
+ * a revelation with the same id already exists (markRevealed looks them up
+ * by id, so duplicates make state queries non-deterministic).
  * @param {object} state
  * @param {{ id: string, info: string, visibility: string, revealInScene: number, revealInEpisode?: number }} revelation
  */
 export function addRevelation(state, { id, info, visibility, revealInScene, revealInEpisode }) {
+  if (state.revelations.some(r => r.id === id)) {
+    console.warn(`[story-state] addRevelation: duplicate revelation id "${id}" — markRevealed lookups will return the first match`);
+  }
   state.revelations.push({ id, info, visibility, revealInScene, revealInEpisode: revealInEpisode ?? null, revealed: false });
 }
 

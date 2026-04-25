@@ -29,14 +29,23 @@ describe('writer', () => {
       title: 'Test Story',
       synopsis: 'A test',
       genres: ['test'],
-      episodes: [{
-        episodeIndex: 0,
-        title: 'Ep1',
-        isEnding: true,
-        ending: 'GOOD',
-        scenePlan: [{ summary: 'Scene 1', sceneType: 'NARRATIVE' }],
-        episodeChoices: [],
-      }],
+      episodes: [
+        {
+          episodeIndex: 0,
+          title: 'Ep1',
+          isEnding: false,
+          scenePlan: [{ summary: 'Scene 1', sceneType: 'NARRATIVE' }],
+          episodeChoices: [],
+        },
+        {
+          episodeIndex: 1,
+          title: 'Ep2',
+          isEnding: true,
+          ending: 'GOOD',
+          scenePlan: [{ summary: 'Scene 2', sceneType: 'NARRATIVE' }],
+          episodeChoices: [],
+        },
+      ],
     };
     const result = await parseOutline(JSON.stringify(valid));
     assert.equal(result.title, 'Test Story');
@@ -63,7 +72,18 @@ describe('writer', () => {
     const { parseOutline } = await import('../src/writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({ title: 'T', synopsis: 'S', episodes: [] })),
-      /at least 1 episode/
+      /at least 2 episodes/
+    );
+  });
+
+  test('parseOutline throws on single episode (variant pipeline requires 2+)', async () => {
+    const { parseOutline } = await import('../src/writer.js');
+    await assert.rejects(
+      () => parseOutline(JSON.stringify({
+        title: 'T', synopsis: 'S',
+        episodes: [{ episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] }],
+      })),
+      /at least 2 episodes/
     );
   });
 
@@ -72,7 +92,10 @@ describe('writer', () => {
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
-        episodes: [{ title: 'Ep1', scenePlan: [{ summary: 's' }] }],
+        episodes: [
+          { title: 'Ep1', scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        ],
       })),
       /missing episodeIndex/
     );
@@ -83,7 +106,10 @@ describe('writer', () => {
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
-        episodes: [{ episodeIndex: 0, title: 'Ep1', isEnding: true, scenePlan: [] }],
+        episodes: [
+          { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [] },
+          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        ],
       })),
       /at least 1 scene in scenePlan/
     );
@@ -149,7 +175,10 @@ describe('writer', () => {
     const result = await parseOutline(JSON.stringify({
       title: 'T', synopsis: 'S',
       characterQuestions: [{ key: 'name', label: 'Name?' }],
-      episodes: [{ episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] }],
+      episodes: [
+        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+      ],
     }));
     assert.deepEqual(result.characterQuestions, []);
   });
@@ -159,7 +188,10 @@ describe('writer', () => {
     const outline = {
       title: 'Fenced',
       synopsis: 'Test',
-      episodes: [{ episodeIndex: 0, title: 'E1', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] }],
+      episodes: [
+        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+      ],
     };
     const wrapped = '```json\n' + JSON.stringify(outline) + '\n```';
     const result = await parseOutline(wrapped);

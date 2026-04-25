@@ -118,7 +118,7 @@ function urlEncode(input) {
   return out;
 }
 
-function percentDecode(input) {
+export function percentDecode(input) {
   const bytes = [];
   let i = 0;
   while (i < input.length) {
@@ -126,13 +126,21 @@ function percentDecode(input) {
       const hex = input.slice(i + 1, i + 3);
       const val = parseInt(hex, 16);
       if (!isNaN(val)) { bytes.push(val); i += 3; continue; }
-      bytes.push(input.charCodeAt(i));
-    } else if (input[i] === '+') {
-      bytes.push(0x20);
-    } else {
-      bytes.push(input.charCodeAt(i));
+      // Malformed escape — fall through and preserve the literal '%' below.
     }
-    i++;
+    if (input[i] === '+') {
+      bytes.push(0x20);
+      i += 1;
+      continue;
+    }
+    // Literal characters: pull the full code point (handling surrogate pairs)
+    // and emit its UTF-8 bytes. The prior implementation pushed charCodeAt(i)
+    // directly, which silently corrupted any literal non-ASCII character (e.g.,
+    // a literal "é" produced 0xE9 — invalid UTF-8 — instead of 0xC3 0xA9).
+    const cp = input.codePointAt(i);
+    const charBytes = Buffer.from(String.fromCodePoint(cp), 'utf-8');
+    for (const b of charBytes) bytes.push(b);
+    i += cp > 0xffff ? 2 : 1;  // surrogate pair advances 2 UTF-16 code units
   }
   return Buffer.from(bytes).toString('utf-8');
 }

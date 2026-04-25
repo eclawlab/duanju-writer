@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import chalk from 'chalk';
 import { callLLM } from './llm.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
@@ -122,6 +123,10 @@ function tryParseJson(raw) {
 }
 
 async function repairJson(broken, label) {
+  // Surface JSON-repair invocations so users can spot recurring LLM JSON malformation
+  // (each call costs an extra LLM round-trip). chalk.dim keeps it low-visual-weight.
+  console.log(chalk.dim(`  [json-repair] ${label}: primary parse failed, invoking LLM repair pass`));
+
   const prompt = [
     'The following text was supposed to be valid JSON but has syntax errors.',
     'Common issues: unescaped quotes inside strings, missing commas, trailing commas, unescaped newlines in strings.',
@@ -149,7 +154,7 @@ async function parseJsonWithRepair(raw, label) {
 
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
-export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType = '') {
+export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType = '', referenceCharacter = '', referenceEvent = '') {
   const templateFile = lang === 'cn' ? OUTLINE_PATH_CN : OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
@@ -160,6 +165,18 @@ export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType =
     const section = lang === 'cn'
       ? `\n\n## 小说类型要求\n\n这个故事必须是**${novelType}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。\n`
       : `\n\n## Novel Type Requirement\n\nThis story MUST be a **${novelType}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.\n`;
+    template += section;
+  }
+  if (referenceCharacter) {
+    const section = lang === 'cn'
+      ? `\n\n## 参考角色（必须使用）\n\n本故事必须包含以下预先定义的角色。请在 episodes 与人物列表中完整保留该角色的姓名、身份、性格、背景、动机与弧光；不要替换或改名。其他角色可按需要虚构。\n\n---\n${referenceCharacter}\n---\n`
+      : `\n\n## Reference Character (REQUIRED)\n\nThis story MUST feature the following predefined character. Preserve their name, identity, traits, background, motivations, and arc exactly as described across episodes and character lists. Do NOT rename or replace them. Other characters may be invented as needed.\n\n---\n${referenceCharacter}\n---\n`;
+    template += section;
+  }
+  if (referenceEvent) {
+    const section = lang === 'cn'
+      ? `\n\n## 参考事件（必须使用）\n\n本故事必须围绕以下预定义事件展开。请将其作为核心情节节点编入 episodes 中——保留其事实、情感分量与后果；不要淡化或偏离。事件在剧情中的位置（如开篇触发、高潮揭示或结局）应与其叙事分量相匹配。\n\n---\n${referenceEvent}\n---\n`
+      : `\n\n## Reference Event (REQUIRED)\n\nThis story MUST be built around the following predefined event. Weave it into the episode structure as a load-bearing plot beat — preserve its facts, emotional weight, and consequences; do not sanitize or drift from it. Its position in the episode arc (inciting incident, climactic revelation, or finale) should match its narrative weight.\n\n---\n${referenceEvent}\n---\n`;
     template += section;
   }
   if (materials.newsSource) {
@@ -177,8 +194,11 @@ export async function parseOutline(raw) {
 
   if (!data.title) throw new Error('Missing required field: title');
   if (!data.synopsis) throw new Error('Missing required field: synopsis');
-  if (!data.episodes || data.episodes.length === 0) {
-    throw new Error('Outline must have at least 1 episode');
+  if (!data.episodes || data.episodes.length < 2) {
+    // The variant pipeline splits episodes into a shared front + divergent tail,
+    // so at least 2 episodes are required (1 front + 1 tail) for the three-ending
+    // variation system to produce meaningful output.
+    throw new Error('Outline must have at least 2 episodes (required for front/tail variant split)');
   }
 
   // Build index of valid episodeIndex values and check for duplicates
@@ -222,7 +242,9 @@ export async function generateOutline(materials, options = {}) {
   const lang = options.lang || 'en';
   const style = options.style;
   const novelType = options.novelType || '';
-  const prompt = buildOutlinePrompt(materials, lang, style, novelType);
+  const referenceCharacter = options.referenceCharacter || '';
+  const referenceEvent = options.referenceEvent || '';
+  const prompt = buildOutlinePrompt(materials, lang, style, novelType, referenceCharacter, referenceEvent);
   const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }
@@ -251,7 +273,7 @@ function summarizeSnowflakeForTail(snowflake) {
   return lines.join('\n') || '(none)';
 }
 
-export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake) {
+export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake, options = {}) {
   const template = readFileSync(TAIL_OUTLINE_PATH, 'utf8');
   const sorted = [...baseOutline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
   const totalEpisodes = sorted.length;
@@ -261,7 +283,7 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
   const priorEpisodes = prior.map(summarizeEpisodeForTail).join('\n\n');
   const priorLastIdx = splitIdx - 1;
 
-  return template
+  let filled = template
     .replace(/\{\{splitIdx\}\}/g, String(splitIdx))
     .replace(/\{\{splitIdxPlus1\}\}/g, String(splitIdx + 1))
     .replace(/\{\{lastIdx\}\}/g, String(lastIdx))
@@ -273,6 +295,36 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
     .replace(/\{\{genres\}\}/g, (baseOutline.genres || []).join(', ') || '(none)')
     .replace(/\{\{priorEpisodes\}\}/g, () => priorEpisodes)
     .replace(/\{\{snowflakeSummary\}\}/g, () => summarizeSnowflakeForTail(snowflake));
+
+  // Append constraint sections so the back half respects the same genre / character / event / news context as the front half.
+  const lang = options.lang || 'en';
+  const novelType = options.novelType || '';
+  const referenceCharacter = options.referenceCharacter || '';
+  const referenceEvent = options.referenceEvent || '';
+  const newsSource = options.newsSource || null;
+
+  if (novelType) {
+    filled += lang === 'cn'
+      ? `\n\n## 小说类型要求\n\n本故事必须保持**${novelType}**类型。后半段的所有情节、基调、语言必须与此类型一致，不得偏移。\n`
+      : `\n\n## Novel Type Requirement\n\nThis story MUST remain a **${novelType}** novel. All plot, tone, and language in the back half must stay consistent with this genre — do NOT drift.\n`;
+  }
+  if (referenceCharacter) {
+    filled += lang === 'cn'
+      ? `\n\n## 参考角色（必须保留）\n\n前半段已确立的以下预定义角色必须贯穿后半段。保留其姓名、身份、动机与弧光；不得替换或改名。其弧光应在后半段自然推进并收束于所选结局。\n\n---\n${referenceCharacter}\n---\n`
+      : `\n\n## Reference Character (PRESERVE)\n\nThe following predefined character established in the front half MUST carry through the back half. Preserve their name, identity, motivations, and arc; do NOT rename or replace them. Their arc should advance naturally and resolve into the chosen ending.\n\n---\n${referenceCharacter}\n---\n`;
+  }
+  if (referenceEvent) {
+    filled += lang === 'cn'
+      ? `\n\n## 参考事件（必须延续）\n\n以下预定义事件已在前半段或作为核心背景确立，其后果、情感回响与揭示必须在后半段得到真实的延续与解决，不得淡化或回避。\n\n---\n${referenceEvent}\n---\n`
+      : `\n\n## Reference Event (CONTINUE)\n\nThe following predefined event was established in the front half or as core backdrop. Its consequences, emotional echoes, and revelations MUST continue and resolve in the back half — do NOT sanitize or sidestep them.\n\n---\n${referenceEvent}\n---\n`;
+  }
+  if (newsSource) {
+    filled += lang === 'cn'
+      ? `\n\n## 新闻灵感（延续）\n\n本故事源自真实新闻事件。主题：${newsSource.theme}。情感内核：${newsSource.emotionalCore}。后半段应延续这一情感内核至结局。\n`
+      : `\n\n## News Inspiration (CONTINUE)\n\nThis story was inspired by a real news event. Theme: ${newsSource.theme}. Emotional core: ${newsSource.emotionalCore}. The back half should carry this emotional core through to the chosen ending.\n`;
+  }
+
+  return filled;
 }
 
 export async function parseTailOutline(raw, splitIdx, totalEpisodes, targetEnding) {
@@ -323,19 +375,47 @@ export async function parseTailOutline(raw, splitIdx, totalEpisodes, targetEndin
 
 export async function generateTailOutline(baseOutline, splitIdx, targetEnding, options = {}) {
   const snowflake = options.snowflake || null;
-  const prompt = buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake);
+  const prompt = buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake, {
+    lang: options.lang,
+    novelType: options.novelType,
+    referenceCharacter: options.referenceCharacter,
+    referenceEvent: options.referenceEvent,
+    newsSource: options.newsSource,
+  });
   const raw = await callLLM(prompt, 'tail-outline');
   return await parseTailOutline(raw, splitIdx, baseOutline.episodes.length, targetEnding);
 }
 
 // ─── Step 2: Generate scenes one at a time ────────────────────────────────────
 
-export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang = 'en', styleKey, narrativeContext) {
+export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang = 'en', styleKey, narrativeContext, constraints = {}) {
   const templateFile = lang === 'cn' ? SCENES_PATH_CN : SCENES_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.scene}\n`;
+  }
+
+  // Inject genre + reference-character + reference-event constraints so individual scene prose
+  // stays aligned with the user-supplied constraints (outline/plan carry them transitively,
+  // but scene prose can drift without explicit reinforcement).
+  const novelType = constraints.novelType || '';
+  const referenceCharacter = constraints.referenceCharacter || '';
+  const referenceEvent = constraints.referenceEvent || '';
+  if (novelType) {
+    template += lang === 'cn'
+      ? `\n\n## 小说类型要求\n\n本场景属于**${novelType}**类型小说，语言、节奏、基调必须与此类型保持一致。\n`
+      : `\n\n## Novel Type Requirement\n\nThis scene is part of a **${novelType}** novel. Language, pacing, and tone must stay consistent with this genre.\n`;
+  }
+  if (referenceCharacter) {
+    template += lang === 'cn'
+      ? `\n\n## 参考角色（必须保留）\n\n如本场景涉及以下预定义角色，请严格保留其姓名、身份、言谈方式与动机；不得改名或改变核心特征。\n\n---\n${referenceCharacter}\n---\n`
+      : `\n\n## Reference Character (PRESERVE)\n\nIf this scene involves the following predefined character, strictly preserve their name, identity, speech patterns, and motivations — do NOT rename or alter their core traits.\n\n---\n${referenceCharacter}\n---\n`;
+  }
+  if (referenceEvent) {
+    template += lang === 'cn'
+      ? `\n\n## 参考事件（必须尊重）\n\n本故事建构于以下预定义事件之上。任何对该事件的描写、回忆或后果都必须忠实于其事实与情感分量，不得淡化。\n\n---\n${referenceEvent}\n---\n`
+      : `\n\n## Reference Event (RESPECT)\n\nThis story is built around the following predefined event. Any depiction, recollection, or consequence of this event in the scene must remain faithful to its facts and emotional weight — do NOT sanitize.\n\n---\n${referenceEvent}\n---\n`;
   }
 
   // Inject narrative intelligence context
@@ -422,16 +502,46 @@ export async function generateScene(outline, sceneIndex, scenePlan, totalScenes,
   const lang = options.lang || 'en';
   const style = options.style;
   const narrativeContext = options.narrativeContext;
-  const prompt = buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang, style, narrativeContext);
+  const constraints = {
+    novelType: options.novelType || '',
+    referenceCharacter: options.referenceCharacter || '',
+    referenceEvent: options.referenceEvent || '',
+  };
+  const prompt = buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang, style, narrativeContext, constraints);
   const raw = await callLLM(prompt, 'scene');
   return await parseScene(raw);
 }
 
 // ─── Fallback scene generation ──────────────────────────────────────────────
 
-export function buildRetryScenePrompt(scenePlan, lang = 'en') {
+export function buildRetryScenePrompt(scenePlan, lang = 'en', constraints = {}) {
   const summary = scenePlan.summary || 'A scene in the story';
   const sceneType = scenePlan.sceneType || 'NARRATIVE';
+  const novelType = constraints.novelType || '';
+  const referenceCharacter = constraints.referenceCharacter || '';
+  const referenceEvent = constraints.referenceEvent || '';
+
+  // Build trailing constraint sections so the retry prompt carries the same
+  // genre / character / event constraints as the primary buildScenePrompt path.
+  // Without this, every first-attempt scene failure drifts away from the user's
+  // --type / --character / --event flags on the regenerated scene.
+  const constraintSections = [];
+  if (novelType) {
+    constraintSections.push(lang === 'cn'
+      ? `\n## 小说类型要求\n本场景属于**${novelType}**类型，语言、节奏、基调必须一致。`
+      : `\n## Novel Type Requirement\nThis scene is part of a **${novelType}** novel. Keep language, pacing, and tone consistent.`);
+  }
+  if (referenceCharacter) {
+    constraintSections.push(lang === 'cn'
+      ? `\n## 参考角色（必须保留）\n如本场景涉及以下预定义角色，严格保留其姓名、身份、言谈方式与动机；不得改名或改变核心特征。\n---\n${referenceCharacter}\n---`
+      : `\n## Reference Character (PRESERVE)\nIf this scene involves the following predefined character, strictly preserve their name, identity, speech, and motivations.\n---\n${referenceCharacter}\n---`);
+  }
+  if (referenceEvent) {
+    constraintSections.push(lang === 'cn'
+      ? `\n## 参考事件（必须尊重）\n本故事建构于以下事件之上；任何描写或后果都必须忠实于其事实与情感分量，不得淡化。\n---\n${referenceEvent}\n---`
+      : `\n## Reference Event (RESPECT)\nThis story is built around the following event; any depiction or consequence must remain faithful to its facts and emotional weight.\n---\n${referenceEvent}\n---`);
+  }
+  const constraintsBlock = constraintSections.length > 0 ? '\n' + constraintSections.join('\n') : '';
 
   if (lang === 'cn') {
     return [
@@ -444,7 +554,7 @@ export function buildRetryScenePrompt(scenePlan, lang = 'en') {
       '{"content": "[narrator]\\n你的场景文本...", "sceneType": "' + sceneType + '", "choices": [], "conclusion": null}',
       '',
       '重要：content字段中的换行用\\n表示，双引号用\\"转义。只返回JSON。',
-    ].join('\n');
+    ].join('\n') + constraintsBlock;
   }
 
   return [
@@ -457,7 +567,7 @@ export function buildRetryScenePrompt(scenePlan, lang = 'en') {
     '{"content": "[narrator]\\nYour scene text here...", "sceneType": "' + sceneType + '", "choices": [], "conclusion": null}',
     '',
     'IMPORTANT: Newlines in content must be \\n, double quotes must be \\". Return only JSON.',
-  ].join('\n');
+  ].join('\n') + constraintsBlock;
 }
 
 export function buildFallbackScene(scenePlan, sceneIndex) {
@@ -535,6 +645,8 @@ export async function pickStyle(materials) {
 export async function generateStory(materials, options = {}) {
   const lang = options.lang || 'en';
   const novelType = options.novelType || '';
+  const referenceCharacter = options.referenceCharacter || '';
+  const referenceEvent = options.referenceEvent || '';
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -556,7 +668,7 @@ export async function generateStory(materials, options = {}) {
   if (!snowflake) {
     try {
       log('Building story architecture (Snowflake method)...');
-      snowflake = await generateSnowflake(materials, { lang, novelType, log });
+      snowflake = await generateSnowflake(materials, { lang, novelType, referenceCharacter, referenceEvent, log });
       if (options.onSnowflake) options.onSnowflake(snowflake);
       log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
     } catch (err) {
@@ -573,7 +685,7 @@ export async function generateStory(materials, options = {}) {
     const enrichedMaterials = snowflake
       ? { ...materials, snowflake }
       : materials;
-    outline = await generateOutline(enrichedMaterials, { lang, style, novelType });
+    outline = await generateOutline(enrichedMaterials, { lang, style, novelType, referenceCharacter, referenceEvent });
     if (options.onOutline) options.onOutline(outline);
   } else {
     log('Resuming — outline already generated');
@@ -589,7 +701,7 @@ export async function generateStory(materials, options = {}) {
     plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
     try {
       log('Planning scene details, events, and revelations...');
-      plan = await generatePlan(outline, { lang, novelType });
+      plan = await generatePlan(outline, { lang, novelType, referenceCharacter, referenceEvent });
       if (options.onPlan) options.onPlan(plan);
       log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
     } catch (planErr) {
@@ -703,18 +815,22 @@ export async function generateStory(materials, options = {}) {
     if (snowflake && snowflake.characters) {
       for (const sc of snowflake.characters) {
         if (sc.arc && branchState.characters[sc.name]) {
-          try { setCharacterArc(branchState, sc.name, sc.arc); } catch {}
+          try { setCharacterArc(branchState, sc.name, sc.arc); }
+          catch (err) { log(`[state:setCharacterArc "${sc.name}"] ${err.message}`); }
         }
       }
     }
     for (const arc of (plan.plotArcs || [])) {
-      try { addPlotArc(branchState, arc); } catch {}
+      try { addPlotArc(branchState, arc); }
+      catch (err) { log(`[state:addPlotArc "${arc?.id || '?'}"] ${err.message}`); }
     }
     for (const f of (plan.foreshadowing || [])) {
-      try { addForeshadowing(branchState, f); } catch {}
+      try { addForeshadowing(branchState, f); }
+      catch (err) { log(`[state:addForeshadowing "${f?.id || '?'}"] ${err.message}`); }
     }
     for (const rel of (plan.relationships || [])) {
-      try { addRelationship(branchState, rel.char1, rel.char2, rel.type, rel.description); } catch {}
+      try { addRelationship(branchState, rel.char1, rel.char2, rel.type, rel.description); }
+      catch (err) { log(`[state:addRelationship "${rel?.char1}↔${rel?.char2}"] ${err.message}`); }
     }
 
     // Apply ancestor episodes' context snapshots (everything except current episode)
@@ -730,24 +846,29 @@ export async function generateStory(materials, options = {}) {
         // Apply state changes from ancestor (older snapshots may lack some fields)
         const sc = ctx.stateChanges || {};
         for (const [name, char] of Object.entries(sc.characters || {})) {
-          try { updateCharacter(branchState, name, char); } catch {}
+          try { updateCharacter(branchState, name, char); }
+          catch (err) { log(`[state:updateCharacter "${name}"] ${err.message}`); }
         }
         for (const [name, item] of Object.entries(sc.items || {})) {
-          try { updateItem(branchState, name, item); } catch {}
+          try { updateItem(branchState, name, item); }
+          catch (err) { log(`[state:updateItem "${name}"] ${err.message}`); }
         }
         for (const revId of sc.revealedIds || []) {
-          try { markRevealed(branchState, revId); } catch {}
+          try { markRevealed(branchState, revId); }
+          catch (err) { log(`[state:markRevealed "${revId}"] ${err.message}`); }
         }
         for (const f of sc.reinforcedForeshadowing || []) {
           // Support both old format (plain id string) and new format ({ id, sceneIndex })
           const fId = typeof f === 'string' ? f : f.id;
           const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
-          try { reinforceForeshadowing(branchState, fId, fScene); } catch {}
+          try { reinforceForeshadowing(branchState, fId, fScene); }
+          catch (err) { log(`[state:reinforceForeshadowing "${fId}"] ${err.message}`); }
         }
         for (const f of sc.resolvedForeshadowing || []) {
           const fId = typeof f === 'string' ? f : f.id;
           const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
-          try { resolveForeshadowing(branchState, fId, fScene); } catch {}
+          try { resolveForeshadowing(branchState, fId, fScene); }
+          catch (err) { log(`[state:resolveForeshadowing "${fId}"] ${err.message}`); }
         }
       }
     }
@@ -814,6 +935,9 @@ export async function generateStory(materials, options = {}) {
         scene = await generateScene(outline, i, plan_scene, totalScenes, {
           lang,
           style,
+          novelType,
+          referenceCharacter,
+          referenceEvent,
           narrativeContext: {
             history,
             stateContext,
@@ -832,7 +956,11 @@ export async function generateStory(materials, options = {}) {
         log(`[scene failed] ${firstErr.message} — retrying with simplified prompt...`);
         wlog('scene_retry', { episodeIndex: ep.episodeIndex, sceneIndex: i, error: firstErr.message });
         try {
-          const retryPrompt = buildRetryScenePrompt(plan_scene, lang);
+          const retryPrompt = buildRetryScenePrompt(plan_scene, lang, {
+            novelType,
+            referenceCharacter,
+            referenceEvent,
+          });
           const retryRaw = await callLLM(retryPrompt, 'scene');
           scene = await parseScene(retryRaw);
         } catch (retryErr) {
@@ -943,10 +1071,16 @@ export async function generateStory(materials, options = {}) {
 
       // Handle foreshadowing operations from plan
       for (const fId of (planScene.reinforceForeshadowing || [])) {
-        try { reinforceForeshadowing(branchState, fId, branchLocalSceneIndex); episodeReinforcedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex }); } catch {}
+        try {
+          reinforceForeshadowing(branchState, fId, branchLocalSceneIndex);
+          episodeReinforcedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex });
+        } catch (err) { log(`[state:reinforceForeshadowing "${fId}"] ${err.message}`); }
       }
       for (const fId of (planScene.resolveForeshadowing || [])) {
-        try { resolveForeshadowing(branchState, fId, branchLocalSceneIndex); episodeResolvedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex }); } catch {}
+        try {
+          resolveForeshadowing(branchState, fId, branchLocalSceneIndex);
+          episodeResolvedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex });
+        } catch (err) { log(`[state:resolveForeshadowing "${fId}"] ${err.message}`); }
       }
 
       // Compress scene into history
