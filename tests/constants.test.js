@@ -6,7 +6,12 @@ import { homedir } from 'node:os';
 describe('constants', () => {
   test('exports VERSION', async () => {
     const { VERSION } = await import('../src/constants.js');
-    assert.equal(VERSION, '0.1.9');
+    assert.equal(VERSION, '0.3.0');
+  });
+
+  test('exports SCHEMA_VERSION', async () => {
+    const { SCHEMA_VERSION } = await import('../src/constants.js');
+    assert.equal(SCHEMA_VERSION, 2);
   });
 
   test('exports NAME', async () => {
