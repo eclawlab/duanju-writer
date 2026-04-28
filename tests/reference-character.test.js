@@ -43,7 +43,7 @@ describe('reference character — prompt injection', () => {
   });
 
   test('buildOutlinePrompt includes reference character section (EN)', async () => {
-    const { buildOutlinePrompt } = await import('../src/writer.js');
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = { topics: ['adventure'], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'en', undefined, '', CHAR_MD);
     assert.ok(prompt.includes('Reference Character (REQUIRED)'), 'EN section header missing in outline');
@@ -51,7 +51,7 @@ describe('reference character — prompt injection', () => {
   });
 
   test('buildOutlinePrompt omits section when referenceCharacter empty', async () => {
-    const { buildOutlinePrompt } = await import('../src/writer.js');
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = { topics: ['adventure'], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'en', undefined, '', '');
     assert.ok(!prompt.includes('Reference Character'), 'section should be absent when no character provided');
@@ -73,7 +73,7 @@ describe('reference character — prompt injection', () => {
   });
 
   test('reference character and novelType coexist in one prompt', async () => {
-    const { buildOutlinePrompt } = await import('../src/writer.js');
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = { topics: ['adventure'], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'en', undefined, 'thriller', CHAR_MD);
     assert.ok(prompt.includes('thriller'), 'novelType should still be present');

@@ -6,7 +6,7 @@ import { loadConfig } from './config.js';
 import { updateJob, getJob, claimNextPending } from './queue.js';
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
-import { generateStory, generateOutline, generateTailOutline } from './writer.js';
+import { generateStory, generateOutline, generateTailOutline } from './drama-writer.js';
 import { generateSnowflake } from './snowflake.js';
 import { generatePlan } from './planner.js';
 import { createStore, getStoreDir } from './vectorstore.js';

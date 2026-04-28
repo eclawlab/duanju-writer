@@ -5,7 +5,7 @@ describe('writer', () => {
   // ─── Outline tests ──────────────────────────────────────────────────────────
 
   test('buildOutlinePrompt inserts materials into template', async () => {
-    const { buildOutlinePrompt } = await import('../src/writer.js');
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = {
       topics: [{ title: 'AI Rebellion', premise: 'Robots gain consciousness' }],
       plotHooks: ['The last human city receives a transmission'],
@@ -17,14 +17,14 @@ describe('writer', () => {
   });
 
   test('buildOutlinePrompt uses CN template when lang is cn', async () => {
-    const { buildOutlinePrompt } = await import('../src/writer.js');
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = { topics: [{ title: '测试' }], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'cn');
     assert.ok(prompt.includes('音频小说作家'));
   });
 
   test('parseOutline validates required structure', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     const valid = {
       title: 'Test Story',
       synopsis: 'A test',
@@ -53,7 +53,7 @@ describe('writer', () => {
   });
 
   test('parseOutline throws on missing title', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({ synopsis: 'A test', episodes: [{ episodeIndex: 0, title: 'E', scenePlan: [{ summary: 's' }] }] })),
       /Missing required field: title/
@@ -61,7 +61,7 @@ describe('writer', () => {
   });
 
   test('parseOutline throws on missing synopsis', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({ title: 'T', episodes: [{ episodeIndex: 0, title: 'E', scenePlan: [{ summary: 's' }] }] })),
       /Missing required field: synopsis/
@@ -69,7 +69,7 @@ describe('writer', () => {
   });
 
   test('parseOutline throws on empty episodes', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({ title: 'T', synopsis: 'S', episodes: [] })),
       /at least 2 episodes/
@@ -77,7 +77,7 @@ describe('writer', () => {
   });
 
   test('parseOutline throws on single episode (variant pipeline requires 2+)', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
@@ -88,7 +88,7 @@ describe('writer', () => {
   });
 
   test('parseOutline throws on missing episodeIndex', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
@@ -102,7 +102,7 @@ describe('writer', () => {
   });
 
   test('parseOutline throws on empty scenePlan', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
@@ -116,7 +116,7 @@ describe('writer', () => {
   });
 
   test('parseOutline rejects duplicate episodeIndex', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
@@ -130,7 +130,7 @@ describe('writer', () => {
   });
 
   test('parseOutline accepts linear multi-episode structure', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     const result = await parseOutline(JSON.stringify({
       title: 'Linear', synopsis: 'Test',
       episodes: [
@@ -144,7 +144,7 @@ describe('writer', () => {
   });
 
   test('parseOutline requires at least one ending episode', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
@@ -158,7 +158,7 @@ describe('writer', () => {
   });
 
   test('parseOutline strips episodeChoices from LLM output', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     const result = await parseOutline(JSON.stringify({
       title: 'T', synopsis: 'S',
       episodes: [
@@ -171,7 +171,7 @@ describe('writer', () => {
   });
 
   test('parseOutline forces characterQuestions to empty array', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     const result = await parseOutline(JSON.stringify({
       title: 'T', synopsis: 'S',
       characterQuestions: [{ key: 'name', label: 'Name?' }],
@@ -184,7 +184,7 @@ describe('writer', () => {
   });
 
   test('parseOutline strips markdown code fences', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     const outline = {
       title: 'Fenced',
       synopsis: 'Test',
@@ -201,7 +201,7 @@ describe('writer', () => {
   // ─── Scene tests ────────────────────────────────────────────────────────────
 
   test('buildScenePrompt inserts outline and scene details', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'Test Story',
       synopsis: 'A test',
@@ -222,7 +222,7 @@ describe('writer', () => {
   });
 
   test('buildScenePrompt includes choice texts for CHOICE scenes', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
       episodes: [{ title: 'E', scenePlan: [{ summary: 'Choose', sceneType: 'CHOICE', hasChoices: true, choiceTexts: ['A', 'B'] }] }],
@@ -232,7 +232,7 @@ describe('writer', () => {
   });
 
   test('buildScenePrompt includes conclusion info', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
       episodes: [{ title: 'E', scenePlan: [{ summary: 'End', sceneType: 'NARRATIVE', isConclusion: true, conclusionType: 'EPISODE_END', ending: 'GOOD' }] }],
@@ -243,7 +243,7 @@ describe('writer', () => {
   });
 
   test('buildScenePrompt uses CN template when lang is cn', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: '测试', synopsis: '简介', genres: [],
       episodes: [{ title: '章节', scenePlan: [{ summary: '场景', sceneType: 'NARRATIVE' }] }],
@@ -253,14 +253,14 @@ describe('writer', () => {
   });
 
   test('parseScene validates content field', async () => {
-    const { parseScene } = await import('../src/writer.js');
+    const { parseScene } = await import('../src/drama-writer.js');
     const valid = { content: '[narrator]\nHello', sceneType: 'NARRATIVE', choices: [], conclusion: null };
     const result = await parseScene(JSON.stringify(valid));
     assert.equal(result.content, '[narrator]\nHello');
   });
 
   test('parseScene throws on missing content', async () => {
-    const { parseScene } = await import('../src/writer.js');
+    const { parseScene } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseScene(JSON.stringify({ sceneType: 'NARRATIVE' })),
       /Scene missing content/
@@ -268,7 +268,7 @@ describe('writer', () => {
   });
 
   test('parseScene strips code fences', async () => {
-    const { parseScene } = await import('../src/writer.js');
+    const { parseScene } = await import('../src/drama-writer.js');
     const scene = { content: '[narrator]\nTest', sceneType: 'NARRATIVE' };
     const wrapped = '```json\n' + JSON.stringify(scene) + '\n```';
     const result = await parseScene(wrapped);
@@ -278,7 +278,7 @@ describe('writer', () => {
   // ─── Retry and fallback tests ──────────────────────────────────────────────
 
   test('buildRetryScenePrompt produces simplified prompt', async () => {
-    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
     const prompt = buildRetryScenePrompt({ summary: 'Hero enters cave', sceneType: 'NARRATIVE' });
     assert.ok(prompt.includes('Hero enters cave'));
     assert.ok(prompt.includes('NARRATIVE'));
@@ -286,14 +286,14 @@ describe('writer', () => {
   });
 
   test('buildRetryScenePrompt uses Chinese for cn lang', async () => {
-    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
     const prompt = buildRetryScenePrompt({ summary: '英雄进入洞穴', sceneType: 'NARRATIVE' }, 'cn');
     assert.ok(prompt.includes('英雄进入洞穴'));
     assert.ok(prompt.includes('JSON'));
   });
 
   test('buildFallbackScene creates valid scene from plan', async () => {
-    const { buildFallbackScene } = await import('../src/writer.js');
+    const { buildFallbackScene } = await import('../src/drama-writer.js');
     const scene = buildFallbackScene({ summary: 'The hero arrives', sceneType: 'NARRATIVE' });
     assert.ok(scene.content.includes('The hero arrives'));
     assert.equal(scene.sceneType, 'NARRATIVE');
@@ -302,7 +302,7 @@ describe('writer', () => {
   });
 
   test('buildFallbackScene handles conclusion scenes', async () => {
-    const { buildFallbackScene } = await import('../src/writer.js');
+    const { buildFallbackScene } = await import('../src/drama-writer.js');
     const scene = buildFallbackScene({
       summary: 'The story ends',
       sceneType: 'NARRATIVE',
@@ -316,7 +316,7 @@ describe('writer', () => {
   });
 
   test('buildFallbackScene handles choice scenes', async () => {
-    const { buildFallbackScene } = await import('../src/writer.js');
+    const { buildFallbackScene } = await import('../src/drama-writer.js');
     const scene = buildFallbackScene({
       summary: 'A fork in the road',
       sceneType: 'CHOICE',
@@ -353,7 +353,7 @@ describe('writer', () => {
   }
 
   test('buildTailOutlinePrompt injects split point, target ending, and prior episodes', async () => {
-    const { buildTailOutlinePrompt } = await import('../src/writer.js');
+    const { buildTailOutlinePrompt } = await import('../src/drama-writer.js');
     const base = makeBaseOutline(6);
     const prompt = buildTailOutlinePrompt(base, 3, 'BITTERSWEET', null);
     assert.ok(prompt.includes('BITTERSWEET'));
@@ -366,7 +366,7 @@ describe('writer', () => {
   });
 
   test('parseTailOutline accepts valid tail and sets ending on last episode', async () => {
-    const { parseTailOutline } = await import('../src/writer.js');
+    const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
         { episodeIndex: 3, title: 'T1', isEnding: false, scenePlan: [{ summary: 's' }] },
@@ -384,7 +384,7 @@ describe('writer', () => {
   });
 
   test('parseTailOutline coerces the last episode to target ending even if LLM emits a different one', async () => {
-    const { parseTailOutline } = await import('../src/writer.js');
+    const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
         { episodeIndex: 2, title: 'T1', isEnding: false, scenePlan: [{ summary: 's' }] },
@@ -396,7 +396,7 @@ describe('writer', () => {
   });
 
   test('parseTailOutline rejects wrong episode count', async () => {
-    const { parseTailOutline } = await import('../src/writer.js');
+    const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
         { episodeIndex: 3, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
@@ -409,7 +409,7 @@ describe('writer', () => {
   });
 
   test('parseTailOutline rejects invalid target ending', async () => {
-    const { parseTailOutline } = await import('../src/writer.js');
+    const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({ episodes: [] });
     await assert.rejects(
       () => parseTailOutline(raw, 3, 6, 'TRAGIC'),
@@ -418,7 +418,7 @@ describe('writer', () => {
   });
 
   test('parseTailOutline coerces misnumbered episodeIndex to expected range', async () => {
-    const { parseTailOutline } = await import('../src/writer.js');
+    const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
         { episodeIndex: 0, title: 'T1', scenePlan: [{ summary: 's' }] },
@@ -432,7 +432,7 @@ describe('writer', () => {
   });
 
   test('parseTailOutline strips any episodeChoices the LLM emits', async () => {
-    const { parseTailOutline } = await import('../src/writer.js');
+    const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
         { episodeIndex: 2, title: 'T1', scenePlan: [{ summary: 's' }], episodeChoices: [{ text: 'X' }] },
@@ -446,7 +446,7 @@ describe('writer', () => {
   });
 
   test('VALID_TAIL_ENDINGS exposes the three supported endings', async () => {
-    const { VALID_TAIL_ENDINGS } = await import('../src/writer.js');
+    const { VALID_TAIL_ENDINGS } = await import('../src/drama-writer.js');
     assert.deepEqual([...VALID_TAIL_ENDINGS].sort(), ['BITTERSWEET', 'GOOD', 'SPECIAL']);
   });
 });

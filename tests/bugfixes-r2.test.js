@@ -10,7 +10,7 @@ const EVENT_MD = '# Bridge Collapse\nThirty-seven dead.';
 // ──────────────────────────────────────────────────────────────────────────────
 describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
   test('omits constraint sections when none provided (EN)', async () => {
-    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
     const prompt = buildRetryScenePrompt({ summary: 'Hero arrives', sceneType: 'NARRATIVE' }, 'en');
     assert.ok(!prompt.includes('Novel Type Requirement'));
     assert.ok(!prompt.includes('Reference Character'));
@@ -18,7 +18,7 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
   });
 
   test('includes all three constraints when provided (EN)', async () => {
-    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
     const prompt = buildRetryScenePrompt(
       { summary: 'Hero arrives', sceneType: 'NARRATIVE' },
       'en',
@@ -32,7 +32,7 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
   });
 
   test('uses CN text for cn lang', async () => {
-    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
     const prompt = buildRetryScenePrompt(
       { summary: '主角登场', sceneType: 'NARRATIVE' },
       'cn',
@@ -44,7 +44,7 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
   });
 
   test('default constraints arg keeps backwards compat for older callers', async () => {
-    const { buildRetryScenePrompt } = await import('../src/writer.js');
+    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
     // Two-arg call should still work and produce a valid prompt without constraints.
     const prompt = buildRetryScenePrompt({ summary: 's', sceneType: 'NARRATIVE' }, 'en');
     assert.ok(prompt.includes('Write a scene'), 'core retry prompt body must remain intact');
@@ -52,7 +52,7 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
 
   test('worker call site passes constraints (source-level guard)', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/writer.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
     // The retry call site must thread novelType/referenceCharacter/referenceEvent.
     const retryCallMatch = src.match(/buildRetryScenePrompt\([^)]*novelType[^)]*referenceCharacter[^)]*referenceEvent/s);
     assert.ok(
@@ -96,7 +96,7 @@ describe('R2 Fix #2/#3 — variantPlan persistence guard', () => {
 describe('R2 Fix #4 — JSON repair is observable', () => {
   test('writer.js repairJson logs invocation', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/writer.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
     const fnMatch = src.match(/async function repairJson\([^]*?\n\}/);
     assert.ok(fnMatch, 'writer.js repairJson should be defined');
     assert.ok(fnMatch[0].includes('json-repair'), 'writer.js repairJson should log on invocation');

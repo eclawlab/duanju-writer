@@ -10,7 +10,7 @@ const EVENT_MD = '# The Bridge Collapse\nThirty-seven people died.';
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #1 — tail-outline receives constraints', () => {
   test('buildTailOutlinePrompt omits sections when no constraints', async () => {
-    const { buildTailOutlinePrompt } = await import('../src/writer.js');
+    const { buildTailOutlinePrompt } = await import('../src/drama-writer.js');
     const baseOutline = {
       title: 'Test',
       synopsis: 'Test',
@@ -28,7 +28,7 @@ describe('Fix #1 — tail-outline receives constraints', () => {
   });
 
   test('buildTailOutlinePrompt includes all constraints when provided (EN)', async () => {
-    const { buildTailOutlinePrompt } = await import('../src/writer.js');
+    const { buildTailOutlinePrompt } = await import('../src/drama-writer.js');
     const baseOutline = {
       title: 'Test',
       synopsis: 'Test',
@@ -55,7 +55,7 @@ describe('Fix #1 — tail-outline receives constraints', () => {
   });
 
   test('buildTailOutlinePrompt uses CN text for cn lang', async () => {
-    const { buildTailOutlinePrompt } = await import('../src/writer.js');
+    const { buildTailOutlinePrompt } = await import('../src/drama-writer.js');
     const baseOutline = {
       title: 'Test', synopsis: 'Test', genres: [],
       episodes: [
@@ -79,7 +79,7 @@ describe('Fix #1 — tail-outline receives constraints', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #2 — scene prompt receives constraints', () => {
   test('buildScenePrompt omits sections when no constraints', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
       episodes: [{ title: 'E', scenePlan: [{ summary: 's', sceneType: 'NARRATIVE' }] }],
@@ -91,7 +91,7 @@ describe('Fix #2 — scene prompt receives constraints', () => {
   });
 
   test('buildScenePrompt injects all constraints when provided (EN)', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
       episodes: [{ title: 'E', scenePlan: [{ summary: 's', sceneType: 'NARRATIVE' }] }],
@@ -109,7 +109,7 @@ describe('Fix #2 — scene prompt receives constraints', () => {
   });
 
   test('buildScenePrompt constraints default to empty when constraints arg omitted', async () => {
-    const { buildScenePrompt } = await import('../src/writer.js');
+    const { buildScenePrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
       episodes: [{ title: 'E', scenePlan: [{ summary: 's', sceneType: 'NARRATIVE' }] }],
@@ -126,7 +126,7 @@ describe('Fix #2 — scene prompt receives constraints', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #5 — outline minimum episode guard', () => {
   test('parseOutline rejects 1-episode outlines', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
@@ -139,7 +139,7 @@ describe('Fix #5 — outline minimum episode guard', () => {
   });
 
   test('parseOutline accepts 2-episode outlines', async () => {
-    const { parseOutline } = await import('../src/writer.js');
+    const { parseOutline } = await import('../src/drama-writer.js');
     const result = await parseOutline(JSON.stringify({
       title: 'T', synopsis: 'S',
       episodes: [
@@ -226,7 +226,7 @@ describe('Fix #3 — plan skeleton non-persistence (logic guard)', () => {
 describe('Fix #6 — state-mutation catches log errors', () => {
   test('writer.js has no remaining empty } catch {} in state mutations', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/writer.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
 
     // Line 115 inside tryParseJson is the one exception — it's an intentional
     // "return undefined on parse failure" pattern, not a state mutation.
@@ -240,7 +240,7 @@ describe('Fix #6 — state-mutation catches log errors', () => {
 
   test('writer.js logs state-mutation failures with operation name', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/writer.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
     // Spot-check: a few operations should show up in log lines.
     assert.ok(src.includes('state:setCharacterArc'), 'setCharacterArc failures should be logged');
     assert.ok(src.includes('state:updateCharacter'), 'updateCharacter failures should be logged');
