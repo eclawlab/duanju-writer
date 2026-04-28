@@ -30,9 +30,9 @@ import {
   reinforceForeshadowing,
   resolveForeshadowing,
   getUnresolvedForeshadowing,
-} from '../src/story-state.js';
+} from '../src/drama-state.js';
 
-describe('story-state', () => {
+describe('drama-state', () => {
   test('createState returns empty collections', () => {
     const state = createState();
     assert.deepEqual(state.characters, {});

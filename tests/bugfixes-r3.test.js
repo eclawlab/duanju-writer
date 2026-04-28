@@ -67,11 +67,11 @@ describe('R3 Fix #1 — uploader timeout', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// R3 Fix #2 — story-state add* functions warn on duplicate-name overwrite so
+// R3 Fix #2 — drama-state add* functions warn on duplicate-name overwrite so
 // LLM-emitted duplicate entries are visible in logs instead of silently losing
 // the prior entry's knowledge / status / location.
 // ──────────────────────────────────────────────────────────────────────────────
-describe('R3 Fix #2 — story-state silent overwrite warnings', () => {
+describe('R3 Fix #2 — drama-state silent overwrite warnings', () => {
   function captureWarn(fn) {
     const warnings = [];
     const orig = console.warn;
@@ -81,7 +81,7 @@ describe('R3 Fix #2 — story-state silent overwrite warnings', () => {
   }
 
   test('addCharacter warns on duplicate name (prior data is overwritten)', async () => {
-    const { createState, addCharacter } = await import('../src/story-state.js');
+    const { createState, addCharacter } = await import('../src/drama-state.js');
     const state = createState();
     addCharacter(state, { name: 'Alice', status: 'alive', location: 'home', knowledge: ['s1'], emotional: 'calm' });
 
@@ -98,7 +98,7 @@ describe('R3 Fix #2 — story-state silent overwrite warnings', () => {
   });
 
   test('addCharacter is silent on first-time add', async () => {
-    const { createState, addCharacter } = await import('../src/story-state.js');
+    const { createState, addCharacter } = await import('../src/drama-state.js');
     const state = createState();
     const warnings = captureWarn(() =>
       addCharacter(state, { name: 'Bob', status: 'alive', location: 'street', knowledge: [], emotional: 'tense' }),
@@ -107,7 +107,7 @@ describe('R3 Fix #2 — story-state silent overwrite warnings', () => {
   });
 
   test('addItem warns on duplicate name', async () => {
-    const { createState, addItem } = await import('../src/story-state.js');
+    const { createState, addItem } = await import('../src/drama-state.js');
     const state = createState();
     addItem(state, { name: 'Sword', status: 'sharp', holder: null, location: 'armory' });
     const warnings = captureWarn(() =>
@@ -117,7 +117,7 @@ describe('R3 Fix #2 — story-state silent overwrite warnings', () => {
   });
 
   test('addLocation warns on duplicate name', async () => {
-    const { createState, addLocation } = await import('../src/story-state.js');
+    const { createState, addLocation } = await import('../src/drama-state.js');
     const state = createState();
     addLocation(state, { name: 'Forest', status: 'open' });
     const warnings = captureWarn(() =>
@@ -127,7 +127,7 @@ describe('R3 Fix #2 — story-state silent overwrite warnings', () => {
   });
 
   test('addRevelation warns on duplicate id (markRevealed is non-deterministic with dups)', async () => {
-    const { createState, addRevelation } = await import('../src/story-state.js');
+    const { createState, addRevelation } = await import('../src/drama-state.js');
     const state = createState();
     addRevelation(state, { id: 'r1', info: 'first', visibility: 'public', revealInScene: 0 });
     const warnings = captureWarn(() =>

@@ -37,7 +37,7 @@ export function createState() {
  */
 export function addCharacter(state, { name, status, location, knowledge, emotional }) {
   if (state.characters[name]) {
-    console.warn(`[story-state] addCharacter: overwriting existing character "${name}" (prior knowledge/status will be lost)`);
+    console.warn(`[drama-state] addCharacter: overwriting existing character "${name}" (prior knowledge/status will be lost)`);
   }
   state.characters[name] = { name, status, location, knowledge, emotional };
 }
@@ -64,7 +64,7 @@ export function updateCharacter(state, name, updates) {
  */
 export function addItem(state, { name, status, holder, location }) {
   if (state.items[name]) {
-    console.warn(`[story-state] addItem: overwriting existing item "${name}"`);
+    console.warn(`[drama-state] addItem: overwriting existing item "${name}"`);
   }
   state.items[name] = { name, status, holder, location };
 }
@@ -91,7 +91,7 @@ export function updateItem(state, name, updates) {
  */
 export function addLocation(state, { name, status }) {
   if (state.locations[name]) {
-    console.warn(`[story-state] addLocation: overwriting existing location "${name}"`);
+    console.warn(`[drama-state] addLocation: overwriting existing location "${name}"`);
   }
   state.locations[name] = { name, status };
 }
@@ -120,7 +120,7 @@ export function updateLocation(state, name, updates) {
  */
 export function addRevelation(state, { id, info, visibility, revealInScene, revealInEpisode }) {
   if (state.revelations.some(r => r.id === id)) {
-    console.warn(`[story-state] addRevelation: duplicate revelation id "${id}" — markRevealed lookups will return the first match`);
+    console.warn(`[drama-state] addRevelation: duplicate revelation id "${id}" — markRevealed lookups will return the first match`);
   }
   state.revelations.push({ id, info, visibility, revealInScene, revealInEpisode: revealInEpisode ?? null, revealed: false });
 }

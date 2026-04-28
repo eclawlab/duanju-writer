@@ -8,7 +8,7 @@ import {
   addItem,
   addLocation,
   addRevelation,
-} from './story-state.js';
+} from './drama-state.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
