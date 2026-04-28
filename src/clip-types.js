@@ -93,8 +93,8 @@ const SCENE_RULES = {
   },
 };
 
-export function getSceneTypeRules(sceneType, lang = 'en') {
-  const rules = SCENE_RULES[sceneType];
+export function getSceneTypeRules(clipType, lang = 'en') {
+  const rules = SCENE_RULES[clipType];
   if (!rules) return '';
   const langRules = rules[lang] || rules['en'];
   return langRules.join('\n');

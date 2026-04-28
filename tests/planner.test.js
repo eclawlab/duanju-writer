@@ -6,7 +6,7 @@ describe('planner', () => {
     const { buildPlanPrompt } = await import('../src/planner.js');
     const outline = {
       title: 'Test Story',
-      episodes: [{ title: 'Episode 1', scenePlan: [{ summary: 'Scene 1' }] }],
+      episodes: [{ title: 'Episode 1', clipPlan: [{ summary: 'Scene 1' }] }],
     };
     const prompt = buildPlanPrompt(outline, 'en');
     assert.ok(prompt.includes('Test Story'), 'prompt should include outline title');
@@ -27,23 +27,23 @@ describe('planner', () => {
       items: [],
       locations: [{ name: 'Forest', status: 'accessible' }],
       revelations: [],
-      scenes: [
-        { sceneIndex: 0, events: ['Alice enters the forest'], threads: [], characterChanges: [], itemChanges: [], revealIds: [], pacing: 'slow' },
+      clips: [
+        { clipIndex: 0, events: ['Alice enters the forest'], threads: [], characterChanges: [], itemChanges: [], revealIds: [], pacing: 'slow' },
       ],
     };
     const result = parsePlan(JSON.stringify(plan));
-    assert.ok(Array.isArray(result.scenes), 'result should have scenes array');
-    assert.equal(result.scenes.length, 1, 'result should have 1 scene');
-    assert.equal(result.scenes[0].events[0], 'Alice enters the forest');
+    assert.ok(Array.isArray(result.clips), 'result should have clips array');
+    assert.equal(result.clips.length, 1, 'result should have 1 scene');
+    assert.equal(result.clips[0].events[0], 'Alice enters the forest');
   });
 
-  test('parsePlan throws on missing scenes', async () => {
+  test('parsePlan throws on missing clips', async () => {
     const { parsePlan } = await import('../src/planner.js');
     const plan = { characters: [], items: [], locations: [], revelations: [] };
     assert.throws(
       () => parsePlan(JSON.stringify(plan)),
-      /scenes/i,
-      'should throw with message mentioning scenes'
+      /clips/i,
+      'should throw with message mentioning clips'
     );
   });
 
@@ -54,7 +54,7 @@ describe('planner', () => {
       items: [],
       locations: [],
       revelations: [],
-      scenes: [{ sceneIndex: 0, events: [], threads: [], characterChanges: [], itemChanges: [], revealIds: [], pacing: 'slow' }],
+      clips: [{ clipIndex: 0, events: [], threads: [], characterChanges: [], itemChanges: [], revealIds: [], pacing: 'slow' }],
     };
     assert.throws(
       () => parsePlan(JSON.stringify(plan)),
@@ -70,12 +70,12 @@ describe('planner', () => {
       items: [],
       locations: [],
       revelations: [],
-      scenes: [{ sceneIndex: 0, events: ['Something happens'], threads: [], characterChanges: [], itemChanges: [], revealIds: [], pacing: 'fast' }],
+      clips: [{ clipIndex: 0, events: ['Something happens'], threads: [], characterChanges: [], itemChanges: [], revealIds: [], pacing: 'fast' }],
     };
     const raw = '```json\n' + JSON.stringify(plan) + '\n```';
     const result = parsePlan(raw);
-    assert.ok(Array.isArray(result.scenes), 'result should have scenes array after stripping code fences');
-    assert.equal(result.scenes[0].events[0], 'Something happens');
+    assert.ok(Array.isArray(result.clips), 'result should have clips array after stripping code fences');
+    assert.equal(result.clips[0].events[0], 'Something happens');
   });
 
   test('initStateFromPlan creates state from plan data', async () => {
@@ -97,7 +97,7 @@ describe('planner', () => {
         { id: 'rev_1', info: 'Alice is the chosen one', visibility: 'hidden', revealInScene: 2 },
         { id: 'rev_2', info: 'The king is corrupt', visibility: 'public', revealInScene: null },
       ],
-      scenes: [],
+      clips: [],
     };
     const state = initStateFromPlan(plan);
     assert.ok(state.characters['Alice'], 'state should have Alice');

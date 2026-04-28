@@ -59,7 +59,7 @@ describe('reference character — prompt injection', () => {
 
   test('buildPlanPrompt includes reference character section (EN)', async () => {
     const { buildPlanPrompt } = await import('../src/planner.js');
-    const outline = { title: 'Test', episodes: [{ title: 'Ep 1', scenePlan: [{ summary: 'Scene 1' }] }] };
+    const outline = { title: 'Test', episodes: [{ title: 'Ep 1', clipPlan: [{ summary: 'Scene 1' }] }] };
     const prompt = buildPlanPrompt(outline, 'en', '', CHAR_MD);
     assert.ok(prompt.includes('Reference Character (REQUIRED)'), 'EN section header missing in plan');
     assert.ok(prompt.includes('林昭'), 'character content should be in plan prompt');

@@ -5,22 +5,22 @@ const CHAR_MD = '# 林昭\nRole: Protagonist';
 const EVENT_MD = '# Bridge Collapse\nThirty-seven dead.';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Round-2 Fix #1: buildRetryScenePrompt now accepts constraints so the scene
+// Round-2 Fix #1: buildRetryClipPrompt now accepts constraints so the scene
 // retry path doesn't drift from --type / --character / --event flags.
 // ──────────────────────────────────────────────────────────────────────────────
-describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
+describe('R2 Fix #1 — buildRetryClipPrompt receives constraints', () => {
   test('omits constraint sections when none provided (EN)', async () => {
-    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryScenePrompt({ summary: 'Hero arrives', sceneType: 'NARRATIVE' }, 'en');
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt({ summary: 'Hero arrives', clipType: 'NARRATIVE' }, 'en');
     assert.ok(!prompt.includes('Novel Type Requirement'));
     assert.ok(!prompt.includes('Reference Character'));
     assert.ok(!prompt.includes('Reference Event'));
   });
 
   test('includes all three constraints when provided (EN)', async () => {
-    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryScenePrompt(
-      { summary: 'Hero arrives', sceneType: 'NARRATIVE' },
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt(
+      { summary: 'Hero arrives', clipType: 'NARRATIVE' },
       'en',
       { novelType: 'thriller', referenceCharacter: CHAR_MD, referenceEvent: EVENT_MD },
     );
@@ -32,9 +32,9 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
   });
 
   test('uses CN text for cn lang', async () => {
-    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryScenePrompt(
-      { summary: '主角登场', sceneType: 'NARRATIVE' },
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt(
+      { summary: '主角登场', clipType: 'NARRATIVE' },
       'cn',
       { novelType: '武侠', referenceCharacter: CHAR_MD },
     );
@@ -44,9 +44,9 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
   });
 
   test('default constraints arg keeps backwards compat for older callers', async () => {
-    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
     // Two-arg call should still work and produce a valid prompt without constraints.
-    const prompt = buildRetryScenePrompt({ summary: 's', sceneType: 'NARRATIVE' }, 'en');
+    const prompt = buildRetryClipPrompt({ summary: 's', clipType: 'NARRATIVE' }, 'en');
     assert.ok(prompt.includes('Write a scene'), 'core retry prompt body must remain intact');
   });
 
@@ -54,10 +54,10 @@ describe('R2 Fix #1 — buildRetryScenePrompt receives constraints', () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
     // The retry call site must thread novelType/referenceCharacter/referenceEvent.
-    const retryCallMatch = src.match(/buildRetryScenePrompt\([^)]*novelType[^)]*referenceCharacter[^)]*referenceEvent/s);
+    const retryCallMatch = src.match(/buildRetryClipPrompt\([^)]*novelType[^)]*referenceCharacter[^)]*referenceEvent/s);
     assert.ok(
       retryCallMatch,
-      'buildRetryScenePrompt call site must thread novelType, referenceCharacter, and referenceEvent',
+      'buildRetryClipPrompt call site must thread novelType, referenceCharacter, and referenceEvent',
     );
   });
 });

@@ -100,35 +100,35 @@ export async function importDirectory(store, dirPath, metadata = {}) {
 
 /**
  * Query the knowledge base, filtering out scene entries that are temporally
- * close to the current scene (within 3 scenes) and scenes from non-ancestor
+ * close to the current scene (within 3 clips) and clips from non-ancestor
  * episodes (cross-branch pollution).
  *
  * @param {object} store
  * @param {string} query
  * @param {number} k        - number of results to return
- * @param {number|null} currentSceneIndex
- * @param {Set|null} ancestorEpisodeIndices - if provided, only include scenes from these episodes
+ * @param {number|null} currentClipIndex
+ * @param {Set|null} ancestorEpisodeIndices - if provided, only include clips from these episodes
  * @returns {{ id: string, text: string, score: number, metadata: object }[]}
  */
-export async function queryKnowledge(store, query, k = 5, currentSceneIndex = null, ancestorEpisodeIndices = null) {
+export async function queryKnowledge(store, query, k = 5, currentClipIndex = null, ancestorEpisodeIndices = null) {
   const raw = store.search(query, k * 3);
 
   const filtered = raw.filter(result => {
-    const { sceneIndex, episodeIndex } = result.metadata || {};
+    const { clipIndex, episodeIndex } = result.metadata || {};
 
-    // Knowledge entries (no sceneIndex) are always included
-    if (sceneIndex === undefined || sceneIndex === null) return true;
+    // Knowledge entries (no clipIndex) are always included
+    if (clipIndex === undefined || clipIndex === null) return true;
 
-    // Filter out scenes from non-ancestor episodes (prevents cross-branch leakage)
+    // Filter out clips from non-ancestor episodes (prevents cross-branch leakage)
     if (ancestorEpisodeIndices && episodeIndex !== undefined) {
       if (!ancestorEpisodeIndices.has(episodeIndex)) return false;
     }
 
     // If we have no reference scene, include all
-    if (currentSceneIndex === null || currentSceneIndex === undefined) return true;
+    if (currentClipIndex === null || currentClipIndex === undefined) return true;
 
-    // Filter out scene entries within 3 scenes of currentSceneIndex
-    return Math.abs(sceneIndex - currentSceneIndex) > 3;
+    // Filter out scene entries within 3 clips of currentClipIndex
+    return Math.abs(clipIndex - currentClipIndex) > 3;
   });
 
   return filtered.slice(0, k);

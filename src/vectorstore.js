@@ -258,7 +258,7 @@ export function createStore(filepath) {
         invalidateCache();
       } catch (err) {
         // Surface corruption rather than silently degrading retrieval. The store
-        // starts empty and gets rebuilt as new scenes are added — search quality
+        // starts empty and gets rebuilt as new clips are added — search quality
         // suffers until then, so users should know.
         console.warn(`[vectorstore] Could not load "${filepath}" (${err.message}) — starting with empty store; retrieval will degrade until rebuilt`);
       }

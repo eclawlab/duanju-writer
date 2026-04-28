@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { callLLM } from './llm.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
-import { compressScenes, buildHistoryContext } from './compressor.js';
+import { compressClips, buildHistoryContext } from './compressor.js';
 import { updateCharacter, updateItem, getAvailableRevelations, markRevealed, toPromptContext, validate } from './drama-state.js';
 import { checkConsistency, rewriteForConsistency, updateMotifTracker } from './consistency.js';
 import { createStore } from './vectorstore.js';
@@ -214,11 +214,11 @@ export async function parseOutline(raw) {
   }
 
   for (const ep of data.episodes) {
-    if (!ep.scenePlan || ep.scenePlan.length === 0) {
-      throw new Error(`Episode "${ep.title}" must have at least 1 scene in scenePlan`);
+    if (!ep.clipPlan || ep.clipPlan.length === 0) {
+      throw new Error(`Episode "${ep.title}" must have at least 1 scene in clipPlan`);
     }
-    for (let i = 0; i < ep.scenePlan.length; i++) {
-      if (!ep.scenePlan[i].summary) {
+    for (let i = 0; i < ep.clipPlan.length; i++) {
+      if (!ep.clipPlan[i].summary) {
         throw new Error(`Episode "${ep.title}" scene ${i} missing summary`);
       }
     }
@@ -252,10 +252,10 @@ export async function generateOutline(materials, options = {}) {
 // ─── Tail outline: regenerate back-half with a divergent ending ──────────────
 
 function summarizeEpisodeForTail(ep) {
-  const scenes = (ep.scenePlan || [])
+  const clips = (ep.clipPlan || [])
     .map((s, i) => `    Scene ${i}: ${s.summary}`)
     .join('\n');
-  return `- Episode ${ep.episodeIndex} "${ep.title}"\n${scenes}`;
+  return `- Episode ${ep.episodeIndex} "${ep.title}"\n${clips}`;
 }
 
 function summarizeSnowflakeForTail(snowflake) {
@@ -351,11 +351,11 @@ export async function parseTailOutline(raw, splitIdx, totalEpisodes, targetEndin
       ep.episodeIndex = expectedIdx;
     }
     if (!ep.title) throw new Error(`Tail episode ${expectedIdx} missing title`);
-    if (!ep.scenePlan || ep.scenePlan.length === 0) {
-      throw new Error(`Tail episode "${ep.title}" must have at least 1 scene in scenePlan`);
+    if (!ep.clipPlan || ep.clipPlan.length === 0) {
+      throw new Error(`Tail episode "${ep.title}" must have at least 1 scene in clipPlan`);
     }
-    for (let j = 0; j < ep.scenePlan.length; j++) {
-      if (!ep.scenePlan[j].summary) {
+    for (let j = 0; j < ep.clipPlan.length; j++) {
+      if (!ep.clipPlan[j].summary) {
         throw new Error(`Tail episode "${ep.title}" scene ${j} missing summary`);
       }
     }
@@ -386,9 +386,9 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
   return await parseTailOutline(raw, splitIdx, baseOutline.episodes.length, targetEnding);
 }
 
-// ─── Step 2: Generate scenes one at a time ────────────────────────────────────
+// ─── Step 2: Generate clips one at a time ────────────────────────────────────
 
-export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang = 'en', styleKey, narrativeContext, constraints = {}) {
+export function buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang = 'en', styleKey, narrativeContext, constraints = {}) {
   const templateFile = lang === 'cn' ? SCENES_PATH_CN : SCENES_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
@@ -445,45 +445,45 @@ export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, la
       template += `\n\n## Global Story Summary\n\n${narrativeContext.globalSummary}\n`;
     }
     if (narrativeContext.knowledgeContext) {
-      template += `\n\n## Reference Knowledge\n\nRelevant context from prior scenes and reference materials:\n${narrativeContext.knowledgeContext}\n`;
+      template += `\n\n## Reference Knowledge\n\nRelevant context from prior clips and reference materials:\n${narrativeContext.knowledgeContext}\n`;
     }
     if (narrativeContext.consistencyNotes && narrativeContext.consistencyNotes.length > 0) {
       template += `\n\n## Writing Notes\n\nAvoid these patterns:\n${narrativeContext.consistencyNotes.map(n => '- ' + n).join('\n')}\n`;
     }
-    if (narrativeContext.sceneTypeRules) {
-      template += `\n\n## Scene Type Guidelines\n\n${narrativeContext.sceneTypeRules}\n`;
+    if (narrativeContext.clipTypeRules) {
+      template += `\n\n## Scene Type Guidelines\n\n${narrativeContext.clipTypeRules}\n`;
     }
   }
 
-  // Build a compact outline summary (without scenePlan details to save tokens)
+  // Build a compact outline summary (without clipPlan details to save tokens)
   const outlineSummary = {
     title: outline.title,
     synopsis: outline.synopsis,
     genres: outline.genres,
     episodes: outline.episodes.map(ep => ({
       title: ep.title,
-      scenes: ep.scenePlan.map((s, i) => `Scene ${i}: ${s.summary} (${s.sceneType})`),
+      clips: ep.clipPlan.map((s, i) => `Scene ${i}: ${s.summary} (${s.clipType})`),
     })),
   };
 
   template = template.replace('{{outline}}', () => JSON.stringify(outlineSummary, null, 2));
-  template = template.replace('{{sceneIndex}}', () => String(sceneIndex + 1));
-  template = template.replace('{{totalScenes}}', () => String(totalScenes));
-  template = template.replace('{{sceneSummary}}', () => scenePlan.summary);
-  template = template.replace('{{sceneType}}', () => scenePlan.sceneType || 'NARRATIVE');
+  template = template.replace('{{clipIndex}}', () => String(clipIndex + 1));
+  template = template.replace('{{totalClips}}', () => String(totalClips));
+  template = template.replace('{{sceneSummary}}', () => clipPlan.summary);
+  template = template.replace('{{clipType}}', () => clipPlan.clipType || 'NARRATIVE');
 
   // Handle conditional sections
-  if (scenePlan.hasChoices && scenePlan.choiceTexts) {
+  if (clipPlan.hasChoices && clipPlan.choiceTexts) {
     template = template.replace('{{#hasChoices}}', '').replace('{{/hasChoices}}', '');
-    template = template.replace('{{choiceTexts}}', () => scenePlan.choiceTexts.join(', '));
+    template = template.replace('{{choiceTexts}}', () => clipPlan.choiceTexts.join(', '));
   } else {
     template = template.replace(/\{\{#hasChoices\}\}.*?\{\{\/hasChoices\}\}/gs, '');
   }
 
-  if (scenePlan.isConclusion) {
+  if (clipPlan.isConclusion) {
     template = template.replace('{{#isConclusion}}', '').replace('{{/isConclusion}}', '');
-    template = template.replace('{{conclusionType}}', () => scenePlan.conclusionType || 'EPISODE_END');
-    template = template.replace('{{ending}}', () => scenePlan.ending || 'GOOD');
+    template = template.replace('{{conclusionType}}', () => clipPlan.conclusionType || 'EPISODE_END');
+    template = template.replace('{{ending}}', () => clipPlan.ending || 'GOOD');
   } else {
     template = template.replace(/\{\{#isConclusion\}\}.*?\{\{\/isConclusion\}\}/gs, '');
   }
@@ -491,14 +491,14 @@ export function buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, la
   return template;
 }
 
-export async function parseScene(raw) {
+export async function parseClip(raw) {
   const data = await parseJsonWithRepair(raw, 'scene');
 
   if (!data.content) throw new Error('Scene missing content');
   return data;
 }
 
-export async function generateScene(outline, sceneIndex, scenePlan, totalScenes, options = {}) {
+export async function generateClip(outline, clipIndex, clipPlan, totalClips, options = {}) {
   const lang = options.lang || 'en';
   const style = options.style;
   const narrativeContext = options.narrativeContext;
@@ -507,22 +507,22 @@ export async function generateScene(outline, sceneIndex, scenePlan, totalScenes,
     referenceCharacter: options.referenceCharacter || '',
     referenceEvent: options.referenceEvent || '',
   };
-  const prompt = buildScenePrompt(outline, sceneIndex, scenePlan, totalScenes, lang, style, narrativeContext, constraints);
+  const prompt = buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang, style, narrativeContext, constraints);
   const raw = await callLLM(prompt, 'scene');
-  return await parseScene(raw);
+  return await parseClip(raw);
 }
 
 // ─── Fallback scene generation ──────────────────────────────────────────────
 
-export function buildRetryScenePrompt(scenePlan, lang = 'en', constraints = {}) {
-  const summary = scenePlan.summary || 'A scene in the story';
-  const sceneType = scenePlan.sceneType || 'NARRATIVE';
+export function buildRetryClipPrompt(clipPlan, lang = 'en', constraints = {}) {
+  const summary = clipPlan.summary || 'A scene in the story';
+  const clipType = clipPlan.clipType || 'NARRATIVE';
   const novelType = constraints.novelType || '';
   const referenceCharacter = constraints.referenceCharacter || '';
   const referenceEvent = constraints.referenceEvent || '';
 
   // Build trailing constraint sections so the retry prompt carries the same
-  // genre / character / event constraints as the primary buildScenePrompt path.
+  // genre / character / event constraints as the primary buildClipPrompt path.
   // Without this, every first-attempt scene failure drifts away from the user's
   // --type / --character / --event flags on the regenerated scene.
   const constraintSections = [];
@@ -548,10 +548,10 @@ export function buildRetryScenePrompt(scenePlan, lang = 'en', constraints = {}) 
       '请根据以下场景描述撰写一个场景。只返回有效的JSON对象，不要其他内容。',
       '',
       `场景描述：${summary}`,
-      `场景类型：${sceneType}`,
+      `场景类型：${clipType}`,
       '',
       '返回格式：',
-      '{"content": "[narrator]\\n你的场景文本...", "sceneType": "' + sceneType + '", "choices": [], "conclusion": null}',
+      '{"content": "[narrator]\\n你的场景文本...", "clipType": "' + clipType + '", "choices": [], "conclusion": null}',
       '',
       '重要：content字段中的换行用\\n表示，双引号用\\"转义。只返回JSON。',
     ].join('\n') + constraintsBlock;
@@ -561,39 +561,39 @@ export function buildRetryScenePrompt(scenePlan, lang = 'en', constraints = {}) 
     'Write a scene based on the following description. Return ONLY a valid JSON object, nothing else.',
     '',
     `Scene description: ${summary}`,
-    `Scene type: ${sceneType}`,
+    `Scene type: ${clipType}`,
     '',
     'Return format:',
-    '{"content": "[narrator]\\nYour scene text here...", "sceneType": "' + sceneType + '", "choices": [], "conclusion": null}',
+    '{"content": "[narrator]\\nYour scene text here...", "clipType": "' + clipType + '", "choices": [], "conclusion": null}',
     '',
     'IMPORTANT: Newlines in content must be \\n, double quotes must be \\". Return only JSON.',
   ].join('\n') + constraintsBlock;
 }
 
-export function buildFallbackScene(scenePlan, sceneIndex) {
-  const summary = scenePlan.summary || 'The story continues.';
-  const sceneType = scenePlan.sceneType || 'NARRATIVE';
+export function buildFallbackClip(clipPlan, clipIndex) {
+  const summary = clipPlan.summary || 'The story continues.';
+  const clipType = clipPlan.clipType || 'NARRATIVE';
   const scene = {
     content: `[narrator]\n${summary}`,
-    sceneType,
+    clipType,
     choices: [],
     conclusion: null,
   };
-  if (scenePlan.isConclusion) {
+  if (clipPlan.isConclusion) {
     scene.conclusion = {
       title: 'End',
       overview: summary,
-      type: scenePlan.conclusionType || 'EPISODE_END',
-      ending: scenePlan.ending || 'GOOD',
+      type: clipPlan.conclusionType || 'EPISODE_END',
+      ending: clipPlan.ending || 'GOOD',
     };
   }
-  if (scenePlan.hasChoices && scenePlan.choiceTexts) {
-    // Fallback scenes can't branch meaningfully; converge every choice to the
-    // next scene (if a sceneIndex is known). Without an index, omit the target
+  if (clipPlan.hasChoices && clipPlan.choiceTexts) {
+    // Fallback clips can't branch meaningfully; converge every choice to the
+    // next scene (if a clipIndex is known). Without an index, omit the target
     // rather than emit a bogus one.
-    scene.choices = scenePlan.choiceTexts.map((text) => (
-      typeof sceneIndex === 'number'
-        ? { text, nextSceneIndex: sceneIndex + 1 }
+    scene.choices = clipPlan.choiceTexts.map((text) => (
+      typeof clipIndex === 'number'
+        ? { text, nextClipIndex: clipIndex + 1 }
         : { text }
     ));
   }
@@ -640,9 +640,9 @@ export async function pickStyle(materials) {
   }
 }
 
-// ─── Full pipeline: outline → scenes ──────────────────────────────────────────
+// ─── Full pipeline: outline → clips ──────────────────────────────────────────
 
-export async function generateStory(materials, options = {}) {
+export async function generateDrama(materials, options = {}) {
   const lang = options.lang || 'en';
   const novelType = options.novelType || '';
   const referenceCharacter = options.referenceCharacter || '';
@@ -650,7 +650,7 @@ export async function generateStory(materials, options = {}) {
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
-  const { targetWordsPerScene } = loadConfig();
+  const { targetCharsPerClip } = loadConfig();
 
   // Auto-pick style if not specified
   if (!style || style === 'default') {
@@ -691,19 +691,19 @@ export async function generateStory(materials, options = {}) {
     log('Resuming — outline already generated');
   }
   const totalEpisodes = outline.episodes.length;
-  const totalScenePlanned = outline.episodes.reduce((sum, ep) => sum + ep.scenePlan.length, 0);
+  const totalScenePlanned = outline.episodes.reduce((sum, ep) => sum + ep.clipPlan.length, 0);
   const endingCount = outline.episodes.filter(ep => ep.isEnding).length;
-  log(`Outline: "${outline.title}" — ${totalEpisodes} episodes (${endingCount} endings), ${totalScenePlanned} scenes total`);
+  log(`Outline: "${outline.title}" — ${totalEpisodes} episodes (${endingCount} endings), ${totalScenePlanned} clips total`);
 
   // Step 2: Generate plan (planning agent) — optional, continues without if it fails
   let plan = options.savedPlan || null;
   if (!plan) {
-    plan = { scenes: [], characters: [], items: [], locations: [], revelations: [] };
+    plan = { clips: [], characters: [], items: [], locations: [], revelations: [] };
     try {
       log('Planning scene details, events, and revelations...');
       plan = await generatePlan(outline, { lang, novelType, referenceCharacter, referenceEvent });
       if (options.onPlan) options.onPlan(plan);
-      log(`Plan: ${plan.scenes.length} scenes planned, ${(plan.revelations || []).length} revelations scheduled`);
+      log(`Plan: ${plan.clips.length} clips planned, ${(plan.revelations || []).length} revelations scheduled`);
     } catch (planErr) {
       log(`[planning failed] ${planErr.message} — continuing without plan`);
     }
@@ -711,7 +711,7 @@ export async function generateStory(materials, options = {}) {
     log('Resuming — plan already generated');
   }
 
-  // Step 4: Generate each episode's scenes with narrative intelligence
+  // Step 4: Generate each episode's clips with narrative intelligence
   // Episodes form a branching tree — each branch gets its own narrative context
   const story = {
     title: outline.title,
@@ -769,7 +769,7 @@ export async function generateStory(materials, options = {}) {
   // Sort episodes by episodeIndex for deterministic processing
   const sortedEpisodes = [...outline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
 
-  let globalSceneIndex = 0;
+  let globalClipIndex = 0;
 
   // Restore progress from a previous interrupted run
   const progress = options.progress;
@@ -785,9 +785,9 @@ export async function generateStory(materials, options = {}) {
       episodeContexts[Number(key)] = ctx;
     }
     // Global scene index is rebuilt by the skip loop below (which adds
-    // scenePlan.length for every completed episode), so we start from 0 here
+    // clipPlan.length for every completed episode), so we start from 0 here
     // to avoid double-counting.
-    globalSceneIndex = 0;
+    globalClipIndex = 0;
     log(`Resuming writing — ${completedEpisodeIndices.size} episode(s) already completed`);
     wlog('writing_resumed_partial', { completedEpisodes: [...completedEpisodeIndices] });
   }
@@ -795,14 +795,14 @@ export async function generateStory(materials, options = {}) {
   for (const ep of sortedEpisodes) {
     // Skip episodes completed in a previous run
     if (completedEpisodeIndices.has(ep.episodeIndex)) {
-      globalSceneIndex += ep.scenePlan.length;
+      globalClipIndex += ep.clipPlan.length;
       continue;
     }
-    const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, scenes: [], episodeChoices: ep.episodeChoices || [] };
-    const totalScenes = ep.scenePlan.length;
+    const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, clips: [], episodeChoices: ep.episodeChoices || [] };
+    const totalClips = ep.clipPlan.length;
 
-    log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalScenes} scenes${ep.isEnding ? ', ending' : ''})...`);
-    wlog('episode_start', { episodeIndex: ep.episodeIndex, title: ep.title, scenes: totalScenes, isEnding: !!ep.isEnding });
+    log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalClips} clips${ep.isEnding ? ', ending' : ''})...`);
+    wlog('episode_start', { episodeIndex: ep.episodeIndex, title: ep.title, clips: totalClips, isEnding: !!ep.isEnding });
 
     // Reconstruct branch-local narrative context from ancestor path
     const ancestorPath = getAncestorPath(ep.episodeIndex);
@@ -858,46 +858,46 @@ export async function generateStory(materials, options = {}) {
           catch (err) { log(`[state:markRevealed "${revId}"] ${err.message}`); }
         }
         for (const f of sc.reinforcedForeshadowing || []) {
-          // Support both old format (plain id string) and new format ({ id, sceneIndex })
+          // Support both old format (plain id string) and new format ({ id, clipIndex })
           const fId = typeof f === 'string' ? f : f.id;
-          const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
+          const fScene = typeof f === 'string' ? 0 : f.clipIndex;
           try { reinforceForeshadowing(branchState, fId, fScene); }
           catch (err) { log(`[state:reinforceForeshadowing "${fId}"] ${err.message}`); }
         }
         for (const f of sc.resolvedForeshadowing || []) {
           const fId = typeof f === 'string' ? f : f.id;
-          const fScene = typeof f === 'string' ? 0 : f.sceneIndex;
+          const fScene = typeof f === 'string' ? 0 : f.clipIndex;
           try { resolveForeshadowing(branchState, fId, fScene); }
           catch (err) { log(`[state:resolveForeshadowing "${fId}"] ${err.message}`); }
         }
       }
     }
 
-    // Compute branch-local scene count: total scenes from ancestor episodes
-    // This represents how many scenes the reader has seen before this episode on this path
+    // Compute branch-local scene count: total clips from ancestor episodes
+    // This represents how many clips the reader has seen before this episode on this path
     let branchSceneCount = 0;
     for (const ancestorIdx of ancestorPath.slice(0, -1)) {
       const ancestorEp = sortedEpisodes.find(e => e.episodeIndex === ancestorIdx);
-      if (ancestorEp) branchSceneCount += ancestorEp.scenePlan.length;
+      if (ancestorEp) branchSceneCount += ancestorEp.clipPlan.length;
     }
 
     // Track this episode's own state changes (to save in snapshot)
     const episodeCharChanges = {};
     const episodeItemChanges = {};
     const episodeRevealedIds = [];
-    const episodeReinforcedForeshadowing = []; // { id, sceneIndex }
-    const episodeResolvedForeshadowing = [];  // { id, sceneIndex }
+    const episodeReinforcedForeshadowing = []; // { id, clipIndex }
+    const episodeResolvedForeshadowing = [];  // { id, clipIndex }
     const episodeCompressedHistory = [];
     let episodeSummary = branchSummary;
     const episodeMotifTracker = { ...branchMotifTracker };
     const recentConsistencyNotes = [];
 
-    for (let i = 0; i < totalScenes; i++) {
-      const plan_scene = ep.scenePlan[i];
-      log(`  Scene ${i + 1}/${totalScenes}: ${plan_scene.summary.slice(0, 60)}...`);
+    for (let i = 0; i < totalClips; i++) {
+      const plan_clip = ep.clipPlan[i];
+      log(`  Scene ${i + 1}/${totalClips}: ${plan_clip.summary.slice(0, 60)}...`);
 
       // Build narrative context from branch-local state
-      // Use branch-local scene position for revelation scheduling (not flat globalSceneIndex)
+      // Use branch-local scene position for revelation scheduling (not flat globalClipIndex)
       const branchLocalSceneIndex = branchSceneCount + i;
       const history = buildHistoryContext([...branchHistory, ...episodeCompressedHistory]);
       const ancestorSet = new Set(ancestorPath);
@@ -910,15 +910,15 @@ export async function generateStory(materials, options = {}) {
         log(`[state warning] ${warning}`);
       }
 
-      // Get plan scene data for events/pacing using composite key (episodeIndex:sceneIndex)
+      // Get plan scene data for events/pacing using composite key (episodeIndex:clipIndex)
       const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || {};
 
       // Query vector store for relevant prior context
-      // Only include scenes from ancestor episodes to prevent cross-branch leakage
+      // Only include clips from ancestor episodes to prevent cross-branch leakage
       let knowledgeContext = '';
       if (options.vectorStore) {
         try {
-          const query = plan_scene.summary + ' ' + (planScene.events || []).join(' ');
+          const query = plan_clip.summary + ' ' + (planScene.events || []).join(' ');
           const results = await queryKnowledge(options.vectorStore, query, 3, branchLocalSceneIndex, ancestorSet);
           if (results.length > 0) {
             knowledgeContext = results.map(r => r.text).join('\n\n');
@@ -929,10 +929,10 @@ export async function generateStory(materials, options = {}) {
       }
 
       // Generate scene with narrative context (with retry and fallback)
-      const sceneTypeRules = getSceneTypeRules(plan_scene.sceneType || 'NARRATIVE', lang);
+      const clipTypeRules = getSceneTypeRules(plan_clip.clipType || 'NARRATIVE', lang);
       let scene;
       try {
-        scene = await generateScene(outline, i, plan_scene, totalScenes, {
+        scene = await generateClip(outline, i, plan_clip, totalClips, {
           lang,
           style,
           novelType,
@@ -949,24 +949,24 @@ export async function generateStory(materials, options = {}) {
             twistStrength: planScene.twistStrength,
             globalSummary: episodeSummary,
             consistencyNotes: recentConsistencyNotes.length > 0 ? recentConsistencyNotes : undefined,
-            sceneTypeRules,
+            clipTypeRules,
           },
         });
       } catch (firstErr) {
         log(`[scene failed] ${firstErr.message} — retrying with simplified prompt...`);
-        wlog('scene_retry', { episodeIndex: ep.episodeIndex, sceneIndex: i, error: firstErr.message });
+        wlog('scene_retry', { episodeIndex: ep.episodeIndex, clipIndex: i, error: firstErr.message });
         try {
-          const retryPrompt = buildRetryScenePrompt(plan_scene, lang, {
+          const retryPrompt = buildRetryClipPrompt(plan_clip, lang, {
             novelType,
             referenceCharacter,
             referenceEvent,
           });
           const retryRaw = await callLLM(retryPrompt, 'scene');
-          scene = await parseScene(retryRaw);
+          scene = await parseClip(retryRaw);
         } catch (retryErr) {
           log(`[scene retry failed] ${retryErr.message} — using fallback scene`);
-          wlog('scene_fallback', { episodeIndex: ep.episodeIndex, sceneIndex: i, error: retryErr.message });
-          scene = buildFallbackScene(plan_scene, i);
+          wlog('scene_fallback', { episodeIndex: ep.episodeIndex, clipIndex: i, error: retryErr.message });
+          scene = buildFallbackClip(plan_clip, i);
         }
       }
 
@@ -976,7 +976,7 @@ export async function generateStory(materials, options = {}) {
           options.vectorStore.add(
             `scene_ep${ep.episodeIndex}_s${i}`,
             scene.content,
-            { sceneIndex: branchLocalSceneIndex, episodeIndex: ep.episodeIndex, episodeTitle: ep.title }
+            { clipIndex: branchLocalSceneIndex, episodeIndex: ep.episodeIndex, episodeTitle: ep.title }
           );
         } catch (err) {
           log(`[scene indexing failed] ${err.message}`);
@@ -987,9 +987,9 @@ export async function generateStory(materials, options = {}) {
       const consistencyResult = checkConsistency(scene.content, episodeMotifTracker, branchLocalSceneIndex);
       if (consistencyResult.issues.length > 0) {
         log(`Fixing ${consistencyResult.issues.length} consistency issue(s)...`);
-        // Feed issues forward so future scenes avoid the same patterns
+        // Feed issues forward so future clips avoid the same patterns
         recentConsistencyNotes.push(...consistencyResult.issues);
-        // Keep only the most recent issues (last 2 scenes worth)
+        // Keep only the most recent issues (last 2 clips worth)
         while (recentConsistencyNotes.length > 10) recentConsistencyNotes.shift();
         try {
           const rewritten = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
@@ -1000,10 +1000,10 @@ export async function generateStory(materials, options = {}) {
       }
 
       // Enrich scene if below word count target
-      if (needsEnrichment(scene.content, targetWordsPerScene)) {
-        log(`Scene below word target (${targetWordsPerScene}) — enriching...`);
+      if (needsEnrichment(scene.content, targetCharsPerClip)) {
+        log(`Scene below word target (${targetCharsPerClip}) — enriching...`);
         try {
-          const enriched = await enrichScene(scene.content, targetWordsPerScene, lang);
+          const enriched = await enrichScene(scene.content, targetCharsPerClip, lang);
           scene.content = sanitizeSceneContent(enriched, scene.content);
         } catch (err) {
           log(`[enrichment failed] ${err.message}`);
@@ -1073,23 +1073,23 @@ export async function generateStory(materials, options = {}) {
       for (const fId of (planScene.reinforceForeshadowing || [])) {
         try {
           reinforceForeshadowing(branchState, fId, branchLocalSceneIndex);
-          episodeReinforcedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex });
+          episodeReinforcedForeshadowing.push({ id: fId, clipIndex: branchLocalSceneIndex });
         } catch (err) { log(`[state:reinforceForeshadowing "${fId}"] ${err.message}`); }
       }
       for (const fId of (planScene.resolveForeshadowing || [])) {
         try {
           resolveForeshadowing(branchState, fId, branchLocalSceneIndex);
-          episodeResolvedForeshadowing.push({ id: fId, sceneIndex: branchLocalSceneIndex });
+          episodeResolvedForeshadowing.push({ id: fId, clipIndex: branchLocalSceneIndex });
         } catch (err) { log(`[state:resolveForeshadowing "${fId}"] ${err.message}`); }
       }
 
       // Compress scene into history
       try {
-        const compressed = await compressScenes([scene], lang);
+        const compressed = await compressClips([scene], lang);
         episodeCompressedHistory.push(compressed);
       } catch (err) {
         log(`[compression failed] ${err.message}`);
-        episodeCompressedHistory.push({ summary: plan_scene.summary, characterActions: [], plotProgress: [], emotionalArc: '' });
+        episodeCompressedHistory.push({ summary: plan_clip.summary, characterActions: [], plotProgress: [], emotionalArc: '' });
       }
 
       // Notify caller of state update
@@ -1099,16 +1099,16 @@ export async function generateStory(materials, options = {}) {
       const sceneChoices = (scene.choices?.length || 0);
       wlog('scene_done', {
         episodeIndex: ep.episodeIndex,
-        sceneIndex: i,
-        sceneOf: totalScenes,
+        clipIndex: i,
+        clipOf: totalClips,
         words: sceneWords,
         choices: sceneChoices,
-        sceneType: scene.sceneType || plan_scene.sceneType || 'NARRATIVE',
+        clipType: scene.clipType || plan_clip.clipType || 'NARRATIVE',
         hasConclusion: !!scene.conclusion,
       });
 
-      episode.scenes.push(scene);
-      globalSceneIndex++;
+      episode.clips.push(scene);
+      globalClipIndex++;
     }
 
     // Save this episode's context snapshot for descendant episodes
@@ -1127,13 +1127,13 @@ export async function generateStory(materials, options = {}) {
 
     // For ending episodes, ensure the last scene has a conclusion
     if (ep.isEnding) {
-      const lastScene = episode.scenes[episode.scenes.length - 1];
-      if (!lastScene.conclusion) {
+      const lastClip = episode.clips[episode.clips.length - 1];
+      if (!lastClip.conclusion) {
         log(`  Ending episode "${ep.title}" missing conclusion — injecting fallback`);
-        lastScene.conclusion = {
+        lastClip.conclusion = {
           title: ep.title,
-          overview: ep.scenePlan[ep.scenePlan.length - 1]?.summary || ep.title,
-          type: 'STORY_END',
+          overview: ep.clipPlan[ep.clipPlan.length - 1]?.summary || ep.title,
+          type: 'DRAMA_END',
           ending: ep.ending || 'NEUTRAL',
         };
       }
@@ -1146,18 +1146,18 @@ export async function generateStory(materials, options = {}) {
       options.onEpisode({
         episodes: story.episodes,
         episodeContexts: { ...episodeContexts },
-        globalSceneIndex,
+        globalClipIndex,
       });
     }
 
     // Persist vector-store embeddings after each episode so a crash mid-run
-    // doesn't strand the indexed scenes (the caller's outer save() would
+    // doesn't strand the indexed clips (the caller's outer save() would
     // otherwise only fire after the whole generation completes).
     if (options.vectorStore?.save) {
       try {
         options.vectorStore.save();
       } catch (err) {
-        log(`[vector store save failed] ${err.message} — indexed scenes not persisted for this episode`);
+        log(`[vector store save failed] ${err.message} — indexed clips not persisted for this episode`);
         wlog('vector_store_save_failed', { episodeIndex: ep.episodeIndex, error: err.message });
       }
     }
@@ -1166,7 +1166,7 @@ export async function generateStory(materials, options = {}) {
   // Validate final story
   if (!story.episodes.length) throw new Error('Story must have at least 1 episode');
   for (const ep of story.episodes) {
-    if (!ep.scenes.length) throw new Error(`Episode "${ep.title}" has no scenes`);
+    if (!ep.clips.length) throw new Error(`Episode "${ep.title}" has no clips`);
   }
 
   return story;

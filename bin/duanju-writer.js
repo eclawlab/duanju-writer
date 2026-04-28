@@ -220,7 +220,7 @@ switch (command) {
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
       'maxRetries', 'publishOnUpload', 'lang', 'novelType',
-      'referenceCharacter', 'referenceEvent', 'style', 'targetWordsPerScene',
+      'referenceCharacter', 'referenceEvent', 'style', 'targetCharsPerClip',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {

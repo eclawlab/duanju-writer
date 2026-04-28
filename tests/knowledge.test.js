@@ -145,14 +145,14 @@ describe('knowledge', () => {
     const storePath = join(TEST_DIR, 'store4.json');
     const store = createStore(storePath);
 
-    // Knowledge entries (no sceneIndex) — always included
+    // Knowledge entries (no clipIndex) — always included
     store.add('knowledge_lore_0', 'Ancient dragon lore and magic history', {});
 
-    // Scene entries — sceneIndex within 3 of currentSceneIndex=5 should be filtered
-    store.add('scene_4', 'Scene four dragon content magic lore', { sceneIndex: 4 }); // distance 1 — filtered
-    store.add('scene_5', 'Scene five dragon content magic lore', { sceneIndex: 5 }); // distance 0 — filtered
-    store.add('scene_6', 'Scene six dragon content magic lore', { sceneIndex: 6 }); // distance 1 — filtered
-    store.add('scene_1', 'Scene one dragon magic content lore', { sceneIndex: 1 }); // distance 4 — kept
+    // Scene entries — clipIndex within 3 of currentClipIndex=5 should be filtered
+    store.add('scene_4', 'Scene four dragon content magic lore', { clipIndex: 4 }); // distance 1 — filtered
+    store.add('scene_5', 'Scene five dragon content magic lore', { clipIndex: 5 }); // distance 0 — filtered
+    store.add('scene_6', 'Scene six dragon content magic lore', { clipIndex: 6 }); // distance 1 — filtered
+    store.add('scene_1', 'Scene one dragon magic content lore', { clipIndex: 1 }); // distance 4 — kept
 
     const results = await queryKnowledge(store, 'dragon magic lore', 10, 5);
 

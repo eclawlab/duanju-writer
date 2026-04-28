@@ -13,7 +13,7 @@ export function buildRequest(story, config, variationOptions = {}) {
     ...story,
     episodes: story.episodes?.map(({ episodeChoices, ...ep }) => ({
       ...ep,
-      scenes: ep.scenes?.map(scene => ({ ...scene })),
+      clips: ep.clips?.map(scene => ({ ...scene })),
     })),
   };
   // Add variation metadata if provided

@@ -34,7 +34,7 @@ describe('writer', () => {
           episodeIndex: 0,
           title: 'Ep1',
           isEnding: false,
-          scenePlan: [{ summary: 'Scene 1', sceneType: 'NARRATIVE' }],
+          clipPlan: [{ summary: 'Scene 1', clipType: 'NARRATIVE' }],
           episodeChoices: [],
         },
         {
@@ -42,20 +42,20 @@ describe('writer', () => {
           title: 'Ep2',
           isEnding: true,
           ending: 'GOOD',
-          scenePlan: [{ summary: 'Scene 2', sceneType: 'NARRATIVE' }],
+          clipPlan: [{ summary: 'Scene 2', clipType: 'NARRATIVE' }],
           episodeChoices: [],
         },
       ],
     };
     const result = await parseOutline(JSON.stringify(valid));
     assert.equal(result.title, 'Test Story');
-    assert.equal(result.episodes[0].scenePlan.length, 1);
+    assert.equal(result.episodes[0].clipPlan.length, 1);
   });
 
   test('parseOutline throws on missing title', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
-      () => parseOutline(JSON.stringify({ synopsis: 'A test', episodes: [{ episodeIndex: 0, title: 'E', scenePlan: [{ summary: 's' }] }] })),
+      () => parseOutline(JSON.stringify({ synopsis: 'A test', episodes: [{ episodeIndex: 0, title: 'E', clipPlan: [{ summary: 's' }] }] })),
       /Missing required field: title/
     );
   });
@@ -63,7 +63,7 @@ describe('writer', () => {
   test('parseOutline throws on missing synopsis', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
-      () => parseOutline(JSON.stringify({ title: 'T', episodes: [{ episodeIndex: 0, title: 'E', scenePlan: [{ summary: 's' }] }] })),
+      () => parseOutline(JSON.stringify({ title: 'T', episodes: [{ episodeIndex: 0, title: 'E', clipPlan: [{ summary: 's' }] }] })),
       /Missing required field: synopsis/
     );
   });
@@ -81,7 +81,7 @@ describe('writer', () => {
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
-        episodes: [{ episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] }],
+        episodes: [{ episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] }],
       })),
       /at least 2 episodes/
     );
@@ -93,25 +93,25 @@ describe('writer', () => {
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { title: 'Ep1', scenePlan: [{ summary: 's' }] },
-          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+          { title: 'Ep1', clipPlan: [{ summary: 's' }] },
+          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
         ],
       })),
       /missing episodeIndex/
     );
   });
 
-  test('parseOutline throws on empty scenePlan', async () => {
+  test('parseOutline throws on empty clipPlan', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [] },
-          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [] },
+          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
         ],
       })),
-      /at least 1 scene in scenePlan/
+      /at least 1 scene in clipPlan/
     );
   });
 
@@ -121,8 +121,8 @@ describe('writer', () => {
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: true, scenePlan: [{ summary: 's' }] },
-          { episodeIndex: 0, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Ep1', isEnding: true, clipPlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Ep2', isEnding: true, clipPlan: [{ summary: 's' }] },
         ],
       })),
       /Duplicate episodeIndex/
@@ -134,9 +134,9 @@ describe('writer', () => {
     const result = await parseOutline(JSON.stringify({
       title: 'Linear', synopsis: 'Test',
       episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'Middle', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 2, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'Middle', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 2, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     }));
     assert.equal(result.episodes.length, 3);
@@ -149,8 +149,8 @@ describe('writer', () => {
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [{ summary: 's' }] },
-          { episodeIndex: 1, title: 'Ep2', isEnding: false, scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [{ summary: 's' }] },
+          { episodeIndex: 1, title: 'Ep2', isEnding: false, clipPlan: [{ summary: 's' }] },
         ],
       })),
       /ending episode/
@@ -162,9 +162,9 @@ describe('writer', () => {
     const result = await parseOutline(JSON.stringify({
       title: 'T', synopsis: 'S',
       episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }],
+        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }],
           episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     }));
     assert.deepEqual(result.episodes[0].episodeChoices, []);
@@ -176,8 +176,8 @@ describe('writer', () => {
       title: 'T', synopsis: 'S',
       characterQuestions: [{ key: 'name', label: 'Name?' }],
       episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     }));
     assert.deepEqual(result.characterQuestions, []);
@@ -189,8 +189,8 @@ describe('writer', () => {
       title: 'Fenced',
       synopsis: 'Test',
       episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     };
     const wrapped = '```json\n' + JSON.stringify(outline) + '\n```';
@@ -200,112 +200,112 @@ describe('writer', () => {
 
   // ─── Scene tests ────────────────────────────────────────────────────────────
 
-  test('buildScenePrompt inserts outline and scene details', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt inserts outline and scene details', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'Test Story',
       synopsis: 'A test',
       genres: ['fantasy'],
       episodes: [{
         title: 'Ep1',
-        scenePlan: [
-          { summary: 'Hero arrives', sceneType: 'NARRATIVE' },
-          { summary: 'Hero chooses', sceneType: 'CHOICE', hasChoices: true, choiceTexts: ['Fight', 'Flee'] },
+        clipPlan: [
+          { summary: 'Hero arrives', clipType: 'NARRATIVE' },
+          { summary: 'Hero chooses', clipType: 'CHOICE', hasChoices: true, choiceTexts: ['Fight', 'Flee'] },
         ],
       }],
     };
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 2);
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 2);
     assert.ok(prompt.includes('Test Story'));
     assert.ok(prompt.includes('Hero arrives'));
     assert.ok(prompt.includes('1'));
     assert.ok(prompt.includes('2'));
   });
 
-  test('buildScenePrompt includes choice texts for CHOICE scenes', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt includes choice texts for CHOICE clips', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', scenePlan: [{ summary: 'Choose', sceneType: 'CHOICE', hasChoices: true, choiceTexts: ['A', 'B'] }] }],
+      episodes: [{ title: 'E', clipPlan: [{ summary: 'Choose', clipType: 'CHOICE', hasChoices: true, choiceTexts: ['A', 'B'] }] }],
     };
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 1);
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
     assert.ok(prompt.includes('A, B'));
   });
 
-  test('buildScenePrompt includes conclusion info', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt includes conclusion info', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', scenePlan: [{ summary: 'End', sceneType: 'NARRATIVE', isConclusion: true, conclusionType: 'EPISODE_END', ending: 'GOOD' }] }],
+      episodes: [{ title: 'E', clipPlan: [{ summary: 'End', clipType: 'NARRATIVE', isConclusion: true, conclusionType: 'EPISODE_END', ending: 'GOOD' }] }],
     };
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 1);
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
     assert.ok(prompt.includes('EPISODE_END'));
     assert.ok(prompt.includes('GOOD'));
   });
 
-  test('buildScenePrompt uses CN template when lang is cn', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt uses CN template when lang is cn', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: '测试', synopsis: '简介', genres: [],
-      episodes: [{ title: '章节', scenePlan: [{ summary: '场景', sceneType: 'NARRATIVE' }] }],
+      episodes: [{ title: '章节', clipPlan: [{ summary: '场景', clipType: 'NARRATIVE' }] }],
     };
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 1, 'cn');
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'cn');
     assert.ok(prompt.includes('互动小说作家'));
   });
 
-  test('parseScene validates content field', async () => {
-    const { parseScene } = await import('../src/drama-writer.js');
-    const valid = { content: '[narrator]\nHello', sceneType: 'NARRATIVE', choices: [], conclusion: null };
-    const result = await parseScene(JSON.stringify(valid));
+  test('parseClip validates content field', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const valid = { content: '[narrator]\nHello', clipType: 'NARRATIVE', choices: [], conclusion: null };
+    const result = await parseClip(JSON.stringify(valid));
     assert.equal(result.content, '[narrator]\nHello');
   });
 
-  test('parseScene throws on missing content', async () => {
-    const { parseScene } = await import('../src/drama-writer.js');
+  test('parseClip throws on missing content', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
     await assert.rejects(
-      () => parseScene(JSON.stringify({ sceneType: 'NARRATIVE' })),
+      () => parseClip(JSON.stringify({ clipType: 'NARRATIVE' })),
       /Scene missing content/
     );
   });
 
-  test('parseScene strips code fences', async () => {
-    const { parseScene } = await import('../src/drama-writer.js');
-    const scene = { content: '[narrator]\nTest', sceneType: 'NARRATIVE' };
+  test('parseClip strips code fences', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const scene = { content: '[narrator]\nTest', clipType: 'NARRATIVE' };
     const wrapped = '```json\n' + JSON.stringify(scene) + '\n```';
-    const result = await parseScene(wrapped);
+    const result = await parseClip(wrapped);
     assert.equal(result.content, '[narrator]\nTest');
   });
 
   // ─── Retry and fallback tests ──────────────────────────────────────────────
 
-  test('buildRetryScenePrompt produces simplified prompt', async () => {
-    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryScenePrompt({ summary: 'Hero enters cave', sceneType: 'NARRATIVE' });
+  test('buildRetryClipPrompt produces simplified prompt', async () => {
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt({ summary: 'Hero enters cave', clipType: 'NARRATIVE' });
     assert.ok(prompt.includes('Hero enters cave'));
     assert.ok(prompt.includes('NARRATIVE'));
     assert.ok(prompt.includes('JSON'));
   });
 
-  test('buildRetryScenePrompt uses Chinese for cn lang', async () => {
-    const { buildRetryScenePrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryScenePrompt({ summary: '英雄进入洞穴', sceneType: 'NARRATIVE' }, 'cn');
+  test('buildRetryClipPrompt uses Chinese for cn lang', async () => {
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt({ summary: '英雄进入洞穴', clipType: 'NARRATIVE' }, 'cn');
     assert.ok(prompt.includes('英雄进入洞穴'));
     assert.ok(prompt.includes('JSON'));
   });
 
-  test('buildFallbackScene creates valid scene from plan', async () => {
-    const { buildFallbackScene } = await import('../src/drama-writer.js');
-    const scene = buildFallbackScene({ summary: 'The hero arrives', sceneType: 'NARRATIVE' });
+  test('buildFallbackClip creates valid scene from plan', async () => {
+    const { buildFallbackClip } = await import('../src/drama-writer.js');
+    const scene = buildFallbackClip({ summary: 'The hero arrives', clipType: 'NARRATIVE' });
     assert.ok(scene.content.includes('The hero arrives'));
-    assert.equal(scene.sceneType, 'NARRATIVE');
+    assert.equal(scene.clipType, 'NARRATIVE');
     assert.deepEqual(scene.choices, []);
     assert.equal(scene.conclusion, null);
   });
 
-  test('buildFallbackScene handles conclusion scenes', async () => {
-    const { buildFallbackScene } = await import('../src/drama-writer.js');
-    const scene = buildFallbackScene({
+  test('buildFallbackClip handles conclusion clips', async () => {
+    const { buildFallbackClip } = await import('../src/drama-writer.js');
+    const scene = buildFallbackClip({
       summary: 'The story ends',
-      sceneType: 'NARRATIVE',
+      clipType: 'NARRATIVE',
       isConclusion: true,
       conclusionType: 'EPISODE_END',
       ending: 'GOOD',
@@ -315,11 +315,11 @@ describe('writer', () => {
     assert.equal(scene.conclusion.ending, 'GOOD');
   });
 
-  test('buildFallbackScene handles choice scenes', async () => {
-    const { buildFallbackScene } = await import('../src/drama-writer.js');
-    const scene = buildFallbackScene({
+  test('buildFallbackClip handles choice clips', async () => {
+    const { buildFallbackClip } = await import('../src/drama-writer.js');
+    const scene = buildFallbackClip({
       summary: 'A fork in the road',
-      sceneType: 'CHOICE',
+      clipType: 'CHOICE',
       hasChoices: true,
       choiceTexts: ['Go left', 'Go right'],
     });
@@ -338,9 +338,9 @@ describe('writer', () => {
         title: `Ep ${i}`,
         isEnding: i === episodeCount - 1,
         ending: i === episodeCount - 1 ? 'GOOD' : undefined,
-        scenePlan: [
-          { summary: `Ep${i} scene 0`, sceneType: 'NARRATIVE' },
-          { summary: `Ep${i} scene 1`, sceneType: 'NARRATIVE' },
+        clipPlan: [
+          { summary: `Ep${i} scene 0`, clipType: 'NARRATIVE' },
+          { summary: `Ep${i} scene 1`, clipType: 'NARRATIVE' },
         ],
       });
     }
@@ -369,9 +369,9 @@ describe('writer', () => {
     const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
-        { episodeIndex: 3, title: 'T1', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 4, title: 'T2', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 5, title: 'T3 Finale', isEnding: true, ending: 'SPECIAL', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 3, title: 'T1', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 4, title: 'T2', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 5, title: 'T3 Finale', isEnding: true, ending: 'SPECIAL', clipPlan: [{ summary: 's' }] },
       ],
     });
     const result = await parseTailOutline(raw, 3, 6, 'SPECIAL');
@@ -387,8 +387,8 @@ describe('writer', () => {
     const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
-        { episodeIndex: 2, title: 'T1', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 3, title: 'Finale', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 2, title: 'T1', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 3, title: 'Finale', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     });
     const result = await parseTailOutline(raw, 2, 4, 'BITTERSWEET');
@@ -399,7 +399,7 @@ describe('writer', () => {
     const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
-        { episodeIndex: 3, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 3, title: 'Only', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     });
     await assert.rejects(
@@ -421,9 +421,9 @@ describe('writer', () => {
     const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
-        { episodeIndex: 0, title: 'T1', scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'T2', scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 2, title: 'T3', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'T1', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'T2', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 2, title: 'T3', clipPlan: [{ summary: 's' }] },
       ],
     });
     const result = await parseTailOutline(raw, 4, 7, 'GOOD');
@@ -435,8 +435,8 @@ describe('writer', () => {
     const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
-        { episodeIndex: 2, title: 'T1', scenePlan: [{ summary: 's' }], episodeChoices: [{ text: 'X' }] },
-        { episodeIndex: 3, title: 'T2', scenePlan: [{ summary: 's' }], episodeChoices: [{ text: 'Y' }] },
+        { episodeIndex: 2, title: 'T1', clipPlan: [{ summary: 's' }], episodeChoices: [{ text: 'X' }] },
+        { episodeIndex: 3, title: 'T2', clipPlan: [{ summary: 's' }], episodeChoices: [{ text: 'Y' }] },
       ],
     });
     const result = await parseTailOutline(raw, 2, 4, 'GOOD');

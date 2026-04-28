@@ -107,27 +107,27 @@ export function findOverusedPhrases(content) {
 
 /**
  * Checks if any tracked motif phrase appears in content within the cooldown window.
- * Cooldown: (sceneIndex - lastScene) <= 3. If elapsed (4+ scenes later), no issue.
+ * Cooldown: (clipIndex - lastClip) <= 3. If elapsed (4+ clips later), no issue.
  */
-export function checkMotifCooldown(content, tracker, sceneIndex) {
+export function checkMotifCooldown(content, tracker, clipIndex) {
   const lowerContent = content.toLowerCase();
   const issues = [];
-  for (const [phrase, lastScene] of Object.entries(tracker)) {
-    if (lowerContent.includes(phrase) && (sceneIndex - lastScene) <= 3) {
-      issues.push(`Motif cooldown: "${phrase}" was used ${sceneIndex - lastScene} scene(s) ago (cooldown: 3 scenes)`);
+  for (const [phrase, lastClip] of Object.entries(tracker)) {
+    if (lowerContent.includes(phrase) && (clipIndex - lastClip) <= 3) {
+      issues.push(`Motif cooldown: "${phrase}" was used ${clipIndex - lastClip} clip(s) ago (cooldown: 3 clips)`);
     }
   }
   return issues;
 }
 
 /**
- * Extracts 4-5 word phrases from content and records them in tracker at sceneIndex.
- * Prunes entries older than the cooldown window (3 scenes) to prevent unbounded growth.
+ * Extracts 4-5 word phrases from content and records them in tracker at clipIndex.
+ * Prunes entries older than the cooldown window (3 clips) to prevent unbounded growth.
  */
-export function updateMotifTracker(tracker, content, sceneIndex) {
+export function updateMotifTracker(tracker, content, clipIndex) {
   // Prune entries outside the cooldown window
   for (const phrase of Object.keys(tracker)) {
-    if (sceneIndex - tracker[phrase] > 3) {
+    if (clipIndex - tracker[phrase] > 3) {
       delete tracker[phrase];
     }
   }
@@ -137,7 +137,7 @@ export function updateMotifTracker(tracker, content, sceneIndex) {
   for (const sentence of sentences) {
     const phrases = extractPhrases(sentence, 4, 5);
     for (const phrase of phrases) {
-      tracker[phrase] = sceneIndex;
+      tracker[phrase] = clipIndex;
     }
   }
 }
@@ -145,11 +145,11 @@ export function updateMotifTracker(tracker, content, sceneIndex) {
 /**
  * Combines all three checks. Returns { issues: [...] }.
  */
-export function checkConsistency(content, motifTracker, sceneIndex) {
+export function checkConsistency(content, motifTracker, clipIndex) {
   const issues = [
     ...findRepetitiveOpeners(content),
     ...findOverusedPhrases(content),
-    ...checkMotifCooldown(content, motifTracker, sceneIndex),
+    ...checkMotifCooldown(content, motifTracker, clipIndex),
   ];
   return { issues };
 }

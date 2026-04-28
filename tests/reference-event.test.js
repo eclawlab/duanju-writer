@@ -67,7 +67,7 @@ describe('reference event — prompt injection', () => {
 
   test('buildPlanPrompt includes reference event section (EN)', async () => {
     const { buildPlanPrompt } = await import('../src/planner.js');
-    const outline = { title: 'Test', episodes: [{ title: 'Ep 1', scenePlan: [{ summary: 'Scene 1' }] }] };
+    const outline = { title: 'Test', episodes: [{ title: 'Ep 1', clipPlan: [{ summary: 'Scene 1' }] }] };
     const prompt = buildPlanPrompt(outline, 'en', '', '', EVENT_MD);
     assert.ok(prompt.includes('Reference Event (REQUIRED)'), 'EN section header missing in plan');
     assert.ok(prompt.includes('Bridge Collapse'), 'event content should be in plan prompt');

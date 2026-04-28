@@ -20,8 +20,8 @@ function extractJsonObject(text) {
 
 // ─── Prompt builder ────────────────────────────────────────────────────────────
 
-export function buildCompressPrompt(scenes, lang = 'en') {
-  const sceneBlocks = scenes.map((s, i) =>
+export function buildCompressPrompt(clips, lang = 'en') {
+  const clipBlocks = clips.map((s, i) =>
     `### Scene ${i + 1}\n${s.content}`
   ).join('\n\n');
 
@@ -31,7 +31,7 @@ export function buildCompressPrompt(scenes, lang = 'en') {
       '',
       '## 场景内容',
       '',
-      sceneBlocks,
+      clipBlocks,
       '',
       '## 输出要求',
       '',
@@ -55,16 +55,16 @@ export function buildCompressPrompt(scenes, lang = 'en') {
     '',
     '## Scene Content',
     '',
-    sceneBlocks,
+    clipBlocks,
     '',
     '## Output Requirements',
     '',
     'Return ONLY a valid JSON object with no explanation and no markdown code fences. The JSON object must contain these fields:',
     '',
-    '- `summary` (string): a concise overall summary of all scenes',
+    '- `summary` (string): a concise overall summary of all clips',
     '- `characterActions` (array): list of key actions taken by each character',
     '- `plotProgress` (array): list of major plot threads that have been advanced',
-    '- `emotionalArc` (string): the overall emotional tone of these scenes',
+    '- `emotionalArc` (string): the overall emotional tone of these clips',
     '- `stateChanges` (object): with two array fields:',
     '  - `characters`: list of character state changes',
     '  - `items`: list of item/object state changes',
@@ -91,8 +91,8 @@ export function parseCompressorOutput(raw) {
 
 // ─── Compress via Claude ───────────────────────────────────────────────────────
 
-export async function compressScenes(scenes, lang = 'en') {
-  const prompt = buildCompressPrompt(scenes, lang);
+export async function compressClips(clips, lang = 'en') {
+  const prompt = buildCompressPrompt(clips, lang);
   const raw = await callLLM(prompt, 'compress');
   return parseCompressorOutput(raw);
 }

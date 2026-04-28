@@ -141,17 +141,17 @@ export function markRevealed(state, id) {
  *
  * Rules:
  *  - Always include `public` visibility (regardless of revealInScene).
- *  - Include `hidden` and `delayed` when revealInScene <= sceneIndex.
+ *  - Include `hidden` and `delayed` when revealInScene <= clipIndex.
  *  - If `revealInEpisode` is set, only include if that episode is on the current branch.
  *  - Never include `never_explicit`.
  *  - Never include already-revealed entries.
  *
  * @param {object} state
- * @param {number} sceneIndex
+ * @param {number} clipIndex
  * @param {Set|null} [ancestorEpisodeIndices] - episodes on the current branch path
  * @returns {object[]}
  */
-export function getAvailableRevelations(state, sceneIndex, ancestorEpisodeIndices = null) {
+export function getAvailableRevelations(state, clipIndex, ancestorEpisodeIndices = null) {
   return state.revelations.filter(r => {
     if (r.revealed) return false;
     if (r.visibility === 'never_explicit') return false;
@@ -161,7 +161,7 @@ export function getAvailableRevelations(state, sceneIndex, ancestorEpisodeIndice
     }
     if (r.visibility === 'public') return true;
     if (r.visibility === 'hidden' || r.visibility === 'delayed') {
-      return r.revealInScene <= sceneIndex;
+      return r.revealInScene <= clipIndex;
     }
     return false;
   });
@@ -304,13 +304,13 @@ export function getOpenPlotArcs(state) {
  * Mark a plot arc as resolved at the given scene index.
  * @param {object} state
  * @param {string} id
- * @param {number} sceneIndex
+ * @param {number} clipIndex
  */
-export function resolvePlotArc(state, id, sceneIndex) {
+export function resolvePlotArc(state, id, clipIndex) {
   const arc = state.plotArcs.find(a => a.id === id);
   if (!arc) throw new Error(`Plot arc not found: ${id}`);
   arc.status = 'resolved';
-  arc.resolvedInScene = sceneIndex;
+  arc.resolvedInScene = clipIndex;
 }
 
 // ---------------------------------------------------------------------------
@@ -402,24 +402,24 @@ export function addForeshadowing(state, { id, description, type, plantedInScene 
  * Record a scene where existing foreshadowing is reinforced.
  * @param {object} state
  * @param {string} id
- * @param {number} sceneIndex
+ * @param {number} clipIndex
  */
-export function reinforceForeshadowing(state, id, sceneIndex) {
+export function reinforceForeshadowing(state, id, clipIndex) {
   if (!state.foreshadowing) return;
   const f = state.foreshadowing.find(x => x.id === id);
-  if (f) f.reinforcedInScenes.push(sceneIndex);
+  if (f) f.reinforcedInScenes.push(clipIndex);
 }
 
 /**
  * Mark foreshadowing as resolved (paid off) at a given scene.
  * @param {object} state
  * @param {string} id
- * @param {number} sceneIndex
+ * @param {number} clipIndex
  */
-export function resolveForeshadowing(state, id, sceneIndex) {
+export function resolveForeshadowing(state, id, clipIndex) {
   if (!state.foreshadowing) return;
   const f = state.foreshadowing.find(x => x.id === id);
-  if (f) f.resolvedInScene = sceneIndex;
+  if (f) f.resolvedInScene = clipIndex;
 }
 
 /**

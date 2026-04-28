@@ -16,8 +16,8 @@ describe('Fix #1 — tail-outline receives constraints', () => {
       synopsis: 'Test',
       genres: [],
       episodes: [
-        { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'Ep2', isEnding: true, clipPlan: [{ summary: 's' }] },
       ],
     };
     const prompt = buildTailOutlinePrompt(baseOutline, 1, 'GOOD', null, {});
@@ -34,8 +34,8 @@ describe('Fix #1 — tail-outline receives constraints', () => {
       synopsis: 'Test',
       genres: [],
       episodes: [
-        { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'Ep2', isEnding: true, clipPlan: [{ summary: 's' }] },
       ],
     };
     const prompt = buildTailOutlinePrompt(baseOutline, 1, 'GOOD', null, {
@@ -59,8 +59,8 @@ describe('Fix #1 — tail-outline receives constraints', () => {
     const baseOutline = {
       title: 'Test', synopsis: 'Test', genres: [],
       episodes: [
-        { episodeIndex: 0, title: 'Ep1', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'Ep2', isEnding: true, scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'Ep2', isEnding: true, clipPlan: [{ summary: 's' }] },
       ],
     };
     const prompt = buildTailOutlinePrompt(baseOutline, 1, 'GOOD', null, {
@@ -74,29 +74,29 @@ describe('Fix #1 — tail-outline receives constraints', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Fix #2: buildScenePrompt carries constraints so scene-level prose stays
+// Fix #2: buildClipPrompt carries constraints so scene-level prose stays
 //         aligned with genre + reference character + reference event.
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #2 — scene prompt receives constraints', () => {
-  test('buildScenePrompt omits sections when no constraints', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt omits sections when no constraints', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', scenePlan: [{ summary: 's', sceneType: 'NARRATIVE' }] }],
+      episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
     };
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 1, 'en', undefined, null, {});
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'en', undefined, null, {});
     assert.ok(!prompt.includes('Novel Type Requirement'));
     assert.ok(!prompt.includes('Reference Character'));
     assert.ok(!prompt.includes('Reference Event'));
   });
 
-  test('buildScenePrompt injects all constraints when provided (EN)', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt injects all constraints when provided (EN)', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', scenePlan: [{ summary: 's', sceneType: 'NARRATIVE' }] }],
+      episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
     };
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 1, 'en', undefined, null, {
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'en', undefined, null, {
       novelType: 'thriller',
       referenceCharacter: CHAR_MD,
       referenceEvent: EVENT_MD,
@@ -108,14 +108,14 @@ describe('Fix #2 — scene prompt receives constraints', () => {
     assert.ok(prompt.includes('Bridge Collapse'));
   });
 
-  test('buildScenePrompt constraints default to empty when constraints arg omitted', async () => {
-    const { buildScenePrompt } = await import('../src/drama-writer.js');
+  test('buildClipPrompt constraints default to empty when constraints arg omitted', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', scenePlan: [{ summary: 's', sceneType: 'NARRATIVE' }] }],
+      episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
     };
     // Omit the trailing constraints arg entirely — backwards-compat with older callers.
-    const prompt = buildScenePrompt(outline, 0, outline.episodes[0].scenePlan[0], 1);
+    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
     assert.ok(!prompt.includes('Reference Character'));
   });
 });
@@ -131,7 +131,7 @@ describe('Fix #5 — outline minimum episode guard', () => {
       () => parseOutline(JSON.stringify({
         title: 'T', synopsis: 'S',
         episodes: [
-          { episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
         ],
       })),
       /at least 2 episodes/
@@ -143,8 +143,8 @@ describe('Fix #5 — outline minimum episode guard', () => {
     const result = await parseOutline(JSON.stringify({
       title: 'T', synopsis: 'S',
       episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, scenePlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', scenePlan: [{ summary: 's' }] },
+        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
       ],
     }));
     assert.equal(result.episodes.length, 2);

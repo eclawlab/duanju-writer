@@ -65,7 +65,7 @@ describe('consistency', () => {
       const words = k.split(' ');
       return words.length >= 4 && words.length <= 5;
     }), 'all recorded phrases should be 4-5 words');
-    assert.ok(Object.values(tracker).every(v => v === 2), 'all phrases should be recorded at sceneIndex 2');
+    assert.ok(Object.values(tracker).every(v => v === 2), 'all phrases should be recorded at clipIndex 2');
   });
 
   test('checkConsistency combines all checks and returns issues for repetitive content', async () => {
