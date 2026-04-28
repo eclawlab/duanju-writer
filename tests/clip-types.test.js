@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getSceneTypeRules, listSceneTypes } from '../src/scene-types.js';
+import { getSceneTypeRules, listSceneTypes } from '../src/clip-types.js';
 
 describe('getSceneTypeRules', () => {
   it('returns rules for NARRATIVE', () => {

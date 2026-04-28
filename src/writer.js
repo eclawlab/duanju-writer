@@ -13,7 +13,7 @@ import { queryKnowledge } from './knowledge.js';
 import { generateSnowflake } from './snowflake.js';
 import { updateGlobalSummary } from './compressor.js';
 import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc } from './drama-state.js';
-import { getSceneTypeRules } from './scene-types.js';
+import { getSceneTypeRules } from './clip-types.js';
 import { needsEnrichment, enrichScene, countWords } from './enrichment.js';
 import { loadConfig } from './config.js';
 
