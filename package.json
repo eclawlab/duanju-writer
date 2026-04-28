@@ -1,17 +1,17 @@
 {
-  "name": "story-writer",
+  "name": "duanju-writer",
   "version": "0.2.2",
   "description": "Autonomous story generation daemon for autostory",
   "type": "module",
   "main": "src/constants.js",
   "bin": {
-    "story-writer": "bin/story-writer.js"
+    "duanju-writer": "bin/duanju-writer.js"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node bin/story-writer.js start",
+    "start": "node bin/duanju-writer.js start",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

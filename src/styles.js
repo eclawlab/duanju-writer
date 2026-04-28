@@ -98,7 +98,7 @@ export function getStyleSafe(key) {
   if (!style) {
     if (!_warnedMissing.has(key)) {
       _warnedMissing.add(key);
-      console.warn(`[styles] Unknown style "${key}" — falling back to default. Run 'story-writer styles' to see available styles.`);
+      console.warn(`[styles] Unknown style "${key}" — falling back to default. Run 'duanju-writer styles' to see available styles.`);
     }
     return null;
   }

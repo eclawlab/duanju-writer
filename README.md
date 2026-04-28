@@ -1,6 +1,6 @@
 <div align="center">
 
-# Story Writer
+# Duanju Writer
 
 ### Autonomous Interactive Fiction Generator
 
@@ -41,7 +41,7 @@ An AI-powered daemon that researches trending fiction from 30 novel platforms wo
 
 ## 项目简介
 
-**Story Writer** 是为 AutoStory 互动有声小说平台打造的全自动故事生成系统。听众通过语音收听故事并做出选择，影响叙事走向 —— 而 Story Writer 负责生成这些专为听觉体验优化的分支互动有声小说。
+**Duanju Writer** 是为 AutoStory 互动有声小说平台打造的全自动故事生成系统。听众通过语音收听故事并做出选择，影响叙事走向 —— 而 Duanju Writer 负责生成这些专为听觉体验优化的分支互动有声小说。
 
 从网络调研、素材收集、大纲规划、场景写作到最终发布，整个流程无需人工干预，完全自动化运行。
 
@@ -114,41 +114,41 @@ An AI-powered daemon that researches trending fiction from 30 novel platforms wo
 ### 安装
 
 ```bash
-git clone https://github.com/eclawlab/story-writer.git
-cd story-writer
+git clone https://github.com/eclawlab/duanju-writer.git
+cd duanju-writer
 npm install
-npm link    # 全局安装 story-writer 命令
+npm link    # 全局安装 duanju-writer 命令
 ```
 
 ### 初始配置
 
 ```bash
 # 连接至 AutoStory 实例（交互式配置）
-story-writer setup https://your-autostory-server.com
+duanju-writer setup https://your-autostory-server.com
 ```
 
 ### 生成故事
 
 ```bash
 # 生成一个故事（自动选择风格）
-story-writer run
+duanju-writer run
 
 # 用莫言风格生成 3 个中文故事
-story-writer run 3 --style moyan --lang cn
+duanju-writer run 3 --style moyan --lang cn
 
 # 用托尔金风格生成
-story-writer run --style tolkien
+duanju-writer run --style tolkien
 ```
 
 ### 守护进程模式
 
 ```bash
 # 启动调度器 + 工作器（定时自动生成）
-story-writer start
+duanju-writer start
 
 # 或分别启动
-story-writer scheduler    # 定时创建任务
-story-writer worker       # 处理待执行任务
+duanju-writer scheduler    # 定时创建任务
+duanju-writer worker       # 处理待执行任务
 ```
 
 ---
@@ -159,15 +159,15 @@ story-writer worker       # 处理待执行任务
 
 | 命令 | 说明 |
 |------|------|
-| `story-writer setup [url]` | 配置 API 连接 |
-| `story-writer run [count] [options]` | 立即生成故事 |
-| `story-writer start` | 启动调度器 + 工作器守护进程 |
-| `story-writer scheduler` | 仅启动调度器 |
-| `story-writer worker` | 仅启动工作器 |
-| `story-writer jobs` | 查看所有任务及状态 |
-| `story-writer styles` | 列出可用写作风格 |
-| `story-writer config` | 显示当前配置 |
-| `story-writer config set <key> <value>` | 更新配置项 |
+| `duanju-writer setup [url]` | 配置 API 连接 |
+| `duanju-writer run [count] [options]` | 立即生成故事 |
+| `duanju-writer start` | 启动调度器 + 工作器守护进程 |
+| `duanju-writer scheduler` | 仅启动调度器 |
+| `duanju-writer worker` | 仅启动工作器 |
+| `duanju-writer jobs` | 查看所有任务及状态 |
+| `duanju-writer styles` | 列出可用写作风格 |
+| `duanju-writer config` | 显示当前配置 |
+| `duanju-writer config set <key> <value>` | 更新配置项 |
 
 ### 生成选项
 
@@ -180,26 +180,26 @@ story-writer worker       # 处理待执行任务
 ### 供应商管理
 
 ```bash
-story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
-story-writer provider list
-story-writer provider test <name>
-story-writer provider remove <name>
+duanju-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
+duanju-writer provider list
+duanju-writer provider test <name>
+duanju-writer provider remove <name>
 ```
 
 ### 角色分配
 
 ```bash
-story-writer role set scene deepseek    # 将场景写作分配给 Deepseek
-story-writer role list                  # 查看角色分配
+duanju-writer role set scene deepseek    # 将场景写作分配给 Deepseek
+duanju-writer role list                  # 查看角色分配
 ```
 
 ### 知识库管理
 
 ```bash
-story-writer knowledge import ./worldbuilding.txt            # 导入文档
-story-writer knowledge import ./docs/ --job <jobId>          # 导入至特定任务
-story-writer knowledge info                                  # 查看知识库信息
-story-writer knowledge clear                                 # 清空知识库
+duanju-writer knowledge import ./worldbuilding.txt            # 导入文档
+duanju-writer knowledge import ./docs/ --job <jobId>          # 导入至特定任务
+duanju-writer knowledge info                                  # 查看知识库信息
+duanju-writer knowledge clear                                 # 清空知识库
 ```
 
 ---
@@ -285,7 +285,7 @@ story-writer knowledge clear                                 # 清空知识库
 
 ## 配置说明 {#配置说明-1}
 
-配置文件路径：`~/.story-writer/config.json`
+配置文件路径：`~/.duanju-writer/config.json`
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -305,9 +305,9 @@ story-writer knowledge clear                                 # 清空知识库
 ## 项目结构 {#项目结构-1}
 
 ```
-story-writer/
+duanju-writer/
 ├── bin/
-│   └── story-writer.js          # CLI 入口和命令路由
+│   └── duanju-writer.js          # CLI 入口和命令路由
 ├── src/                         # 24 个源文件
 │   ├── llm.js                   # 多供应商 LLM 抽象层
 │   ├── collector.js             # 全球 30 站网络调研 + 素材生成
@@ -344,8 +344,8 @@ story-writer/
 ### 添加新的 LLM 供应商
 
 ```bash
-story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
-story-writer role set <role> <provider>
+duanju-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
+duanju-writer role set <role> <provider>
 ```
 
 ### 添加写作风格
@@ -462,41 +462,41 @@ Each step's output is saved to disk. If the process crashes, the next run resume
 ### Install
 
 ```bash
-git clone https://github.com/eclawlab/story-writer.git
-cd story-writer
+git clone https://github.com/eclawlab/duanju-writer.git
+cd duanju-writer
 npm install
-npm link    # makes 'story-writer' available globally
+npm link    # makes 'duanju-writer' available globally
 ```
 
 ### Setup
 
 ```bash
 # Connect to your AutoStory instance (interactive)
-story-writer setup https://your-autostory-server.com
+duanju-writer setup https://your-autostory-server.com
 ```
 
 ### Generate a Story
 
 ```bash
 # Generate one story (auto-picks style)
-story-writer run
+duanju-writer run
 
 # Generate 3 stories in Mo Yan's style, in Chinese
-story-writer run 3 --style moyan --lang cn
+duanju-writer run 3 --style moyan --lang cn
 
 # Generate in Tolkien's style
-story-writer run --style tolkien
+duanju-writer run --style tolkien
 ```
 
 ### Run as Daemon
 
 ```bash
 # Start scheduler + worker (generates stories on a timer)
-story-writer start
+duanju-writer start
 
 # Or run them separately
-story-writer scheduler    # creates jobs on a heartbeat
-story-writer worker       # processes pending jobs
+duanju-writer scheduler    # creates jobs on a heartbeat
+duanju-writer worker       # processes pending jobs
 ```
 
 ---
@@ -507,15 +507,15 @@ story-writer worker       # processes pending jobs
 
 | Command | Description |
 |---------|-------------|
-| `story-writer setup [url]` | Configure API connection |
-| `story-writer run [count] [options]` | Generate stories immediately |
-| `story-writer start` | Run scheduler + worker daemon |
-| `story-writer scheduler` | Run scheduler only |
-| `story-writer worker` | Run worker only |
-| `story-writer jobs` | List all jobs and their status |
-| `story-writer styles` | List available writing styles |
-| `story-writer config` | Show current configuration |
-| `story-writer config set <key> <value>` | Update a config value |
+| `duanju-writer setup [url]` | Configure API connection |
+| `duanju-writer run [count] [options]` | Generate stories immediately |
+| `duanju-writer start` | Run scheduler + worker daemon |
+| `duanju-writer scheduler` | Run scheduler only |
+| `duanju-writer worker` | Run worker only |
+| `duanju-writer jobs` | List all jobs and their status |
+| `duanju-writer styles` | List available writing styles |
+| `duanju-writer config` | Show current configuration |
+| `duanju-writer config set <key> <value>` | Update a config value |
 
 ### Run Options
 
@@ -528,26 +528,26 @@ story-writer worker       # processes pending jobs
 ### Provider Management
 
 ```bash
-story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
-story-writer provider list
-story-writer provider test <name>
-story-writer provider remove <name>
+duanju-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key>
+duanju-writer provider list
+duanju-writer provider test <name>
+duanju-writer provider remove <name>
 ```
 
 ### Role Assignment
 
 ```bash
-story-writer role set scene deepseek    # Use Deepseek for scene writing
-story-writer role list                  # Show role assignments
+duanju-writer role set scene deepseek    # Use Deepseek for scene writing
+duanju-writer role list                  # Show role assignments
 ```
 
 ### Knowledge Base
 
 ```bash
-story-writer knowledge import ./worldbuilding.txt            # Import a document
-story-writer knowledge import ./docs/ --job <jobId>          # Import to a specific job
-story-writer knowledge info                                  # Show knowledge base info
-story-writer knowledge clear                                 # Clear knowledge base
+duanju-writer knowledge import ./worldbuilding.txt            # Import a document
+duanju-writer knowledge import ./docs/ --job <jobId>          # Import to a specific job
+duanju-writer knowledge info                                  # Show knowledge base info
+duanju-writer knowledge clear                                 # Clear knowledge base
 ```
 
 ---
@@ -747,13 +747,13 @@ Import reference documents into a built-in TF-IDF vector store. Relevant chunks 
 
 ```bash
 # Import worldbuilding docs
-story-writer knowledge import ./worldbuilding.txt
+duanju-writer knowledge import ./worldbuilding.txt
 
 # Import a full directory (.txt and .md files)
-story-writer knowledge import ./reference-docs/
+duanju-writer knowledge import ./reference-docs/
 
 # Target a specific job
-story-writer knowledge import ./plot-details.md --job <jobId>
+duanju-writer knowledge import ./plot-details.md --job <jobId>
 ```
 
 ---
@@ -831,7 +831,7 @@ Structured 4-step story planning that enriches the outline:
 
 ## Configuration
 
-Stored at `~/.story-writer/config.json`.
+Stored at `~/.duanju-writer/config.json`.
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -853,9 +853,9 @@ Stored at `~/.story-writer/config.json`.
 ## Project Structure
 
 ```
-story-writer/
+duanju-writer/
 ├── bin/
-│   └── story-writer.js          # CLI entry point and command router
+│   └── duanju-writer.js          # CLI entry point and command router
 ├── src/                         # 24 source files
 │   ├── llm.js                   # Multi-provider LLM abstraction (OpenAI + Claude CLI)
 │   ├── collector.js             # 30-site global web research + material generation
@@ -892,8 +892,8 @@ story-writer/
 ### Add a New LLM Provider
 
 ```bash
-story-writer provider add mymodel --type openai --base-url https://api.example.com/v1 --model model-name --api-key sk-...
-story-writer role set scene mymodel
+duanju-writer provider add mymodel --type openai --base-url https://api.example.com/v1 --model model-name --api-key sk-...
+duanju-writer role set scene mymodel
 ```
 
 ### Add a Writing Style

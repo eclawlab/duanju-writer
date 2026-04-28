@@ -65,7 +65,7 @@ callLLM(prompt, role)
 
 ## Config Structure
 
-Added to `~/.story-writer/config.json` alongside existing keys:
+Added to `~/.duanju-writer/config.json` alongside existing keys:
 
 ```json
 {
@@ -92,14 +92,14 @@ Added to `~/.story-writer/config.json` alongside existing keys:
 
 ```bash
 # Provider management
-story-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key> [--temperature 0.7] [--max-tokens 8192] [--timeout 120000]
-story-writer provider list
-story-writer provider remove <name>
-story-writer provider test <name>
+duanju-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key> [--temperature 0.7] [--max-tokens 8192] [--timeout 120000]
+duanju-writer provider list
+duanju-writer provider remove <name>
+duanju-writer provider test <name>
 
 # Role assignment
-story-writer role set <role> <provider>
-story-writer role list
+duanju-writer role set <role> <provider>
+duanju-writer role list
 ```
 
 `provider test` sends a simple prompt ("Say hello in one word.") and verifies a response is returned.
@@ -124,7 +124,7 @@ story-writer role list
 | `src/planner.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'plan')` |
 | `src/compressor.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'compress')` |
 | `src/consistency.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'consistency')` |
-| `bin/story-writer.js` | Add `provider` and `role` commands |
+| `bin/duanju-writer.js` | Add `provider` and `role` commands |
 
 ## Error Handling
 

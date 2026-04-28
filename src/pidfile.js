@@ -90,7 +90,7 @@ function defaultCommandFor(pid) {
 // role is 'parent' (daemon) or 'child' (claude CLI)
 function defaultMatchesSignature(cmd, role) {
   if (!cmd) return false;
-  if (role === 'parent') return cmd.includes('story-writer');
+  if (role === 'parent') return cmd.includes('duanju-writer');
   if (role === 'child') return cmd.includes('claude');
   return false;
 }
@@ -143,7 +143,7 @@ export function unregisterChildIn(filePath, pid) {
 
 /**
  * Read the pidfile, kill any lingering PIDs whose process signature still
- * matches what we expect (parent=story-writer, child=claude), then clear
+ * matches what we expect (parent=duanju-writer, child=claude), then clear
  * the pidfile. Safe against PID reuse because we verify the command string
  * before sending any signal.
  *

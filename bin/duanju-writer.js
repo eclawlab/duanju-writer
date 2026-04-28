@@ -180,14 +180,14 @@ switch (command) {
       if (!config.providers || !config.providers[model]) {
         console.log(`Provider "${model}" not found.`);
         console.log(`Available providers: ${Object.keys(config.providers || {}).join(', ')}`);
-        console.log('Add one with: story-writer provider add <name> --type openai ...');
+        console.log('Add one with: duanju-writer provider add <name> --type openai ...');
         process.exit(1);
       }
       // Check OpenAI providers have an API key configured
       const providerCfg = config.providers[model];
       if (providerCfg.type === 'openai' && !providerCfg.apiKey) {
         console.log(`Provider "${model}" has no API key configured.`);
-        console.log(`Set it with: story-writer provider add ${model} --type openai --base-url ${providerCfg.baseUrl} --model ${providerCfg.model} --api-key <your-key>`);
+        console.log(`Set it with: duanju-writer provider add ${model} --type openai --base-url ${providerCfg.baseUrl} --model ${providerCfg.model} --api-key <your-key>`);
         process.exit(1);
       }
       const { setModelOverride } = await import('../src/llm.js');
@@ -276,8 +276,8 @@ switch (command) {
       }
       console.log();
     }
-    console.log('Usage: story-writer run --style sanderson');
-    console.log('   or: story-writer config set style sanderson');
+    console.log('Usage: duanju-writer run --style sanderson');
+    console.log('   or: duanju-writer config set style sanderson');
     break;
   }
   case 'setup': {
@@ -343,7 +343,7 @@ switch (command) {
       const usedBy = Object.entries(roles).filter(([, v]) => v === name).map(([k]) => k);
       if (usedBy.length > 0) {
         console.log(`Cannot remove "${name}" — used by roles: ${usedBy.join(', ')}`);
-        console.log('Reassign those roles first with: story-writer role set <role> <other-provider>');
+        console.log('Reassign those roles first with: duanju-writer role set <role> <other-provider>');
         process.exit(1);
       }
       delete config.providers[name];
@@ -370,12 +370,12 @@ switch (command) {
       }
 
     } else {
-      console.log('Usage: story-writer provider [add|list|remove|test] [name] [--flags]');
+      console.log('Usage: duanju-writer provider [add|list|remove|test] [name] [--flags]');
       console.log('\nExamples:');
-      console.log('  story-writer provider add deepseek --type openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...');
-      console.log('  story-writer provider list');
-      console.log('  story-writer provider test deepseek');
-      console.log('  story-writer provider remove deepseek');
+      console.log('  duanju-writer provider add deepseek --type openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...');
+      console.log('  duanju-writer provider list');
+      console.log('  duanju-writer provider test deepseek');
+      console.log('  duanju-writer provider remove deepseek');
     }
     break;
   }
@@ -395,7 +395,7 @@ switch (command) {
       const config = loadConfig();
       const providers = config.providers || {};
       if (!providers[provider]) {
-        console.log(`Provider "${provider}" not found. Add it first with: story-writer provider add ${provider} ...`);
+        console.log(`Provider "${provider}" not found. Add it first with: duanju-writer provider add ${provider} ...`);
         process.exit(1);
       }
       if (!config.roles) config.roles = {};
@@ -412,10 +412,10 @@ switch (command) {
       }
 
     } else {
-      console.log('Usage: story-writer role [set|list]');
+      console.log('Usage: duanju-writer role [set|list]');
       console.log('\nExamples:');
-      console.log('  story-writer role list');
-      console.log('  story-writer role set scene deepseek');
+      console.log('  duanju-writer role list');
+      console.log('  duanju-writer role set scene deepseek');
     }
     break;
   }
@@ -495,18 +495,18 @@ switch (command) {
     console.log(`Store path: ${storePath}`);
 
   } else {
-    console.log('Usage: story-writer knowledge [import|clear|info] [path] [--job jobId]');
+    console.log('Usage: duanju-writer knowledge [import|clear|info] [path] [--job jobId]');
     console.log('\nExamples:');
-    console.log('  story-writer knowledge import ./my-worldbuilding.txt');
-    console.log('  story-writer knowledge import ./reference-docs/');
-    console.log('  story-writer knowledge info');
-    console.log('  story-writer knowledge clear');
+    console.log('  duanju-writer knowledge import ./my-worldbuilding.txt');
+    console.log('  duanju-writer knowledge import ./reference-docs/');
+    console.log('  duanju-writer knowledge info');
+    console.log('  duanju-writer knowledge clear');
   }
   break;
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: story-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
-    console.log('\nRun options: story-writer run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--character path.md] [--event path.md] [--model claude|openai]');
+    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
+    console.log('\nRun options: duanju-writer run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--character path.md] [--event path.md] [--model claude|openai]');
     process.exit(1);
 }

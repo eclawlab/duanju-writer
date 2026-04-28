@@ -100,7 +100,7 @@ describe('pidfile', () => {
     const signals = [];
     const result = cleanupStaleIn(f, {
       isAlive: () => true,
-      commandFor: (pid) => (pid === 111 ? 'node /usr/local/bin/story-writer start' : 'claude -p'),
+      commandFor: (pid) => (pid === 111 ? 'node /usr/local/bin/duanju-writer start' : 'claude -p'),
       sendSignal: (pid, sig) => { signals.push([pid, sig]); },
       graceMs: 0,
     });

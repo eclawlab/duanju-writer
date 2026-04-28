@@ -10,7 +10,7 @@ export async function setup(args) {
   const config = loadConfig();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  console.log(chalk.bold('\nstory-writer setup\n'));
+  console.log(chalk.bold('\nduanju-writer setup\n'));
 
   try {
     // Step 1: Get autostory URL (or use CLI arg)
@@ -53,7 +53,7 @@ export async function setup(args) {
       keyRes = await fetch(`${autostoryUrl}/api/ai/keys/bootstrap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: 'story-writer' }),
+        body: JSON.stringify({ label: 'duanju-writer' }),
         signal: bootstrapController.signal,
       });
     } catch (err) {
@@ -80,7 +80,7 @@ export async function setup(args) {
             'Content-Type': 'application/json',
             'X-Api-Key': existingKey.trim(),
           },
-          body: JSON.stringify({ label: 'story-writer' }),
+          body: JSON.stringify({ label: 'duanju-writer' }),
           signal: keyController.signal,
         });
       } catch (err) {
@@ -108,9 +108,9 @@ export async function setup(args) {
 
     console.log(chalk.green('\nSetup complete! Config saved.\n'));
     console.log(chalk.dim('Run a test:'));
-    console.log(chalk.dim('  node bin/story-writer.js run\n'));
+    console.log(chalk.dim('  node bin/duanju-writer.js run\n'));
     console.log(chalk.dim('Start the daemon:'));
-    console.log(chalk.dim('  node bin/story-writer.js start\n'));
+    console.log(chalk.dim('  node bin/duanju-writer.js start\n'));
   } finally {
     rl.close();
   }
