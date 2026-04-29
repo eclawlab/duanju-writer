@@ -232,8 +232,8 @@ describe('writer', () => {
   test('parseClip accepts a valid clip', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
     const result = await parseClip(JSON.stringify(validClip()));
-    assert.equal(result.clipIndex, 0);
-    assert.ok(result.hook && result.hook.length > 0);
+    assert.equal(result._beats.clipIndex, 0);
+    assert.ok(result._beats.hook && result._beats.hook.length > 0);
   });
 
   test('parseClip rejects missing hook on non-conclusion clip', async () => {
@@ -278,8 +278,8 @@ describe('writer', () => {
     c.hook = '';
     c.conclusion = { title: '结局', overview: '...', type: 'DRAMA_END', ending: '爽爆' };
     const result = await parseClip(JSON.stringify(c));
-    assert.equal(result.isConclusion, true);
-    assert.equal(result.conclusion.type, 'DRAMA_END');
+    assert.equal(result._beats.isConclusion, true);
+    assert.equal(result.conclusion.type, 'STORY_END');
   });
 
   test('parseClip rejects conclusion clip with wrong conclusion.type', async () => {
@@ -296,15 +296,15 @@ describe('writer', () => {
     const bad = validClip();
     bad.dialogue = '[character:陆衡|voice:alloy]\n来了\n[player]\n好的';
     const result = await parseClip(JSON.stringify(bad));
-    assert.ok(!result.dialogue.includes('|voice:'));
-    assert.ok(!result.dialogue.includes('[player]'));
+    assert.ok(!result._beats.dialogue.includes('|voice:'));
+    assert.ok(!result._beats.dialogue.includes('[player]'));
   });
 
   test('parseClip strips markdown code fences', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
     const wrapped = '```json\n' + JSON.stringify(validClip()) + '\n```';
     const result = await parseClip(wrapped);
-    assert.equal(result.clipIndex, 0);
+    assert.equal(result._beats.clipIndex, 0);
   });
 
   // ─── Retry and fallback tests ──────────────────────────────────────────────
@@ -526,6 +526,137 @@ describe('writer', () => {
     test('maps 反转 to SPECIAL', async () => {
       const { ENDING_LABEL_TO_ENUM } = await import('../src/drama-writer.js');
       assert.equal(ENDING_LABEL_TO_ENUM['反转'], 'SPECIAL');
+    });
+  });
+
+  describe('parseClip — scene shape', () => {
+    function rawClip(overrides = {}) {
+      return JSON.stringify({
+        clipIndex: 0,
+        setting: '夜雨破庙',
+        action: '陆衡踉跄推门',
+        dialogue: '[character:陆衡]\n三年了',
+        hook: '摩托声渐近',
+        durationSec: 12,
+        isConclusion: false,
+        conclusion: null,
+        ...overrides,
+      });
+    }
+
+    test('returns { content, choices, conclusion } shape (no top-level beats)', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip());
+      assert.equal(typeof scene.content, 'string');
+      assert.ok(scene.content.length > 0);
+      assert.deepEqual(scene.choices, []);
+      assert.equal(scene.conclusion, null);
+      const enumerableKeys = Object.keys(scene);
+      assert.ok(!enumerableKeys.includes('setting'), `setting should not be enumerable, got keys: ${enumerableKeys}`);
+      assert.ok(!enumerableKeys.includes('action'), 'action should not be enumerable');
+      assert.ok(!enumerableKeys.includes('dialogue'), 'dialogue should not be enumerable');
+      assert.ok(!enumerableKeys.includes('hook'), 'hook should not be enumerable');
+    });
+
+    test('JSON.stringify(scene) does not leak _beats or beat fields', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip());
+      const json = JSON.stringify(scene);
+      assert.ok(!json.includes('"setting"'), `setting leaked into JSON: ${json}`);
+      assert.ok(!json.includes('"_beats"'), `_beats leaked into JSON: ${json}`);
+      assert.ok(!json.includes('"hook"'), `hook leaked into JSON: ${json}`);
+      assert.ok(!json.includes('"action"'), `action leaked into JSON: ${json}`);
+    });
+
+    test('_beats ride-along contains the original four beats plus durationSec/clipIndex/isConclusion', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip());
+      assert.equal(scene._beats.setting, '夜雨破庙');
+      assert.equal(scene._beats.action, '陆衡踉跄推门');
+      assert.equal(scene._beats.dialogue, '[character:陆衡]\n三年了');
+      assert.equal(scene._beats.hook, '摩托声渐近');
+      assert.equal(scene._beats.durationSec, 12);
+      assert.equal(scene._beats.clipIndex, 0);
+      assert.equal(scene._beats.isConclusion, false);
+    });
+
+    test('content is composed from beats per the composition rule', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip());
+      assert.equal(
+        scene.content,
+        '[narrator]\n夜雨破庙\n\n[narrator]\n陆衡踉跄推门\n\n[character:陆衡]\n三年了\n\n[narrator]\n摩托声渐近'
+      );
+    });
+
+    test('conclusion clip with 爽爆 → conclusion.ending GOOD, type STORY_END', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip({
+        isConclusion: true,
+        hook: '',
+        conclusion: { title: '结局：碾压', overview: '反派全员跪地', type: 'DRAMA_END', ending: '爽爆' },
+      }));
+      assert.equal(scene.conclusion.type, 'STORY_END');
+      assert.equal(scene.conclusion.ending, 'GOOD');
+      assert.equal(scene.conclusion.title, '结局：碾压');
+      assert.equal(scene.conclusion.overview, '反派全员跪地');
+    });
+
+    test('conclusion clip with 苦尽甘来 → NEUTRAL', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip({
+        isConclusion: true,
+        hook: '',
+        conclusion: { title: 't', overview: 'o', type: 'DRAMA_END', ending: '苦尽甘来' },
+      }));
+      assert.equal(scene.conclusion.ending, 'NEUTRAL');
+    });
+
+    test('conclusion clip with 反转 → SPECIAL', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const scene = await parseClip(rawClip({
+        isConclusion: true,
+        hook: '',
+        conclusion: { title: 't', overview: 'o', type: 'DRAMA_END', ending: '反转' },
+      }));
+      assert.equal(scene.conclusion.ending, 'SPECIAL');
+    });
+
+    test('still throws on missing dialogue (existing per-beat validation runs first)', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      await assert.rejects(
+        () => parseClip(rawClip({ dialogue: '' })),
+        /clip missing dialogue/
+      );
+    });
+
+    test('still throws on dialogue exceeding CN-char limit (60)', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      const long = '一'.repeat(70);
+      await assert.rejects(
+        () => parseClip(rawClip({ dialogue: long })),
+        /dialogue.*max 60/
+      );
+    });
+
+    test('still throws on missing hook for non-conclusion clip', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      await assert.rejects(
+        () => parseClip(rawClip({ hook: '' })),
+        /hook required/
+      );
+    });
+
+    test('still throws on conclusion clip with invalid ending label', async () => {
+      const { parseClip } = await import('../src/drama-writer.js');
+      await assert.rejects(
+        () => parseClip(rawClip({
+          isConclusion: true,
+          hook: '',
+          conclusion: { title: 't', overview: 'o', type: 'DRAMA_END', ending: 'BE' },
+        })),
+        /ending must be one of/
+      );
     });
   });
 });

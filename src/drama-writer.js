@@ -513,6 +513,7 @@ export async function parseClip(raw) {
   }
 
   // Conclusion validation.
+  let composedConclusion = null;
   if (data.isConclusion) {
     if (!data.conclusion || typeof data.conclusion !== 'object') {
       throw new Error('conclusion clip must have a conclusion object');
@@ -523,8 +524,12 @@ export async function parseClip(raw) {
     if (!VALID_ENDINGS.includes(data.conclusion.ending)) {
       throw new Error(`conclusion.ending must be one of ${VALID_ENDINGS.join('/')}, got: ${data.conclusion.ending}`);
     }
-  } else {
-    data.conclusion = null;
+    composedConclusion = {
+      title: data.conclusion.title,
+      overview: data.conclusion.overview,
+      type: 'STORY_END',
+      ending: ENDING_LABEL_TO_ENUM[data.conclusion.ending],
+    };
   }
 
   // Default durationSec if missing/out-of-range.
@@ -532,7 +537,31 @@ export async function parseClip(raw) {
     data.durationSec = 12;
   }
 
-  return data;
+  // Compose scene-shaped output. Beats survive on a non-enumerable _beats
+  // ride-along that the compressor and consistency check consult; nothing
+  // else in the pipeline reads beat fields directly.
+  const content = composeScene({
+    setting: data.setting,
+    action: data.action,
+    dialogue: data.dialogue,
+    hook: data.hook,
+  });
+  const scene = { content, choices: [], conclusion: composedConclusion };
+  Object.defineProperty(scene, '_beats', {
+    value: {
+      clipIndex: data.clipIndex,
+      setting: data.setting,
+      action: data.action,
+      dialogue: data.dialogue,
+      hook: data.hook,
+      durationSec: data.durationSec,
+      isConclusion: !!data.isConclusion,
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return scene;
 }
 
 export async function generateClip(ctx) {
