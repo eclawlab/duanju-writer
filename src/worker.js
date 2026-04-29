@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
-import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES } from './constants.js';
+import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
 import { loadConfig } from './config.js';
 import { updateJob, getJob, claimNextPending } from './queue.js';
 import { getHistory, addEntry } from './history.js';
@@ -18,9 +18,9 @@ import { getLLMStats, resetLLMStats } from './llm.js';
 // Each job produces 3 uploads sharing a variationGroupId, one per ending type.
 // Front half (≈50% of episodes) is generated once and shared; back halves diverge.
 const VARIANTS = [
-  { key: 'v1', ending: 'GOOD',        label: 'Good Ending' },
-  { key: 'v2', ending: 'BITTERSWEET', label: 'Bittersweet Ending' },
-  { key: 'v3', ending: 'SPECIAL',     label: 'Special Ending' },
+  { key: 'v1', ending: '爽爆',     label: '爽爆结局' },
+  { key: 'v2', ending: '苦尽甘来', label: '苦尽甘来结局' },
+  { key: 'v3', ending: '反转',     label: '反转结局' },
 ];
 
 export function getStatusTransitions() {
@@ -34,14 +34,29 @@ export function getStatusTransitions() {
 
 function saveArtifact(jobId, filename, data) {
   const dir = join(JOBS_DIR, jobId);
-  writeFileSync(join(dir, filename), JSON.stringify(data, null, 2) + '\n', 'utf8');
+  // Tag JSON-object artifacts with schemaVersion so the loader can refuse to
+  // resume jobs whose artifacts predate this pivot. Arrays and primitives pass
+  // through untouched.
+  const tagged = (data && typeof data === 'object' && !Array.isArray(data))
+    ? { schemaVersion: SCHEMA_VERSION, ...data }
+    : data;
+  writeFileSync(join(dir, filename), JSON.stringify(tagged, null, 2) + '\n', 'utf8');
 }
 
 function loadArtifact(jobId, filename) {
   const filePath = join(JOBS_DIR, jobId, filename);
   if (!existsSync(filePath)) return null;
-  try { return JSON.parse(readFileSync(filePath, 'utf8')); }
-  catch (err) {
+  try {
+    const data = JSON.parse(readFileSync(filePath, 'utf8'));
+    // Reject mismatched schema versions: a stale (v1) artifact would silently
+    // produce garbage if fed into the new (v2) pipeline. Log loudly and treat
+    // as missing so the worker regenerates from the latest valid upstream stage.
+    if (data && typeof data === 'object' && !Array.isArray(data) && data.schemaVersion !== SCHEMA_VERSION) {
+      console.log(chalk.yellow(`  [${jobId}] Artifact "${filename}" has schemaVersion=${data.schemaVersion} (expected ${SCHEMA_VERSION}) — will regenerate`));
+      return null;
+    }
+    return data;
+  } catch (err) {
     // Corrupt artifact (e.g., half-written after process kill). Log loudly so it's
     // not silently skipped, and return null so the caller re-runs that stage.
     console.log(chalk.yellow(`  [${jobId}] Artifact "${filename}" is corrupt (${err.message}) — will regenerate`));
@@ -56,6 +71,8 @@ async function processJob(jobId, options = {}) {
   const genre = options.genre || config.genre || '';
   const newsUrl = options.newsUrl || '';
   const style = options.style || config.style || 'default';
+  const episodesPerDrama = options.episodesPerDrama || config.episodesPerDrama || 20;
+  const clipsPerEpisode = options.clipsPerEpisode || config.clipsPerEpisode || 6;
   // Reference character/event: prefer snapshotted content from job options; otherwise read config path.
   let referenceCharacter = options.referenceCharacter || '';
   if (!referenceCharacter && config.referenceCharacter) {
@@ -394,11 +411,13 @@ async function processJob(jobId, options = {}) {
       `Job ID:          ${jobId}`,
       `Title:           ${sampleStory?.title || '(unknown)'}`,
       `Language:        ${lang}`,
-      `Type:            ${genre || '(any)'}`,
+      `Genre:           ${genre || '(any)'}`,
       `News:            ${newsUrl || '(none)'}`,
       `Ref character:   ${referenceCharacter ? `${referenceCharacter.length} chars` : '(none)'}`,
       `Ref event:       ${referenceEvent ? `${referenceEvent.length} chars` : '(none)'}`,
-      `Style:           ${style}`,
+      `Trope:           ${style}`,
+      `Episodes:        ${episodesPerDrama}`,
+      `Clips/episode:   ${clipsPerEpisode}`,
       `Variation Group: ${variationGroupId}`,
       ``,
       `--- Variations ---`,
@@ -406,7 +425,7 @@ async function processJob(jobId, options = {}) {
       ``,
       `Episodes per variant: ${epsPerVariant}`,
       `Split point:          ${splitIdx}/${totalEpisodes} (front shared)`,
-      `Clips (total):       ${totalClipsAcrossVariants}`,
+      `Clips (total):        ${totalClipsAcrossVariants}`,
       `Words (total):        ${totalWordsAcrossVariants}`,
       ``,
       `--- LLM Usage ---`,
