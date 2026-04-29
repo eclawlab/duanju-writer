@@ -169,56 +169,51 @@ describe('writer', () => {
 
   // ─── Scene tests ────────────────────────────────────────────────────────────
 
-  test('buildClipPrompt inserts outline and scene details', async () => {
-    const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'Test Story',
-      synopsis: 'A test',
-      genres: ['fantasy'],
-      episodes: [{
-        title: 'Ep1',
-        clipPlan: [
-          { summary: 'Hero arrives', clipType: 'NARRATIVE' },
-          { summary: 'Hero chooses', clipType: 'CHOICE', hasChoices: true, choiceTexts: ['Fight', 'Flee'] },
-        ],
-      }],
+  function clipCtx() {
+    return {
+      outline: {
+        title: '战神归来',
+        synopsis: '钩子',
+        characters: [{ name: '陆衡', role: 'p', description: 'd' }],
+      },
+      episode: { episodeIndex: 0, title: '第1集', clipPlan: [{ summary: '登场', isConclusion: false }] },
+      clipIndex: 0,
+      totalClips: 6,
+      clipSummary: '陆衡推门归来',
+      isConclusion: false,
+      priorClipDigest: '',
+      tropeSection: '## Clip\n短促对白，反问句多。',
     };
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 2);
-    assert.ok(prompt.includes('Test Story'));
-    assert.ok(prompt.includes('Hero arrives'));
-    assert.ok(prompt.includes('1'));
-    assert.ok(prompt.includes('2'));
+  }
+
+  test('buildClipPrompt injects clipIndex, totalClips, summary', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const p = buildClipPrompt(clipCtx());
+    assert.match(p, /片段\s*0\s*\/\s*6/);
+    assert.match(p, /陆衡推门归来/);
+    assert.match(p, /战神归来/);
   });
 
-  test('buildClipPrompt includes choice texts for CHOICE clips', async () => {
+  test('buildClipPrompt injects trope ## Clip section', async () => {
     const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', clipPlan: [{ summary: 'Choose', clipType: 'CHOICE', hasChoices: true, choiceTexts: ['A', 'B'] }] }],
-    };
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
-    assert.ok(prompt.includes('A, B'));
+    const p = buildClipPrompt(clipCtx());
+    assert.match(p, /短促对白，反问句多/);
   });
 
-  test('buildClipPrompt includes conclusion info', async () => {
+  test('buildClipPrompt forbids voice IDs and [player] blocks (in the 严禁 section)', async () => {
     const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', clipPlan: [{ summary: 'End', clipType: 'NARRATIVE', isConclusion: true, conclusionType: 'EPISODE_END', ending: '爽爆' }] }],
-    };
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
-    assert.ok(prompt.includes('EPISODE_END'));
-    assert.ok(prompt.includes('爽爆'));
+    const p = buildClipPrompt(clipCtx());
+    // The prompt MAY mention these markers, but only in a forbidden list.
+    assert.ok(/不写\s*\|voice:/.test(p) || /不\s*要.*voice/i.test(p), 'prompt should explicitly forbid |voice: markers');
+    assert.ok(/不写\s*\[player\]/.test(p), 'prompt should explicitly forbid [player] blocks');
   });
 
-  test('buildClipPrompt uses CN template when lang is cn', async () => {
+  test('buildClipPrompt marks conclusion clip context when isConclusion=true', async () => {
     const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: '测试', synopsis: '简介', genres: [],
-      episodes: [{ title: '章节', clipPlan: [{ summary: '场景', clipType: 'NARRATIVE' }] }],
-    };
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'cn');
-    assert.ok(prompt.includes('互动小说作家'));
+    const c = clipCtx();
+    c.isConclusion = true;
+    const p = buildClipPrompt(c);
+    assert.match(p, /是否结局片段：true/);
   });
 
   function validClip() {
@@ -314,56 +309,42 @@ describe('writer', () => {
 
   // ─── Retry and fallback tests ──────────────────────────────────────────────
 
-  test('buildRetryClipPrompt produces simplified prompt', async () => {
+  test('buildRetryClipPrompt produces simplified prompt with summary and JSON instruction', async () => {
     const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryClipPrompt({ summary: 'Hero enters cave', clipType: 'NARRATIVE' });
-    assert.ok(prompt.includes('Hero enters cave'));
-    assert.ok(prompt.includes('NARRATIVE'));
-    assert.ok(prompt.includes('JSON'));
+    const prompt = buildRetryClipPrompt({ clipSummary: '陆衡推门归来', prevError: 'invalid hook' });
+    assert.match(prompt, /陆衡推门归来/);
+    assert.match(prompt, /JSON/);
+    assert.match(prompt, /invalid hook/);
+    assert.match(prompt, /hook≤30/);
   });
 
-  test('buildRetryClipPrompt uses Chinese for cn lang', async () => {
+  test('buildRetryClipPrompt swaps to conclusion-mode tail when isConclusion=true', async () => {
     const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryClipPrompt({ summary: '英雄进入洞穴', clipType: 'NARRATIVE' }, 'cn');
-    assert.ok(prompt.includes('英雄进入洞穴'));
-    assert.ok(prompt.includes('JSON'));
+    const prompt = buildRetryClipPrompt({ clipSummary: '终极爆点', isConclusion: true, ending: '反转' });
+    assert.match(prompt, /DRAMA_END/);
+    assert.match(prompt, /反转/);
   });
 
-  test('buildFallbackClip creates valid scene from plan', async () => {
-    const { buildFallbackClip } = await import('../src/drama-writer.js');
-    const scene = buildFallbackClip({ summary: 'The hero arrives', clipType: 'NARRATIVE' });
-    assert.ok(scene.content.includes('The hero arrives'));
-    assert.equal(scene.clipType, 'NARRATIVE');
-    assert.deepEqual(scene.choices, []);
-    assert.equal(scene.conclusion, null);
+  test('buildFallbackClip produces a parser-valid clip from plan data', async () => {
+    const { buildFallbackClip, parseClip } = await import('../src/drama-writer.js');
+    const c = buildFallbackClip({ clipIndex: 2, summary: '陆衡推门进入豪门', isConclusion: false });
+    // Must round-trip through parseClip without throwing
+    const parsed = await parseClip(JSON.stringify(c));
+    assert.equal(parsed.clipIndex, 2);
+    assert.ok(parsed.hook && parsed.hook.length > 0);
   });
 
-  test('buildFallbackClip handles conclusion clips', async () => {
-    const { buildFallbackClip } = await import('../src/drama-writer.js');
-    const scene = buildFallbackClip({
-      summary: 'The story ends',
-      clipType: 'NARRATIVE',
-      isConclusion: true,
-      conclusionType: 'EPISODE_END',
-      ending: '爽爆',
-    });
-    assert.ok(scene.conclusion);
-    assert.equal(scene.conclusion.type, 'EPISODE_END');
-    assert.equal(scene.conclusion.ending, '爽爆');
+  test('buildFallbackClip produces a valid conclusion clip when isConclusion=true', async () => {
+    const { buildFallbackClip, parseClip } = await import('../src/drama-writer.js');
+    const c = buildFallbackClip({ clipIndex: 5, summary: '陆衡身份揭露', isConclusion: true, ending: '爽爆' });
+    const parsed = await parseClip(JSON.stringify(c));
+    assert.equal(parsed.isConclusion, true);
+    assert.equal(parsed.conclusion.type, 'DRAMA_END');
+    assert.equal(parsed.conclusion.ending, '爽爆');
   });
 
-  test('buildFallbackClip handles choice clips', async () => {
-    const { buildFallbackClip } = await import('../src/drama-writer.js');
-    const scene = buildFallbackClip({
-      summary: 'A fork in the road',
-      clipType: 'CHOICE',
-      hasChoices: true,
-      choiceTexts: ['Go left', 'Go right'],
-    });
-    assert.equal(scene.choices.length, 2);
-    assert.equal(scene.choices[0].text, 'Go left');
-    assert.equal(scene.choices[1].text, 'Go right');
-  });
+  // (legacy buildFallbackClip "handles conclusion/choice clips" tests retired —
+  // drama pipeline has no choices and conclusion type is locked to DRAMA_END.)
 
   // ─── Tail outline tests (variant endings) ─────────────────────────────────
 

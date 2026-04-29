@@ -403,7 +403,57 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
 
 // ─── Step 2: Generate clips one at a time ────────────────────────────────────
 
-export function buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang = 'en', styleKey, narrativeContext, constraints = {}) {
+const CLIPS_PROMPT_PATH = join(__dirname, '..', 'prompts', 'clips.md');
+
+/**
+ * Build the per-clip generation prompt (new drama-pipeline signature).
+ *
+ * @param {object} ctx
+ * @param {object} ctx.outline           Full drama outline
+ * @param {object} ctx.episode           Current episode object
+ * @param {number} ctx.clipIndex         0-based clip position within episode
+ * @param {number} ctx.totalClips        Number of clips in this episode
+ * @param {string} ctx.clipSummary       Plan summary for this clip
+ * @param {boolean} [ctx.isConclusion]   True only for last clip of last episode
+ * @param {string} [ctx.priorClipDigest] Compressed summary of prior clips
+ * @param {string} [ctx.tropeSection]    `## Clip` injection from the trope file
+ * @param {string} [ctx.referenceCharacter]
+ * @param {string} [ctx.referenceEvent]
+ */
+export function buildClipPrompt(ctx) {
+  const {
+    outline = {},
+    episode = {},
+    clipIndex = 0,
+    totalClips = 1,
+    clipSummary = '',
+    isConclusion = false,
+    priorClipDigest = '',
+    tropeSection = '',
+    referenceCharacter = '',
+    referenceEvent = '',
+  } = ctx || {};
+
+  let template = readFileSync(CLIPS_PROMPT_PATH, 'utf8');
+  return template
+    .replace(/\{\{title\}\}/g, outline.title || '')
+    .replace(/\{\{synopsis\}\}/g, outline.synopsis || '')
+    .replace(/\{\{characters\}\}/g, JSON.stringify(outline.characters || [], null, 2))
+    .replace(/\{\{episodeTitle\}\}/g, episode.title || '')
+    .replace(/\{\{episodeIndex\}\}/g, String(episode.episodeIndex ?? 0))
+    .replace(/\{\{clipIndex\}\}/g, String(clipIndex))
+    .replace(/\{\{totalClips\}\}/g, String(totalClips))
+    .replace(/\{\{clipSummary\}\}/g, clipSummary || '')
+    .replace(/\{\{isConclusion\}\}/g, isConclusion ? 'true' : 'false')
+    .replace(/\{\{priorClipDigest\}\}/g, priorClipDigest || '(none)')
+    .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
+    .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
+    .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
+}
+
+// Legacy buildClipPrompt body kept below as `_legacyBuildClipPrompt` only for
+// reference until generateDrama is migrated in Task 11; not exported.
+function _legacyBuildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang = 'en', styleKey, narrativeContext, constraints = {}) {
   const templateFile = lang === 'cn' ? SCENES_PATH_CN : SCENES_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
@@ -572,106 +622,73 @@ export async function parseClip(raw) {
   return data;
 }
 
-export async function generateClip(outline, clipIndex, clipPlan, totalClips, options = {}) {
-  const lang = options.lang || 'en';
-  const style = options.style;
-  const narrativeContext = options.narrativeContext;
-  const constraints = {
-    genre: options.genre || '',
-    referenceCharacter: options.referenceCharacter || '',
-    referenceEvent: options.referenceEvent || '',
-  };
-  const prompt = buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang, style, narrativeContext, constraints);
+export async function generateClip(ctx) {
+  const prompt = buildClipPrompt(ctx);
   const raw = await callLLM(prompt, 'clip');
   return await parseClip(raw);
 }
 
-// ─── Fallback scene generation ──────────────────────────────────────────────
+// ─── Retry & fallback ────────────────────────────────────────────────────────
 
-export function buildRetryClipPrompt(clipPlan, lang = 'en', constraints = {}) {
-  const summary = clipPlan.summary || 'A scene in the story';
-  const clipType = clipPlan.clipType || 'NARRATIVE';
-  const genre = constraints.genre || '';
-  const referenceCharacter = constraints.referenceCharacter || '';
-  const referenceEvent = constraints.referenceEvent || '';
-
-  // Build trailing constraint sections so the retry prompt carries the same
-  // genre / character / event constraints as the primary buildClipPrompt path.
-  // Without this, every first-attempt scene failure drifts away from the user's
-  // --type / --character / --event flags on the regenerated scene.
-  const constraintSections = [];
-  if (genre) {
-    constraintSections.push(lang === 'cn'
-      ? `\n## 题材要求\n本场景属于**${genre}**类型，语言、节奏、基调必须一致。`
-      : `\n## Novel Type Requirement\nThis scene is part of a **${genre}** novel. Keep language, pacing, and tone consistent.`);
-  }
-  if (referenceCharacter) {
-    constraintSections.push(lang === 'cn'
-      ? `\n## 参考角色（必须保留）\n如本场景涉及以下预定义角色，严格保留其姓名、身份、言谈方式与动机；不得改名或改变核心特征。\n---\n${referenceCharacter}\n---`
-      : `\n## Reference Character (PRESERVE)\nIf this scene involves the following predefined character, strictly preserve their name, identity, speech, and motivations.\n---\n${referenceCharacter}\n---`);
-  }
-  if (referenceEvent) {
-    constraintSections.push(lang === 'cn'
-      ? `\n## 参考事件（必须尊重）\n本故事建构于以下事件之上；任何描写或后果都必须忠实于其事实与情感分量，不得淡化。\n---\n${referenceEvent}\n---`
-      : `\n## Reference Event (RESPECT)\nThis story is built around the following event; any depiction or consequence must remain faithful to its facts and emotional weight.\n---\n${referenceEvent}\n---`);
-  }
-  const constraintsBlock = constraintSections.length > 0 ? '\n' + constraintSections.join('\n') : '';
-
-  if (lang === 'cn') {
-    return [
-      '请根据以下场景描述撰写一个场景。只返回有效的JSON对象，不要其他内容。',
-      '',
-      `场景描述：${summary}`,
-      `场景类型：${clipType}`,
-      '',
-      '返回格式：',
-      '{"content": "[narrator]\\n你的场景文本...", "clipType": "' + clipType + '", "choices": [], "conclusion": null}',
-      '',
-      '重要：content字段中的换行用\\n表示，双引号用\\"转义。只返回JSON。',
-    ].join('\n') + constraintsBlock;
-  }
-
+/**
+ * Simplified retry prompt invoked when the primary clip prompt's output failed
+ * to parse. Includes the schema constraints + the prior parse error so the
+ * model can correct itself.
+ */
+export function buildRetryClipPrompt(ctx = {}) {
+  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆' } = ctx;
+  const tail = isConclusion
+    ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${ending}" } and you may leave "hook" empty.`
+    : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
   return [
-    'Write a scene based on the following description. Return ONLY a valid JSON object, nothing else.',
-    '',
-    `Scene description: ${summary}`,
-    `Scene type: ${clipType}`,
-    '',
-    'Return format:',
-    '{"content": "[narrator]\\nYour scene text here...", "clipType": "' + clipType + '", "choices": [], "conclusion": null}',
-    '',
-    'IMPORTANT: Newlines in content must be \\n, double quotes must be \\". Return only JSON.',
-  ].join('\n') + constraintsBlock;
+    `Previous attempt failed: ${prevError || 'invalid output'}.`,
+    `Generate one short-drama clip (10–15 seconds) based on this summary:`,
+    clipSummary,
+    `CN-char limits: setting≤20, action≤80, dialogue≤60, hook≤30.`,
+    `Output ONLY a single JSON object matching the clip schema. No markdown fences, no commentary.`,
+    tail,
+  ].join('\n');
 }
 
-export function buildFallbackClip(clipPlan, clipIndex) {
-  const summary = clipPlan.summary || 'The story continues.';
-  const clipType = clipPlan.clipType || 'NARRATIVE';
-  const scene = {
-    content: `[narrator]\n${summary}`,
-    clipType,
-    choices: [],
-    conclusion: null,
+/**
+ * Synthesize a parser-valid clip when LLM retries are exhausted. Output must
+ * round-trip through parseClip without throwing.
+ */
+export function buildFallbackClip(ctx = {}) {
+  const {
+    clipIndex = 0,
+    summary = '',
+    isConclusion = false,
+    ending = '爽爆',
+  } = ctx;
+  const setting = '场景 · 时间 · 氛围';
+  const truncate = (s, n) => {
+    const chars = (s || '').match(/[一-鿿㐀-䶿]/g) || [];
+    return chars.slice(0, n).join('');
   };
-  if (clipPlan.isConclusion) {
-    scene.conclusion = {
-      title: 'End',
-      overview: summary,
-      type: clipPlan.conclusionType || 'EPISODE_END',
-      ending: clipPlan.ending || '爽爆',
+  const action = truncate(summary || '动作描述', 80) || '动作描述';
+  const dialogue = '[narrator]\n' + (truncate(summary, 50) || '叙述');
+  const base = {
+    clipIndex,
+    setting,
+    action,
+    dialogue,
+    durationSec: 12,
+    isConclusion: !!isConclusion,
+  };
+  if (isConclusion) {
+    base.hook = '';
+    base.conclusion = {
+      title: '结局',
+      overview: summary || '故事结束',
+      type: 'DRAMA_END',
+      ending: VALID_ENDINGS.includes(ending) ? ending : '爽爆',
     };
+  } else {
+    base.hook = '镜头特写关键道具';
+    base.conclusion = null;
   }
-  if (clipPlan.hasChoices && clipPlan.choiceTexts) {
-    // Fallback clips can't branch meaningfully; converge every choice to the
-    // next scene (if a clipIndex is known). Without an index, omit the target
-    // rather than emit a bogus one.
-    scene.choices = clipPlan.choiceTexts.map((text) => (
-      typeof clipIndex === 'number'
-        ? { text, nextClipIndex: clipIndex + 1 }
-        : { text }
-    ));
-  }
-  return scene;
+  return base;
 }
 
 // ─── Style selection ─────────────────────────────────────────────────────────

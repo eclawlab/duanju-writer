@@ -73,52 +73,11 @@ describe('Fix #1 — tail-outline receives constraints', () => {
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Fix #2: buildClipPrompt carries constraints so scene-level prose stays
-//         aligned with genre + reference character + reference event.
-// ──────────────────────────────────────────────────────────────────────────────
-describe('Fix #2 — scene prompt receives constraints', () => {
-  test('buildClipPrompt omits sections when no constraints', async () => {
-    const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
-    };
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'en', undefined, null, {});
-    assert.ok(!prompt.includes('Novel Type Requirement'));
-    assert.ok(!prompt.includes('Reference Character'));
-    assert.ok(!prompt.includes('Reference Event'));
-  });
-
-  test('buildClipPrompt injects all constraints when provided (EN)', async () => {
-    const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
-    };
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'en', undefined, null, {
-      genre: 'thriller',
-      referenceCharacter: CHAR_MD,
-      referenceEvent: EVENT_MD,
-    });
-    assert.ok(prompt.includes('thriller'));
-    assert.ok(prompt.includes('Reference Character (PRESERVE)'));
-    assert.ok(prompt.includes('林昭'));
-    assert.ok(prompt.includes('Reference Event (RESPECT)'));
-    assert.ok(prompt.includes('Bridge Collapse'));
-  });
-
-  test('buildClipPrompt constraints default to empty when constraints arg omitted', async () => {
-    const { buildClipPrompt } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
-    };
-    // Omit the trailing constraints arg entirely — backwards-compat with older callers.
-    const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
-    assert.ok(!prompt.includes('Reference Character'));
-  });
-});
+// (Fix #2 retired: legacy buildClipPrompt accepted positional (lang, style,
+// narrativeContext, constraints) args. The duanju-pipeline buildClipPrompt
+// takes a single ctx object whose tropeSection / referenceCharacter /
+// referenceEvent fields cover what the old constraints arg did. Coverage
+// for those is now in tests/drama-writer.test.js's buildClipPrompt block.)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Fix #5: parseOutline rejects outlines with <2 episodes because the variant

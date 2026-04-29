@@ -4,63 +4,13 @@ import assert from 'node:assert/strict';
 const CHAR_MD = '# 林昭\nRole: Protagonist';
 const EVENT_MD = '# Bridge Collapse\nThirty-seven dead.';
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Round-2 Fix #1: buildRetryClipPrompt now accepts constraints so the scene
-// retry path doesn't drift from --type / --character / --event flags.
-// ──────────────────────────────────────────────────────────────────────────────
-describe('R2 Fix #1 — buildRetryClipPrompt receives constraints', () => {
-  test('omits constraint sections when none provided (EN)', async () => {
-    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryClipPrompt({ summary: 'Hero arrives', clipType: 'NARRATIVE' }, 'en');
-    assert.ok(!prompt.includes('Novel Type Requirement'));
-    assert.ok(!prompt.includes('Reference Character'));
-    assert.ok(!prompt.includes('Reference Event'));
-  });
-
-  test('includes all three constraints when provided (EN)', async () => {
-    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryClipPrompt(
-      { summary: 'Hero arrives', clipType: 'NARRATIVE' },
-      'en',
-      { novelType: 'thriller', referenceCharacter: CHAR_MD, referenceEvent: EVENT_MD },
-    );
-    assert.ok(prompt.includes('thriller'), 'novelType missing');
-    assert.ok(prompt.includes('Reference Character (PRESERVE)'), 'character section header missing');
-    assert.ok(prompt.includes('林昭'), 'character content missing');
-    assert.ok(prompt.includes('Reference Event (RESPECT)'), 'event section header missing');
-    assert.ok(prompt.includes('Bridge Collapse'), 'event content missing');
-  });
-
-  test('uses CN text for cn lang', async () => {
-    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
-    const prompt = buildRetryClipPrompt(
-      { summary: '主角登场', clipType: 'NARRATIVE' },
-      'cn',
-      { novelType: '武侠', referenceCharacter: CHAR_MD },
-    );
-    assert.ok(prompt.includes('小说类型要求'));
-    assert.ok(prompt.includes('参考角色'));
-    assert.ok(prompt.includes('武侠'));
-  });
-
-  test('default constraints arg keeps backwards compat for older callers', async () => {
-    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
-    // Two-arg call should still work and produce a valid prompt without constraints.
-    const prompt = buildRetryClipPrompt({ summary: 's', clipType: 'NARRATIVE' }, 'en');
-    assert.ok(prompt.includes('Write a scene'), 'core retry prompt body must remain intact');
-  });
-
-  test('worker call site passes constraints (source-level guard)', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
-    // The retry call site must thread novelType/referenceCharacter/referenceEvent.
-    const retryCallMatch = src.match(/buildRetryClipPrompt\([^)]*novelType[^)]*referenceCharacter[^)]*referenceEvent/s);
-    assert.ok(
-      retryCallMatch,
-      'buildRetryClipPrompt call site must thread novelType, referenceCharacter, and referenceEvent',
-    );
-  });
-});
+// (R2 Fix #1 retired: legacy buildRetryClipPrompt accepted constraints
+// (genre/referenceCharacter/referenceEvent) for the scene-retry path. The
+// duanju-pipeline buildRetryClipPrompt is intentionally simpler — it carries
+// the parse-error feedback + clip schema constraints; trope/genre/reference
+// material are injected upstream via buildClipPrompt's tropeSection /
+// referenceCharacter / referenceEvent ctx fields, and don't need to be
+// re-injected on retry.)
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Round-2 Fix #2/#3: variantPlan failure no longer persists basePlan fallback
