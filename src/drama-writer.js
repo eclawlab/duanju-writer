@@ -842,7 +842,7 @@ export async function generateDrama(materials, options = {}) {
       globalClipIndex += ep.clipPlan.length;
       continue;
     }
-    const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, clips: [], episodeChoices: ep.episodeChoices || [] };
+    const episode = { title: ep.title, episodeIndex: ep.episodeIndex, isEnding: !!ep.isEnding, ending: ep.ending || null, scenes: [], episodeChoices: ep.episodeChoices || [] };
     const totalClips = ep.clipPlan.length;
 
     log(`Writing episode ${ep.episodeIndex}: "${ep.title}" (${totalClips} clips${ep.isEnding ? ', ending' : ''})...`);
@@ -1091,7 +1091,7 @@ export async function generateDrama(materials, options = {}) {
         hasConclusion: !!scene.conclusion,
       });
 
-      episode.clips.push(scene);
+      episode.scenes.push(scene);
       globalClipIndex++;
     }
 
@@ -1109,7 +1109,7 @@ export async function generateDrama(materials, options = {}) {
 
     // For ending episodes, ensure the last scene has a conclusion
     if (ep.isEnding) {
-      const lastClip = episode.clips[episode.clips.length - 1];
+      const lastClip = episode.scenes[episode.scenes.length - 1];
       const fallbackEnding = VALID_ENDINGS.includes(ep.ending) ? ep.ending : '爽爆';
       if (!lastClip.conclusion) {
         log(`  Ending episode "${ep.title}" missing conclusion — injecting fallback`);
@@ -1150,7 +1150,7 @@ export async function generateDrama(materials, options = {}) {
   // Validate final story
   if (!story.episodes.length) throw new Error('Story must have at least 1 episode');
   for (const ep of story.episodes) {
-    if (!ep.clips.length) throw new Error(`Episode "${ep.title}" has no clips`);
+    if (!ep.scenes.length) throw new Error(`Episode "${ep.title}" has no scenes`);
     const hookIssues = checkHookDensity(ep);
     for (const issue of hookIssues) log(`[hook density] ${issue}`);
   }
