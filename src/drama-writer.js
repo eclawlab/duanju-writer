@@ -603,34 +603,35 @@ export function buildFallbackClip(ctx = {}) {
     isConclusion = false,
     ending = '爽爆',
   } = ctx;
-  const setting = '场景 · 时间 · 氛围';
   const truncate = (s, n) => {
     const chars = (s || '').match(/[一-鿿㐀-䶿]/g) || [];
     return chars.slice(0, n).join('');
   };
-  const action = truncate(summary || '动作描述', 80) || '动作描述';
+  const setting  = '场景 · 时间 · 氛围';
+  const action   = truncate(summary || '动作描述', 80) || '动作描述';
   const dialogue = '[narrator]\n' + (truncate(summary, 50) || '叙述');
-  const base = {
-    clipIndex,
-    setting,
-    action,
-    dialogue,
-    durationSec: 12,
-    isConclusion: !!isConclusion,
-  };
+  const hook     = isConclusion ? '' : '镜头特写关键道具';
+  const durationSec = 12;
+
+  const content = composeScene({ setting, action, dialogue, hook });
+  let conclusion = null;
   if (isConclusion) {
-    base.hook = '';
-    base.conclusion = {
+    const safeEnding = VALID_ENDINGS.includes(ending) ? ending : '爽爆';
+    conclusion = {
       title: '结局',
       overview: summary || '故事结束',
-      type: 'DRAMA_END',
-      ending: VALID_ENDINGS.includes(ending) ? ending : '爽爆',
+      type: 'STORY_END',
+      ending: ENDING_LABEL_TO_ENUM[safeEnding],
     };
-  } else {
-    base.hook = '镜头特写关键道具';
-    base.conclusion = null;
   }
-  return base;
+  const scene = { content, choices: [], conclusion };
+  Object.defineProperty(scene, '_beats', {
+    value: { clipIndex, setting, action, dialogue, hook, durationSec, isConclusion: !!isConclusion },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return scene;
 }
 
 // ─── Style selection ─────────────────────────────────────────────────────────

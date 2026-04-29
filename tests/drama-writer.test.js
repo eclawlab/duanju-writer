@@ -325,26 +325,41 @@ describe('writer', () => {
     assert.match(prompt, /反转/);
   });
 
-  test('buildFallbackClip produces a parser-valid clip from plan data', async () => {
-    const { buildFallbackClip, parseClip } = await import('../src/drama-writer.js');
-    const c = buildFallbackClip({ clipIndex: 2, summary: '陆衡推门进入豪门', isConclusion: false });
-    // Must round-trip through parseClip without throwing
-    const parsed = await parseClip(JSON.stringify(c));
-    assert.equal(parsed.clipIndex, 2);
-    assert.ok(parsed.hook && parsed.hook.length > 0);
-  });
+  describe('buildFallbackClip — scene shape', () => {
+    test('non-conclusion fallback returns scene shape', async () => {
+      const { buildFallbackClip } = await import('../src/drama-writer.js');
+      const scene = buildFallbackClip({ clipIndex: 5, summary: '陆衡推门', isConclusion: false });
+      assert.equal(typeof scene.content, 'string');
+      assert.ok(scene.content.length > 0);
+      assert.deepEqual(scene.choices, []);
+      assert.equal(scene.conclusion, null);
+      const keys = Object.keys(scene);
+      assert.ok(!keys.includes('setting'), 'fallback leaks setting');
+      assert.ok(!keys.includes('hook'), 'fallback leaks hook');
+    });
 
-  test('buildFallbackClip produces a valid conclusion clip when isConclusion=true', async () => {
-    const { buildFallbackClip, parseClip } = await import('../src/drama-writer.js');
-    const c = buildFallbackClip({ clipIndex: 5, summary: '陆衡身份揭露', isConclusion: true, ending: '爽爆' });
-    const parsed = await parseClip(JSON.stringify(c));
-    assert.equal(parsed.isConclusion, true);
-    assert.equal(parsed.conclusion.type, 'DRAMA_END');
-    assert.equal(parsed.conclusion.ending, '爽爆');
-  });
+    test('conclusion fallback maps 爽爆 to GOOD and type STORY_END', async () => {
+      const { buildFallbackClip } = await import('../src/drama-writer.js');
+      const scene = buildFallbackClip({ clipIndex: 9, summary: '终局', isConclusion: true, ending: '爽爆' });
+      assert.equal(scene.conclusion.type, 'STORY_END');
+      assert.equal(scene.conclusion.ending, 'GOOD');
+    });
 
-  // (legacy buildFallbackClip "handles conclusion/choice clips" tests retired —
-  // drama pipeline has no choices and conclusion type is locked to DRAMA_END.)
+    test('fallback _beats survives on non-enumerable property', async () => {
+      const { buildFallbackClip } = await import('../src/drama-writer.js');
+      const scene = buildFallbackClip({ clipIndex: 3, summary: 'sx' });
+      assert.equal(scene._beats.clipIndex, 3);
+      assert.ok(typeof scene._beats.setting === 'string');
+      assert.ok(typeof scene._beats.action === 'string');
+      assert.ok(typeof scene._beats.dialogue === 'string');
+    });
+
+    test('fallback JSON.stringify does not leak _beats', async () => {
+      const { buildFallbackClip } = await import('../src/drama-writer.js');
+      const scene = buildFallbackClip({ clipIndex: 0, summary: 'x' });
+      assert.ok(!JSON.stringify(scene).includes('_beats'));
+    });
+  });
 
   // ─── Tail outline tests (variant endings) ─────────────────────────────────
 
