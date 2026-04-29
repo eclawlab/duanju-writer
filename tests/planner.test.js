@@ -17,7 +17,7 @@ describe('planner', () => {
     const { buildPlanPrompt } = await import('../src/planner.js');
     const outline = { title: 'Test', episodes: [] };
     const prompt = buildPlanPrompt(outline, 'cn');
-    assert.ok(prompt.includes('故事规划代理'), 'CN prompt should include Chinese header text');
+    assert.ok(prompt.includes('短剧叙事规划师'), 'CN prompt should include Chinese header text');
   });
 
   test('parsePlan validates required structure', async () => {
@@ -94,8 +94,8 @@ describe('planner', () => {
         { name: 'Village', status: 'accessible' },
       ],
       revelations: [
-        { id: 'rev_1', info: 'Alice is the chosen one', visibility: 'hidden', revealInScene: 2 },
-        { id: 'rev_2', info: 'The king is corrupt', visibility: 'public', revealInScene: null },
+        { id: 'rev_1', info: 'Alice is the chosen one', visibility: 'hidden', revealInClip: 2 },
+        { id: 'rev_2', info: 'The king is corrupt', visibility: 'public', revealInClip: null },
       ],
       clips: [],
     };

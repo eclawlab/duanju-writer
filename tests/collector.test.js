@@ -23,8 +23,8 @@ describe('collector', () => {
     const { buildResearchPrompt } = await import('../src/collector.js');
     const prompt = buildResearchPrompt([], 'web data');
     // CN-only research prompt
-    assert.ok(prompt.includes('小说研究助手') || prompt.includes('短剧'));
-    assert.ok(prompt.includes('指令'));
+    assert.ok(prompt.includes('短剧素材研究助手'));
+    assert.ok(prompt.includes('任务'));
   });
 
   test('buildResearchPrompt handles history with empty genres', async () => {
@@ -110,7 +110,7 @@ describe('collector', () => {
   test('buildResearchPrompt uses CN template when lang is cn', async () => {
     const { buildResearchPrompt } = await import('../src/collector.js');
     const prompt = buildResearchPrompt([], 'web data', 'cn');
-    assert.ok(prompt.includes('小说研究助手'));
+    assert.ok(prompt.includes('短剧素材研究助手'));
     assert.ok(prompt.includes('web data'));
   });
 

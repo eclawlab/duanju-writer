@@ -20,7 +20,7 @@ describe('writer', () => {
     const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = { topics: [{ title: '测试' }], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'cn');
-    assert.ok(prompt.includes('音频小说作家'));
+    assert.ok(prompt.includes('短剧编剧'));
   });
 
   function validOutline() {

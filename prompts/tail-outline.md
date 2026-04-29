@@ -1,91 +1,64 @@
-You are an audio-novel author writing an ALTERNATE BACK HALF for an existing linear story. The first {{splitIdx}} episodes are already written and MUST NOT be changed. Your job: write episodes {{splitIdx}} through {{lastIdx}} so the story ends with a **{{targetEnding}}** ending.
+你是短剧编剧。请基于已有的前半段大纲，为本剧生成后半段（包含结局）。
 
-## Ending Type Meanings
+## 故事元信息
 
-- **GOOD**: The protagonist achieves their core goal. Deserved victory, hopeful resolution, emotional catharsis. The listener leaves satisfied and uplifted.
-- **BITTERSWEET**: Mixed outcome — some wins, real losses. The protagonist gets part of what they wanted but pays a meaningful cost. Melancholy, reflective, emotionally complex. NOT a tragedy, but NOT a clean win either.
-- **SPECIAL**: An unconventional, surprising, or genre-bending conclusion. Metafictional, ambiguous, circular, cosmic, or subversive. It should NOT be the ending the listener expected after the first half. Defy the conventional resolution for this kind of story.
+- 标题（title）：{{title}}
+- 简介（synopsis）：{{synopsis}}
+- 类型（genres）：{{genres}}
 
-Pick ONE of these three tones and commit to it fully. Do not blend them.
-
-## Story So Far (locked — do not alter)
-
-Title: {{title}}
-Synopsis: {{synopsis}}
-Genres: {{genres}}
-
-### Prior Episodes (0..{{priorLastIdx}})
-
-{{priorEpisodes}}
-
-### Established Characters & World
+## 雪花结构概要
 
 {{snowflakeSummary}}
 
-## Your Task
+## 已确定的前半段（episode 0..{{priorLastIdx}}）
 
-Write episodes {{splitIdx}}..{{lastIdx}} as a JSON object. This is the full back-half of the story — roughly 50% of the total length — so give the ending arc enough room to develop and land.
+{{priorEpisodes}}
 
-## Output Format
+## 任务
 
-Return ONLY valid JSON (no markdown, no commentary):
+Produce exactly {{tailCount}} episodes, starting at episodeIndex {{splitIdx}} and ending at episodeIndex {{lastIdx}}.
 
-```json
+- 整体走向必须导向 **{{targetEnding}}** 类型结局：
+  - **爽爆**：身份全揭，反派全员跪地，主角拿走所有筹码。
+  - **苦尽甘来**：主角受尽磨难后获得真情/认可，但有小遗憾。
+  - **反转**：终局前抛出关键反转，重新定义此前所有事件的意义。
+- 最后一集（episodeIndex {{lastIdx}}）`isEnding: true`，`ending: "{{targetEnding}}"`。
+- 最后一集的最后一个 clip `isConclusion: true`，`conclusion.type: "DRAMA_END"`。
+- 中间集（非最后）必须 `isEnding: false`、`ending: null`。
+- 每集 4–10 个 clip，每个 clipPlan 项需有 `summary` 字段。
+
+## 输出
+
+只返回 JSON 对象，不要 markdown 围栏，不要解释：
+
+```jsonc
 {
   "episodes": [
     {
       "episodeIndex": {{splitIdx}},
-      "title": "Episode N: Title",
+      "title": "...",
       "isEnding": false,
-      "scenePlan": [
-        { "summary": "Scene description advancing toward the {{targetEnding}} ending", "sceneType": "NARRATIVE", "hasChoices": false, "isConclusion": false },
-        { "summary": "...", "sceneType": "NARRATIVE", "hasChoices": false, "isConclusion": false }
+      "ending": null,
+      "clipPlan": [
+        { "summary": "...", "isConclusion": false }
       ]
     },
     {
       "episodeIndex": {{lastIdx}},
-      "title": "Episode M: Finale",
+      "title": "终局",
       "isEnding": true,
       "ending": "{{targetEnding}}",
-      "scenePlan": [
-        { "summary": "...", "sceneType": "NARRATIVE", "hasChoices": false, "isConclusion": false },
-        {
-          "summary": "Final scene delivering the {{targetEnding}} ending",
-          "sceneType": "NARRATIVE",
-          "hasChoices": false,
-          "isConclusion": true,
-          "conclusionType": "STORY_END",
-          "ending": "{{targetEnding}}"
-        }
+      "clipPlan": [
+        { "summary": "...", "isConclusion": true }
       ]
     }
   ]
 }
 ```
 
-## Structural Rules
+## 严禁
 
-- Produce exactly {{tailCount}} episodes with episodeIndex values {{splitIdx}}, {{splitIdxPlus1}}, ..., {{lastIdx}} (contiguous, no gaps, no duplicates).
-- ONLY the last episode has `isEnding: true` with `ending: "{{targetEnding}}"`.
-- ONLY the last scene of the last episode has `isConclusion: true` with `conclusionType: "STORY_END"` and `ending: "{{targetEnding}}"`.
-- Every other episode has `isEnding: false` and no `ending` field.
-- Do NOT include `episodeChoices` anywhere — there is no branching.
-- Each episode has 2-3 scenes.
-- Every non-ending tail episode must end on a strong cliffhanger or escalation hook.
-- Every episode must contain at least one twist, revelation, or reversal.
-
-## Consistency Rules
-
-- DO NOT contradict anything established in the prior episodes — preserve character identities, relationships, locations, established facts, and foreshadowing set up in the first half.
-- DO resolve (or intentionally subvert, for SPECIAL) any open threads and foreshadowing from the first half.
-- The tone of the back half should feel continuous with the first half until the ending reveals its {{targetEnding}} character.
-
-## Pacing
-
-- Fast-paced, information-dense. No filler.
-- Ramp escalation scene by scene toward the finale.
-- Deliver the ending decisively — no ambiguous fade-outs (unless the ending type is SPECIAL and ambiguity is the point).
-
-## Language
-
-Write episode titles and scene summaries in the SAME LANGUAGE as the prior episodes above. If the prior episodes are in Chinese, write the tail in Chinese. If English, English.
+- 不写 `episodeChoices`（线性）
+- 中间集 `isEnding` 不要为 true
+- 结局 ending 必须严格匹配 {{targetEnding}}
+- 不要英语注释或翻译

@@ -72,11 +72,11 @@ describe('reference character — prompt injection', () => {
     assert.ok(prompt.includes('参考角色'), 'CN section header missing in plan');
   });
 
-  test('reference character and novelType coexist in one prompt', async () => {
+  test('reference character and genre coexist in one prompt', async () => {
     const { buildOutlinePrompt } = await import('../src/drama-writer.js');
     const materials = { topics: ['adventure'], plotHooks: [] };
     const prompt = buildOutlinePrompt(materials, 'en', undefined, 'thriller', CHAR_MD);
-    assert.ok(prompt.includes('thriller'), 'novelType should still be present');
+    assert.ok(prompt.includes('thriller'), 'genre should still be present');
     assert.ok(prompt.includes('林昭'), 'reference character should still be present');
   });
 });
