@@ -23,179 +23,148 @@ describe('writer', () => {
     assert.ok(prompt.includes('音频小说作家'));
   });
 
-  test('parseOutline validates required structure', async () => {
-    const { parseOutline } = await import('../src/drama-writer.js');
-    const valid = {
-      title: 'Test Story',
-      synopsis: 'A test',
-      genres: ['test'],
+  function validOutline() {
+    return {
+      title: '战神归来',
+      synopsis: '两句话钩子。',
+      trope: '战神归来',
+      genre: '都市',
+      tags: ['复仇', '打脸'],
+      lang: 'cn',
+      characters: [
+        { name: '陆衡', role: 'protagonist', description: '...' },
+        { name: '苏晚', role: 'ex-wife', description: '...' },
+        { name: '林董', role: 'antagonist', description: '...' },
+      ],
       episodes: [
-        {
-          episodeIndex: 0,
-          title: 'Ep1',
-          isEnding: false,
-          clipPlan: [{ summary: 'Scene 1', clipType: 'NARRATIVE' }],
-          episodeChoices: [],
-        },
-        {
-          episodeIndex: 1,
-          title: 'Ep2',
-          isEnding: true,
-          ending: 'GOOD',
-          clipPlan: [{ summary: 'Scene 2', clipType: 'NARRATIVE' }],
-          episodeChoices: [],
-        },
+        { episodeIndex: 0, title: '第1集', isEnding: false, ending: null,
+          clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] },
+        { episodeIndex: 1, title: '第2集', isEnding: true, ending: '爽爆',
+          clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] },
       ],
     };
-    const result = await parseOutline(JSON.stringify(valid));
-    assert.equal(result.title, 'Test Story');
+  }
+
+  test('parseOutline accepts a valid drama outline', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const result = await parseOutline(JSON.stringify(validOutline()));
+    assert.equal(result.title, '战神归来');
     assert.equal(result.episodes[0].clipPlan.length, 1);
+    assert.equal(result.trope, '战神归来');
   });
 
   test('parseOutline throws on missing title', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({ synopsis: 'A test', episodes: [{ episodeIndex: 0, title: 'E', clipPlan: [{ summary: 's' }] }] })),
-      /Missing required field: title/
-    );
+    const bad = validOutline();
+    delete bad.title;
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /Missing required field: title/);
   });
 
   test('parseOutline throws on missing synopsis', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({ title: 'T', episodes: [{ episodeIndex: 0, title: 'E', clipPlan: [{ summary: 's' }] }] })),
-      /Missing required field: synopsis/
-    );
+    const bad = validOutline();
+    delete bad.synopsis;
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /Missing required field: synopsis/);
   });
 
   test('parseOutline throws on empty episodes', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({ title: 'T', synopsis: 'S', episodes: [] })),
-      /at least 2 episodes/
-    );
+    const bad = validOutline();
+    bad.episodes = [];
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /at least 2 episodes/);
   });
 
   test('parseOutline throws on single episode (variant pipeline requires 2+)', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [{ episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] }],
-      })),
-      /at least 2 episodes/
-    );
+    const bad = validOutline();
+    bad.episodes = [bad.episodes[0]];
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /at least 2 episodes/);
+  });
+
+  test('parseOutline rejects fewer than 3 characters', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const bad = validOutline();
+    bad.characters = [bad.characters[0], bad.characters[1]];
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /3 to 7 characters/);
+  });
+
+  test('parseOutline rejects more than 7 characters', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const bad = validOutline();
+    bad.characters = Array.from({ length: 8 }, (_, i) => ({ name: `C${i}`, role: 'r', description: 'd' }));
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /3 to 7 characters/);
   });
 
   test('parseOutline throws on missing episodeIndex', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [
-          { title: 'Ep1', clipPlan: [{ summary: 's' }] },
-          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
-        ],
-      })),
-      /missing episodeIndex/
-    );
+    const bad = validOutline();
+    delete bad.episodes[0].episodeIndex;
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /missing episodeIndex/);
   });
 
   test('parseOutline throws on empty clipPlan', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [] },
-          { episodeIndex: 1, title: 'Ep2', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
-        ],
-      })),
-      /at least 1 scene in clipPlan/
-    );
+    const bad = validOutline();
+    bad.episodes[0].clipPlan = [];
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /at least 1 clip in clipPlan/);
   });
 
   test('parseOutline rejects duplicate episodeIndex', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: true, clipPlan: [{ summary: 's' }] },
-          { episodeIndex: 0, title: 'Ep2', isEnding: true, clipPlan: [{ summary: 's' }] },
-        ],
-      })),
-      /Duplicate episodeIndex/
-    );
+    const bad = validOutline();
+    bad.episodes[1].episodeIndex = 0;
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /Duplicate episodeIndex/);
+  });
+
+  test('parseOutline rejects missing isEnding on final episode', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const bad = validOutline();
+    bad.episodes[1].isEnding = false;
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /Final episode must have isEnding/);
+  });
+
+  test('parseOutline rejects invalid ending value', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const bad = validOutline();
+    bad.episodes[1].ending = 'GOOD';
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /ending must be one of/);
   });
 
   test('parseOutline accepts linear multi-episode structure', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    const result = await parseOutline(JSON.stringify({
-      title: 'Linear', synopsis: 'Test',
-      episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'Middle', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 2, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
-      ],
-    }));
+    const valid = validOutline();
+    valid.episodes = [
+      { episodeIndex: 0, title: '第1集', isEnding: false, ending: null, clipPlan: [{ summary: 's' }] },
+      { episodeIndex: 1, title: '第2集', isEnding: false, ending: null, clipPlan: [{ summary: 's' }] },
+      { episodeIndex: 2, title: '第3集', isEnding: true, ending: '反转', clipPlan: [{ summary: 's' }] },
+    ];
+    const result = await parseOutline(JSON.stringify(valid));
     assert.equal(result.episodes.length, 3);
     assert.equal(result.episodes[2].isEnding, true);
-  });
-
-  test('parseOutline requires at least one ending episode', async () => {
-    const { parseOutline } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
-        episodes: [
-          { episodeIndex: 0, title: 'Ep1', isEnding: false, clipPlan: [{ summary: 's' }] },
-          { episodeIndex: 1, title: 'Ep2', isEnding: false, clipPlan: [{ summary: 's' }] },
-        ],
-      })),
-      /ending episode/
-    );
+    assert.equal(result.episodes[2].ending, '反转');
   });
 
   test('parseOutline strips episodeChoices from LLM output', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    const result = await parseOutline(JSON.stringify({
-      title: 'T', synopsis: 'S',
-      episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }],
-          episodeChoices: [{ text: 'A', nextEpisodeIndex: 1 }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
-      ],
-    }));
+    const valid = validOutline();
+    valid.episodes[0].episodeChoices = [{ text: 'A', nextEpisodeIndex: 1 }];
+    const result = await parseOutline(JSON.stringify(valid));
     assert.deepEqual(result.episodes[0].episodeChoices, []);
   });
 
   test('parseOutline forces characterQuestions to empty array', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    const result = await parseOutline(JSON.stringify({
-      title: 'T', synopsis: 'S',
-      characterQuestions: [{ key: 'name', label: 'Name?' }],
-      episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
-      ],
-    }));
+    const valid = validOutline();
+    valid.characterQuestions = [{ key: 'name', label: 'Name?' }];
+    const result = await parseOutline(JSON.stringify(valid));
     assert.deepEqual(result.characterQuestions, []);
   });
 
   test('parseOutline strips markdown code fences', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
-    const outline = {
-      title: 'Fenced',
-      synopsis: 'Test',
-      episodes: [
-        { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
-      ],
-    };
-    const wrapped = '```json\n' + JSON.stringify(outline) + '\n```';
+    const wrapped = '```json\n' + JSON.stringify(validOutline()) + '\n```';
     const result = await parseOutline(wrapped);
-    assert.equal(result.title, 'Fenced');
+    assert.equal(result.title, '战神归来');
   });
 
   // ─── Scene tests ────────────────────────────────────────────────────────────

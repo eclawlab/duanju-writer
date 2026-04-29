@@ -5,7 +5,7 @@ const CHAR_MD = '# 林昭\nRole: Protagonist\nBackground: Former medic';
 const EVENT_MD = '# The Bridge Collapse\nThirty-seven people died.';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Fix #1: tail-outline prompt carries novelType / referenceCharacter /
+// Fix #1: tail-outline prompt carries genre / referenceCharacter /
 //         referenceEvent / newsSource so the back half doesn't drift.
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #1 — tail-outline receives constraints', () => {
@@ -40,12 +40,12 @@ describe('Fix #1 — tail-outline receives constraints', () => {
     };
     const prompt = buildTailOutlinePrompt(baseOutline, 1, 'GOOD', null, {
       lang: 'en',
-      novelType: 'thriller',
+      genre: 'thriller',
       referenceCharacter: CHAR_MD,
       referenceEvent: EVENT_MD,
       newsSource: { theme: 'grief', emotionalCore: 'loss' },
     });
-    assert.ok(prompt.includes('thriller'), 'novelType must appear');
+    assert.ok(prompt.includes('thriller'), 'genre must appear');
     assert.ok(prompt.includes('Reference Character (PRESERVE)'), 'character section must appear');
     assert.ok(prompt.includes('林昭'), 'character content must appear');
     assert.ok(prompt.includes('Reference Event (CONTINUE)'), 'event section must appear');
@@ -65,10 +65,10 @@ describe('Fix #1 — tail-outline receives constraints', () => {
     };
     const prompt = buildTailOutlinePrompt(baseOutline, 1, 'GOOD', null, {
       lang: 'cn',
-      novelType: '武侠',
+      genre: '武侠',
       referenceCharacter: CHAR_MD,
     });
-    assert.ok(prompt.includes('小说类型要求'));
+    assert.ok(prompt.includes('题材要求'));
     assert.ok(prompt.includes('参考角色'));
   });
 });
@@ -97,7 +97,7 @@ describe('Fix #2 — scene prompt receives constraints', () => {
       episodes: [{ title: 'E', clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] }],
     };
     const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1, 'en', undefined, null, {
-      novelType: 'thriller',
+      genre: 'thriller',
       referenceCharacter: CHAR_MD,
       referenceEvent: EVENT_MD,
     });
@@ -125,13 +125,19 @@ describe('Fix #2 — scene prompt receives constraints', () => {
 //         pipeline (front + tail) cannot produce meaningful output from 1 ep.
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #5 — outline minimum episode guard', () => {
+  const minimalChars = [
+    { name: '陆衡', role: 'protagonist', description: '...' },
+    { name: '苏晚', role: 'ex-wife', description: '...' },
+    { name: '林董', role: 'antagonist', description: '...' },
+  ];
+
   test('parseOutline rejects 1-episode outlines', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     await assert.rejects(
       () => parseOutline(JSON.stringify({
-        title: 'T', synopsis: 'S',
+        title: 'T', synopsis: 'S', characters: minimalChars,
         episodes: [
-          { episodeIndex: 0, title: 'Only', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
+          { episodeIndex: 0, title: 'Only', isEnding: true, ending: '爽爆', clipPlan: [{ summary: 's' }] },
         ],
       })),
       /at least 2 episodes/
@@ -141,10 +147,10 @@ describe('Fix #5 — outline minimum episode guard', () => {
   test('parseOutline accepts 2-episode outlines', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     const result = await parseOutline(JSON.stringify({
-      title: 'T', synopsis: 'S',
+      title: 'T', synopsis: 'S', characters: minimalChars,
       episodes: [
         { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: '爽爆', clipPlan: [{ summary: 's' }] },
       ],
     }));
     assert.equal(result.episodes.length, 2);
@@ -176,14 +182,14 @@ describe('Fix #4 — scheduler snapshots reference content', () => {
       const job = createJobIn(jobsFile, jobsDir, {
         lang: 'cn',
         style: 'moyan',
-        novelType: 'wuxia',
+        genre: 'wuxia',
         referenceCharacter: CHAR_MD,
         referenceEvent: EVENT_MD,
       });
       const reloaded = getJobFrom(jobsFile, job.id);
       assert.equal(reloaded.options.lang, 'cn');
       assert.equal(reloaded.options.style, 'moyan');
-      assert.equal(reloaded.options.novelType, 'wuxia');
+      assert.equal(reloaded.options.genre, 'wuxia');
       assert.equal(reloaded.options.referenceCharacter, CHAR_MD);
       assert.equal(reloaded.options.referenceEvent, EVENT_MD);
     } finally {

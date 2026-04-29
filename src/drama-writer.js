@@ -189,6 +189,8 @@ export function buildOutlinePrompt(materials, lang = 'en', styleKey, genre = '',
   return template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
 }
 
+export const VALID_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
+
 export async function parseOutline(raw) {
   const data = await parseJsonWithRepair(raw, 'outline');
 
@@ -199,6 +201,16 @@ export async function parseOutline(raw) {
     // so at least 2 episodes are required (1 front + 1 tail) for the three-ending
     // variation system to produce meaningful output.
     throw new Error('Outline must have at least 2 episodes (required for front/tail variant split)');
+  }
+
+  // Character roster: 3–7 phonetically distinct named characters required for 短剧 viewability.
+  if (!Array.isArray(data.characters) || data.characters.length < 3 || data.characters.length > 7) {
+    throw new Error(`Outline must have 3 to 7 characters, got ${Array.isArray(data.characters) ? data.characters.length : 'none'}`);
+  }
+  for (const c of data.characters) {
+    if (!c.name || !c.role) {
+      throw new Error('Each character must have name and role');
+    }
   }
 
   // Build index of valid episodeIndex values and check for duplicates
@@ -215,21 +227,24 @@ export async function parseOutline(raw) {
 
   for (const ep of data.episodes) {
     if (!ep.clipPlan || ep.clipPlan.length === 0) {
-      throw new Error(`Episode "${ep.title}" must have at least 1 scene in clipPlan`);
+      throw new Error(`Episode "${ep.title}" must have at least 1 clip in clipPlan`);
     }
     for (let i = 0; i < ep.clipPlan.length; i++) {
       if (!ep.clipPlan[i].summary) {
-        throw new Error(`Episode "${ep.title}" scene ${i} missing summary`);
+        throw new Error(`Episode "${ep.title}" clip ${i} missing summary`);
       }
     }
     // Linear stories have no branching — strip any stray episodeChoices the LLM emits.
     ep.episodeChoices = [];
   }
 
-  // Linear stories require exactly one ending episode (the last one)
-  const endingCount = data.episodes.filter(ep => ep.isEnding).length;
-  if (endingCount === 0) {
-    throw new Error('Linear outline must have exactly one ending episode (isEnding: true)');
+  // Linear dramas require the FINAL episode to be the ending with a valid label.
+  const lastEp = data.episodes[data.episodes.length - 1];
+  if (!lastEp.isEnding) {
+    throw new Error('Final episode must have isEnding: true (linear drama requires a single ending episode)');
+  }
+  if (!VALID_ENDINGS.includes(lastEp.ending)) {
+    throw new Error(`Final episode ending must be one of ${VALID_ENDINGS.join('/')}, got: ${lastEp.ending}`);
   }
 
   // Always produce empty characterQuestions — the player skips that step.
