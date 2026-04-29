@@ -1,31 +1,37 @@
 import { loadConfig } from './config.js';
 
-// Upper bound on a single upload attempt. Without this, a hung AutoStory API
+// Upper bound on a single upload attempt. Without this, a hung Duanju API
 // (overloaded, deadlocked, network black hole) blocks the worker indefinitely
 // because fetch() has no built-in timeout. Job-level retry won't help if the
 // job never returns. Configurable via config.uploadTimeout.
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60_000;
 
-export function buildRequest(story, config, variationOptions = {}) {
+export function buildRequest(drama, config, variationOptions = {}) {
+  // Endpoint path preserved (`/api/ai/stories`) so the existing AutoStory
+  // ingestion route stays stable — the body discriminator `format: "duanju"`
+  // tells AutoStory to use the new short-drama schema.
   const url = `${config.autostoryUrl}/api/ai/stories`;
-  // Deep-copy episodes to avoid mutating the original story object
   const body = {
-    ...story,
-    episodes: story.episodes?.map(({ episodeChoices, ...ep }) => ({
-      ...ep,
-      clips: ep.clips?.map(scene => ({ ...scene })),
+    format: 'duanju',
+    title: drama.title,
+    synopsis: drama.synopsis,
+    trope: drama.trope,
+    genre: drama.genre,
+    tags: drama.tags || [],
+    lang: drama.lang || 'cn',
+    characters: drama.characters || [],
+    episodes: (drama.episodes || []).map(ep => ({
+      episodeIndex: ep.episodeIndex,
+      title: ep.title,
+      isEnding: !!ep.isEnding,
+      ending: ep.ending || null,
+      clips: (ep.clips || []).map(clip => ({ ...clip })),
     })),
   };
-  // Add variation metadata if provided
-  if (variationOptions.variationGroupId) {
-    body.variationGroupId = variationOptions.variationGroupId;
-  }
-  if (variationOptions.variationLabel) {
-    body.variationLabel = variationOptions.variationLabel;
-  }
-  if (config.publishOnUpload !== undefined) {
-    body.publish = config.publishOnUpload;
-  }
+
+  if (variationOptions.variationGroupId) body.variationGroupId = variationOptions.variationGroupId;
+  if (variationOptions.variationLabel) body.variationLabel = variationOptions.variationLabel;
+  if (config.publishOnUpload !== undefined) body.publish = config.publishOnUpload;
 
   const timeoutMs = Number.isFinite(config.uploadTimeout) && config.uploadTimeout > 0
     ? config.uploadTimeout

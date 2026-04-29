@@ -163,4 +163,63 @@ describe('uploader', () => {
     assert.equal(body.variationGroupId, undefined);
     assert.equal(body.variationLabel, undefined);
   });
+
+  describe('duanju payload shape', () => {
+    function fullDrama() {
+      return {
+        title: '战神归来',
+        synopsis: '钩子',
+        trope: '战神归来',
+        genre: '都市',
+        tags: ['复仇'],
+        lang: 'cn',
+        characters: [{ name: '陆衡', role: 'protagonist', description: '...' }],
+        episodes: [
+          { episodeIndex: 0, title: '第1集', isEnding: false, ending: null,
+            clips: [{
+              clipIndex: 0, setting: 's', action: 'a', dialogue: 'd',
+              hook: 'h', durationSec: 12, isConclusion: false, conclusion: null,
+            }] },
+        ],
+      };
+    }
+
+    test('buildRequest emits format:duanju with new top-level fields', async () => {
+      const { buildRequest } = await import('../src/uploader.js');
+      const config = { autostoryUrl: 'http://x', aiApiKey: 'k', publishOnUpload: true };
+      const { url, options } = buildRequest(fullDrama(), config, { variationGroupId: 'g1', variationLabel: '爽爆结局' });
+      const body = JSON.parse(options.body);
+      assert.equal(url, 'http://x/api/ai/stories');
+      assert.equal(body.format, 'duanju');
+      assert.equal(body.trope, '战神归来');
+      assert.equal(body.genre, '都市');
+      assert.equal(body.lang, 'cn');
+      assert.equal(body.characters.length, 1);
+      assert.equal(body.episodes[0].clips.length, 1);
+      assert.equal(body.episodes[0].scenes, undefined);
+      assert.equal(body.variationGroupId, 'g1');
+      assert.equal(body.variationLabel, '爽爆结局');
+      assert.equal(body.publish, true);
+    });
+
+    test('buildRequest does not strip episodeChoices (no longer generated)', async () => {
+      const { buildRequest } = await import('../src/uploader.js');
+      const drama = fullDrama();
+      // Even if a stale episode object had episodeChoices, the new buildRequest
+      // simply doesn't carry it forward — no error path.
+      drama.episodes[0].episodeChoices = [{ text: 'X' }];
+      const { options } = buildRequest(drama, { autostoryUrl: 'http://x', aiApiKey: 'k' });
+      const body = JSON.parse(options.body);
+      assert.equal(body.episodes[0].episodeChoices, undefined);
+    });
+
+    test('buildRequest defaults lang to cn when missing', async () => {
+      const { buildRequest } = await import('../src/uploader.js');
+      const drama = fullDrama();
+      delete drama.lang;
+      const { options } = buildRequest(drama, { autostoryUrl: 'http://x', aiApiKey: 'k' });
+      const body = JSON.parse(options.body);
+      assert.equal(body.lang, 'cn');
+    });
+  });
 });
