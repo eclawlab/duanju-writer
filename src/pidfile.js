@@ -91,7 +91,15 @@ function defaultCommandFor(pid) {
 function defaultMatchesSignature(cmd, role) {
   if (!cmd) return false;
   if (role === 'parent') return cmd.includes('duanju-writer');
-  if (role === 'child') return cmd.includes('claude');
+  if (role === 'child') {
+    // The writer always invokes the Claude CLI with `--no-session-persistence`
+    // (see llm.js createClaudeCliAdapter). A bare `cmd.includes('claude')` was
+    // dangerously loose: after PID reuse it would happily match Claude Code,
+    // claude-bench, or anything with "claude" in the path, and cleanupStaleIn
+    // would SIGKILL it. Requiring the unique flag distinguishes our spawned
+    // children from any other claude-named process the user is running.
+    return cmd.includes('claude') && cmd.includes('--no-session-persistence');
+  }
   return false;
 }
 

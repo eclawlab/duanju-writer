@@ -20,11 +20,10 @@ function extractJsonObject(text) {
 
 // ─── Prompt builder ────────────────────────────────────────────────────────────
 
-// Render a clip's spoken/action content for LLM compression. Reads the
-// non-enumerable _beats ride-along that parseClip / buildFallbackClip set.
-// Falls back to direct fields (pre-pivot fallback shape) and to a flat
-// `content` string (legacy audio-novel shape) so this helper degrades
-// gracefully on artifacts produced by older code paths.
+// Render a clip's spoken/action content for LLM compression. Reads structured
+// beat fields directly from the scene; falls back to the older `_beats`
+// ride-along (legacy artifacts from pre-flatten runs) and finally to the flat
+// `content` string so this helper degrades gracefully across pipeline versions.
 function clipBody(c) {
   const beats = c._beats || c;
   const parts = [];

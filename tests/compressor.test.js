@@ -125,7 +125,23 @@ describe('compressor', () => {
     assert.equal(formatGlobalSummary(summary), summary);
   });
 
-  test('buildCompressPrompt prefers _beats over direct fields', async () => {
+  test('buildCompressPrompt reads structured beats from the scene itself', async () => {
+    const { buildCompressPrompt } = await import('../src/compressor.js');
+    const scene = {
+      content: 'x',
+      setting: '夜雨',
+      action: '推门',
+      dialogue: '[character:陆衡]\n三年了',
+      hook: '钩点',
+    };
+    const prompt = buildCompressPrompt([scene], 'cn');
+    assert.ok(prompt.includes('场景：夜雨'), 'prompt missing setting');
+    assert.ok(prompt.includes('动作：推门'), 'prompt missing action');
+    assert.ok(prompt.includes('[character:陆衡]'), 'prompt missing dialogue');
+    assert.ok(prompt.includes('钩点：钩点'), 'prompt missing hook');
+  });
+
+  test('buildCompressPrompt still consults legacy _beats ride-along (back-compat)', async () => {
     const { buildCompressPrompt } = await import('../src/compressor.js');
     const sceneWithBeats = { content: 'x' };
     Object.defineProperty(sceneWithBeats, '_beats', {
@@ -133,9 +149,7 @@ describe('compressor', () => {
       enumerable: false,
     });
     const prompt = buildCompressPrompt([sceneWithBeats], 'cn');
-    assert.ok(prompt.includes('场景：夜雨'), 'prompt missing setting from _beats');
-    assert.ok(prompt.includes('动作：推门'), 'prompt missing action from _beats');
-    assert.ok(prompt.includes('[character:陆衡]'), 'prompt missing dialogue from _beats');
-    assert.ok(prompt.includes('钩点：钩点'), 'prompt missing hook from _beats');
+    assert.ok(prompt.includes('场景：夜雨'));
+    assert.ok(prompt.includes('动作：推门'));
   });
 });

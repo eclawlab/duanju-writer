@@ -41,9 +41,34 @@ function withLock(filePath, fn) {
 
 function readJobs(filePath) {
   if (!existsSync(filePath)) return [];
+  let raw;
   try {
-    return JSON.parse(readFileSync(filePath, 'utf8'));
-  } catch { return []; }
+    raw = readFileSync(filePath, 'utf8');
+  } catch (err) {
+    // I/O failure (permissions, disk error). Surface and abort — proceeding
+    // with `[]` would let the next writeJobs overwrite the on-disk file with
+    // empty, irrecoverably destroying every job record.
+    throw new Error(`Failed to read ${filePath}: ${err.message}`);
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new Error(`expected array, got ${typeof parsed}`);
+    }
+    return parsed;
+  } catch (parseErr) {
+    // Corrupt jobs.json. Earlier this returned [] silently — and the very
+    // next writeJobs would overwrite the bad file with [], permanently
+    // erasing every job record. Instead, rename the bad file aside so a
+    // human can recover it, log loudly, and fail the call.
+    const stamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15);
+    const backup = `${filePath}.corrupt-${stamp}`;
+    try { renameSync(filePath, backup); } catch {}
+    throw new Error(
+      `${filePath} is corrupt (${parseErr.message}). Renamed to ${backup}. ` +
+      `Inspect or delete that file before continuing.`
+    );
+  }
 }
 
 function writeJobs(filePath, jobs) {
@@ -80,14 +105,15 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         referenceEvent: options.referenceEvent ?? null,
       },
     };
-    // Persist the job record FIRST. If a kill lands between mkdirSync and
-    // writeJobs, an orphan directory accumulates with no entry in jobs.json —
-    // not a correctness bug (claim* only operates on the json) but a slow
-    // filesystem leak. The worker creates the directory lazily on first
-    // artifact write anyway.
+    // Create the artifact directory BEFORE writing the job record. The first
+    // artifact write (saveArtifact in worker.js) does not mkdir; if jobs.json
+    // claimed a job whose dir was missing, it would throw ENOENT and the
+    // worker would burn its retry budget on an unfixable error. A kill
+    // between mkdirSync and writeJobs leaves an orphan directory with no
+    // record — a slow FS leak, but harmless for correctness.
+    mkdirSync(join(jobsDir, job.id), { recursive: true });
     jobs.push(job);
     writeJobs(filePath, jobs);
-    mkdirSync(join(jobsDir, job.id), { recursive: true });
     return job;
   });
 }

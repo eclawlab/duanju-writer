@@ -100,7 +100,9 @@ describe('pidfile', () => {
     const signals = [];
     const result = cleanupStaleIn(f, {
       isAlive: () => true,
-      commandFor: (pid) => (pid === 111 ? 'node /usr/local/bin/duanju-writer start' : 'claude -p'),
+      commandFor: (pid) => (pid === 111
+        ? 'node /usr/local/bin/duanju-writer start'
+        : 'claude -p --output-format json --no-session-persistence'),
       sendSignal: (pid, sig) => { signals.push([pid, sig]); },
       graceMs: 0,
     });
@@ -142,7 +144,7 @@ describe('pidfile', () => {
         aliveCalls++;
         return aliveCalls === 1;
       },
-      commandFor: () => 'claude -p',
+      commandFor: () => 'claude -p --output-format json --no-session-persistence',
       sendSignal: (pid, sig) => { signals.push([pid, sig]); },
       graceMs: 0,
     });

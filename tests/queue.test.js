@@ -87,11 +87,15 @@ describe('queue', () => {
     assert.deepEqual(jobs, []);
   });
 
-  test('listJobsFrom returns empty array for invalid JSON', async () => {
+  test('listJobsFrom throws and renames a corrupt jobs.json aside (so writeJobs cannot clobber it)', async () => {
     const { listJobsFrom } = await import('../src/queue.js');
+    const { existsSync, readdirSync } = await import('node:fs');
     writeFileSync(JOBS_FILE, 'bad json', 'utf8');
-    const jobs = listJobsFrom(JOBS_FILE);
-    assert.deepEqual(jobs, []);
+    assert.throws(() => listJobsFrom(JOBS_FILE), /is corrupt.*Renamed to/);
+    // Original path is moved aside, not silently replaced with [].
+    assert.equal(existsSync(JOBS_FILE), false);
+    const stragglers = readdirSync(TEST_DIR).filter(n => n.startsWith('jobs.json.corrupt-'));
+    assert.equal(stragglers.length, 1, 'expected exactly one corrupt-backup file');
   });
 
   test('listJobsFrom returns all jobs', async () => {

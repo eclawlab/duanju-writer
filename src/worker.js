@@ -250,12 +250,18 @@ async function processJob(jobId, options = {}) {
       if (prior && prior.storyId) {
         log(`Variant ${v.key} (${v.label}) already uploaded: ${prior.storyId}`);
         storyIds.push(prior.storyId);
-        // Populate sampleStory from cached story so the post-loop addEntry
-        // has metadata to record (otherwise a job that fully completes via
-        // resume would skip history entirely).
-        if (!sampleStory) {
-          const cachedStory = loadArtifact(jobId, `story.${v.key}.json`);
-          if (cachedStory) sampleStory = cachedStory;
+        // Populate sampleStory AND fold the cached variant's clip/word totals
+        // into the summary counters — earlier the resume path silently dropped
+        // them, so a job that completed via multiple runOnce calls reported
+        // totals only for the variants generated in the final run.
+        const cachedStory = loadArtifact(jobId, `story.${v.key}.json`);
+        if (cachedStory) {
+          if (!sampleStory) sampleStory = cachedStory;
+          const vClips = (cachedStory.episodes || []).reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
+          const vWords = (cachedStory.episodes || []).reduce(
+            (sum, ep) => sum + (ep.scenes || []).reduce((s, sc) => s + countWords(sc.content), 0), 0);
+          totalClipsAcrossVariants += vClips;
+          totalWordsAcrossVariants += vWords;
         }
         continue;
       }
@@ -305,14 +311,26 @@ async function processJob(jobId, options = {}) {
         if (variantPlanSucceeded) saveArtifact(jobId, `plan.${v.key}.json`, variantPlan);
       }
 
-      // Fork the front vector store so variants don't cross-contaminate retrieval
+      // Fork the front vector store so variants don't cross-contaminate retrieval.
+      // Re-save the in-memory front store right before the fork: an earlier save
+      // may have failed (and only logged), in which case the on-disk file is
+      // stale and copyFileSync would clone the stale snapshot into the variant
+      // store with no warning.
       const variantStorePath = join(JOBS_DIR, jobId, `vectorstore.${v.key}.json`);
-      if (!existsSync(variantStorePath) && existsSync(frontStorePath)) {
+      if (!existsSync(variantStorePath)) {
         try {
-          copyFileSync(frontStorePath, variantStorePath);
+          frontStore.save();
         } catch (err) {
-          log(`[variant ${v.key}] vector store fork failed: ${err.message} — variant will start with empty retrieval`);
-          wlog('variant_store_fork_failed', { variant: v.key, error: err.message });
+          log(`[variant ${v.key}] front store re-save before fork failed: ${err.message} — fork may use a stale snapshot`);
+          wlog('front_store_resave_failed', { variant: v.key, error: err.message });
+        }
+        if (existsSync(frontStorePath)) {
+          try {
+            copyFileSync(frontStorePath, variantStorePath);
+          } catch (err) {
+            log(`[variant ${v.key}] vector store fork failed: ${err.message} — variant will start with empty retrieval`);
+            wlog('variant_store_fork_failed', { variant: v.key, error: err.message });
+          }
         }
       }
       const variantStore = createStore(variantStorePath);

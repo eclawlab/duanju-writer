@@ -45,8 +45,7 @@ function installShutdown(services) {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-async function startupCleanup() {
-  const { resetJobs } = await import('../src/queue.js');
+async function startupCleanup({ fresh = false } = {}) {
   const result = cleanupStale();
   if (result.killed.length > 0) {
     console.log(`Terminated ${result.killed.length} orphan process(es) from prior run: ${result.killed.join(', ')}`);
@@ -54,16 +53,37 @@ async function startupCleanup() {
   if (result.skipped.length > 0) {
     console.log(`Skipped ${result.skipped.length} stale PID(s) that no longer match expected signature: ${result.skipped.join(', ')}`);
   }
-  const { priorCount } = resetJobs();
-  if (priorCount > 0) {
-    console.log(`Fresh start — cleared ${priorCount} prior job(s) and their artifacts.`);
+  if (fresh) {
+    // Explicit opt-in wipe. Without --fresh the daemon resumes from per-job
+    // artifacts (front.progress.json, story.{key}.progress.json, etc.) — the
+    // whole point of those files is that a daemon restart should NOT lose
+    // partially-generated dramas (30+ minutes of LLM time per job).
+    const { resetJobs } = await import('../src/queue.js');
+    const { priorCount } = resetJobs();
+    if (priorCount > 0) {
+      console.log(`Fresh start — cleared ${priorCount} prior job(s) and their artifacts.`);
+    }
+  } else {
+    const { listJobs } = await import('../src/queue.js');
+    const jobs = listJobs();
+    const inFlight = jobs.filter(j => ['collecting', 'writing', 'uploading'].includes(j.status));
+    const pending = jobs.filter(j => j.status === 'pending');
+    if (inFlight.length > 0 || pending.length > 0) {
+      console.log(`Resuming with ${inFlight.length} in-flight + ${pending.length} pending job(s). Pass --fresh to discard them.`);
+    }
   }
   registerParent(process.pid);
 }
 
+function hasFlag(argv, name) {
+  return argv.includes(name);
+}
+
+const fresh = hasFlag(args, '--fresh');
+
 switch (command) {
   case 'start': {
-    await startupCleanup();
+    await startupCleanup({ fresh });
     const { startScheduler } = await import('../src/scheduler.js');
     const { startWorker } = await import('../src/worker.js');
     const scheduler = startScheduler();
@@ -72,14 +92,14 @@ switch (command) {
     break;
   }
   case 'scheduler': {
-    await startupCleanup();
+    await startupCleanup({ fresh });
     const { startScheduler } = await import('../src/scheduler.js');
     const scheduler = startScheduler();
     installShutdown([scheduler]);
     break;
   }
   case 'worker': {
-    await startupCleanup();
+    await startupCleanup({ fresh });
     const { startWorker } = await import('../src/worker.js');
     const worker = startWorker();
     installShutdown([worker]);

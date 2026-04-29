@@ -537,31 +537,27 @@ export async function parseClip(raw) {
     data.durationSec = 12;
   }
 
-  // Compose scene-shaped output. Beats survive on a non-enumerable _beats
-  // ride-along that the compressor and consistency check consult; nothing
-  // else in the pipeline reads beat fields directly.
+  // Compose scene-shaped output with structured beats kept enumerable so the
+  // uploader carries them through to the server (mini-drama TTS / player
+  // pipelines consume the per-beat fields directly).
   const content = composeScene({
     setting: data.setting,
     action: data.action,
     dialogue: data.dialogue,
     hook: data.hook,
   });
-  const scene = { content, choices: [], conclusion: composedConclusion };
-  Object.defineProperty(scene, '_beats', {
-    value: {
-      clipIndex: data.clipIndex,
-      setting: data.setting,
-      action: data.action,
-      dialogue: data.dialogue,
-      hook: data.hook,
-      durationSec: data.durationSec,
-      isConclusion: !!data.isConclusion,
-    },
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
-  return scene;
+  return {
+    clipIndex: data.clipIndex,
+    content,
+    setting: data.setting,
+    action: data.action,
+    dialogue: data.dialogue,
+    hook: data.hook,
+    durationSec: data.durationSec,
+    isConclusion: !!data.isConclusion,
+    choices: [],
+    conclusion: composedConclusion,
+  };
 }
 
 export async function generateClip(ctx) {
@@ -624,14 +620,18 @@ export function buildFallbackClip(ctx = {}) {
       ending: ENDING_LABEL_TO_ENUM[safeEnding],
     };
   }
-  const scene = { content, choices: [], conclusion };
-  Object.defineProperty(scene, '_beats', {
-    value: { clipIndex, setting, action, dialogue, hook, durationSec, isConclusion: !!isConclusion },
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
-  return scene;
+  return {
+    clipIndex,
+    content,
+    setting,
+    action,
+    dialogue,
+    hook,
+    durationSec,
+    isConclusion: !!isConclusion,
+    choices: [],
+    conclusion,
+  };
 }
 
 // ─── Style selection ─────────────────────────────────────────────────────────
@@ -984,13 +984,6 @@ export async function generateDrama(materials, options = {}) {
         }
       }
 
-      // Derived "view" string: structured fields concatenated for downstream
-      // consumers (vectorstore retrieval, log word counts) that historically
-      // read scene.content. The structured fields remain authoritative for
-      // upload; this is just a convenience join.
-      scene.content = [scene.setting, scene.action, scene.dialogue, scene.hook]
-        .filter(Boolean).join('\n\n');
-
       // Index clip in vector store for future similarity retrieval
       if (options.vectorStore) {
         try {
@@ -1107,7 +1100,12 @@ export async function generateDrama(materials, options = {}) {
       },
     };
 
-    // For ending episodes, ensure the last scene has a conclusion
+    // For ending episodes, ensure the last scene has a conclusion. The
+    // injected conclusion must use the server-canonical enum values (type
+    // 'STORY_END', ending GOOD/NEUTRAL/SPECIAL) — same shape parseClip and
+    // buildFallbackClip already emit. Earlier code emitted 'DRAMA_END' and a
+    // raw CN ending label here, which the server's conclusions table accepts
+    // unvalidated, leaving downstream consumers reading non-enum values.
     if (ep.isEnding) {
       const lastClip = episode.scenes[episode.scenes.length - 1];
       const fallbackEnding = VALID_ENDINGS.includes(ep.ending) ? ep.ending : '爽爆';
@@ -1116,8 +1114,8 @@ export async function generateDrama(materials, options = {}) {
         lastClip.conclusion = {
           title: ep.title,
           overview: ep.clipPlan[ep.clipPlan.length - 1]?.summary || ep.title,
-          type: 'DRAMA_END',
-          ending: fallbackEnding,
+          type: 'STORY_END',
+          ending: ENDING_LABEL_TO_ENUM[fallbackEnding],
         };
         lastClip.isConclusion = true;
       }

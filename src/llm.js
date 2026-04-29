@@ -218,9 +218,61 @@ export function setModelOverride(providerName) {
 }
 export function getModelOverride() { return _modelOverride; }
 
+// Transient errors recoverable by simple retry: HTTP 5xx, request timeouts,
+// connection resets, the Claude CLI bumping into a transient backend issue.
+// Anything that looks structurally wrong (4xx, JSON-parse errors, "Provider
+// not found") is NOT retried — those need human or upstream attention.
+export function isTransientLLMError(err) {
+  const msg = err?.message || '';
+  if (/timed out/i.test(msg)) return true;
+  if (/HTTP 5\d\d/.test(msg)) return true;
+  if (/HTTP 429/.test(msg)) return true;
+  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND/i.test(msg)) return true;
+  if (err?.code && /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND/i.test(err.code)) return true;
+  if (/Claude CLI failed.*overloaded/i.test(msg)) return true;
+  return false;
+}
+
+const LLM_MAX_RETRIES = 3;
+const LLM_RETRY_BASE_MS = 2_000;
+
+function defaultSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/**
+ * Retry a thunk against transient LLM errors with exponential backoff + jitter.
+ * Exported for direct unit testing — callLLM uses this with the default
+ * sleep/baseMs/maxRetries.
+ *
+ * @param {() => Promise<any>} fn
+ * @param {{ maxRetries?: number, baseMs?: number, sleep?: (ms: number) => Promise<void>, isTransient?: (err: any) => boolean }} [opts]
+ */
+export async function retryTransient(fn, opts = {}) {
+  const maxRetries = opts.maxRetries ?? LLM_MAX_RETRIES;
+  const baseMs = opts.baseMs ?? LLM_RETRY_BASE_MS;
+  const sleep = opts.sleep || defaultSleep;
+  const isTransient = opts.isTransient || isTransientLLMError;
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxRetries || !isTransient(err)) throw err;
+      const delay = baseMs * 2 ** attempt + Math.floor(Math.random() * 1000);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Calls the LLM for a given prompt and role, using config-defined providers.
  * Provider instances are cached by provider name.
+ *
+ * Wraps the provider call in a bounded retry for transient errors so a
+ * single 503 or network blip doesn't blow up the entire job (which would
+ * trigger the much heavier job-level retry, losing in-progress LLM state).
+ *
  * @param {string} prompt
  * @param {string} role
  * @returns {Promise<string>}
@@ -253,11 +305,20 @@ export async function callLLM(prompt, role) {
   }
 
   const provider = providerCache.get(providerName);
-  const start = Date.now();
-  const result = await provider.call(prompt);
-  stats.totalMs += Date.now() - start;
-  stats.calls += 1;
-  return result;
+
+  return retryTransient(async () => {
+    const start = Date.now();
+    try {
+      const result = await provider.call(prompt);
+      stats.totalMs += Date.now() - start;
+      stats.calls += 1;
+      return result;
+    } catch (err) {
+      stats.totalMs += Date.now() - start;
+      stats.calls += 1;
+      throw err;
+    }
+  });
 }
 
 /**

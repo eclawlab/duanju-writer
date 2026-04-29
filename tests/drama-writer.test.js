@@ -232,8 +232,8 @@ describe('writer', () => {
   test('parseClip accepts a valid clip', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
     const result = await parseClip(JSON.stringify(validClip()));
-    assert.equal(result._beats.clipIndex, 0);
-    assert.ok(result._beats.hook && result._beats.hook.length > 0);
+    assert.equal(result.clipIndex, 0);
+    assert.ok(result.hook && result.hook.length > 0);
   });
 
   test('parseClip rejects missing hook on non-conclusion clip', async () => {
@@ -278,7 +278,7 @@ describe('writer', () => {
     c.hook = '';
     c.conclusion = { title: '结局', overview: '...', type: 'DRAMA_END', ending: '爽爆' };
     const result = await parseClip(JSON.stringify(c));
-    assert.equal(result._beats.isConclusion, true);
+    assert.equal(result.isConclusion, true);
     assert.equal(result.conclusion.type, 'STORY_END');
   });
 
@@ -296,15 +296,15 @@ describe('writer', () => {
     const bad = validClip();
     bad.dialogue = '[character:陆衡|voice:alloy]\n来了\n[player]\n好的';
     const result = await parseClip(JSON.stringify(bad));
-    assert.ok(!result._beats.dialogue.includes('|voice:'));
-    assert.ok(!result._beats.dialogue.includes('[player]'));
+    assert.ok(!result.dialogue.includes('|voice:'));
+    assert.ok(!result.dialogue.includes('[player]'));
   });
 
   test('parseClip strips markdown code fences', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
     const wrapped = '```json\n' + JSON.stringify(validClip()) + '\n```';
     const result = await parseClip(wrapped);
-    assert.equal(result._beats.clipIndex, 0);
+    assert.equal(result.clipIndex, 0);
   });
 
   // ─── Retry and fallback tests ──────────────────────────────────────────────
@@ -326,16 +326,15 @@ describe('writer', () => {
   });
 
   describe('buildFallbackClip — scene shape', () => {
-    test('non-conclusion fallback returns scene shape', async () => {
+    test('non-conclusion fallback returns scene shape with enumerable beats', async () => {
       const { buildFallbackClip } = await import('../src/drama-writer.js');
       const scene = buildFallbackClip({ clipIndex: 5, summary: '陆衡推门', isConclusion: false });
       assert.equal(typeof scene.content, 'string');
       assert.ok(scene.content.length > 0);
       assert.deepEqual(scene.choices, []);
       assert.equal(scene.conclusion, null);
-      const keys = Object.keys(scene);
-      assert.ok(!keys.includes('setting'), 'fallback leaks setting');
-      assert.ok(!keys.includes('hook'), 'fallback leaks hook');
+      assert.equal(typeof scene.setting, 'string');
+      assert.equal(typeof scene.hook, 'string');
     });
 
     test('conclusion fallback maps 爽爆 to GOOD and type STORY_END', async () => {
@@ -345,19 +344,25 @@ describe('writer', () => {
       assert.equal(scene.conclusion.ending, 'GOOD');
     });
 
-    test('fallback _beats survives on non-enumerable property', async () => {
+    test('fallback exposes structured beats on the scene itself', async () => {
       const { buildFallbackClip } = await import('../src/drama-writer.js');
       const scene = buildFallbackClip({ clipIndex: 3, summary: 'sx' });
-      assert.equal(scene._beats.clipIndex, 3);
-      assert.ok(typeof scene._beats.setting === 'string');
-      assert.ok(typeof scene._beats.action === 'string');
-      assert.ok(typeof scene._beats.dialogue === 'string');
+      assert.equal(scene.clipIndex, 3);
+      assert.ok(typeof scene.setting === 'string');
+      assert.ok(typeof scene.action === 'string');
+      assert.ok(typeof scene.dialogue === 'string');
+      assert.equal(typeof scene.durationSec, 'number');
     });
 
-    test('fallback JSON.stringify does not leak _beats', async () => {
+    test('fallback JSON.stringify carries beats through to the wire', async () => {
       const { buildFallbackClip } = await import('../src/drama-writer.js');
       const scene = buildFallbackClip({ clipIndex: 0, summary: 'x' });
-      assert.ok(!JSON.stringify(scene).includes('_beats'));
+      const json = JSON.stringify(scene);
+      assert.ok(json.includes('"setting"'), 'setting missing from wire');
+      assert.ok(json.includes('"action"'), 'action missing from wire');
+      assert.ok(json.includes('"dialogue"'), 'dialogue missing from wire');
+      assert.ok(json.includes('"durationSec"'), 'durationSec missing from wire');
+      assert.ok(!json.includes('"_beats"'), '_beats should not appear at all');
     });
   });
 
@@ -559,7 +564,7 @@ describe('writer', () => {
       });
     }
 
-    test('returns { content, choices, conclusion } shape (no top-level beats)', async () => {
+    test('returns { content, choices, conclusion } shape with enumerable beats', async () => {
       const { parseClip } = await import('../src/drama-writer.js');
       const scene = await parseClip(rawClip());
       assert.equal(typeof scene.content, 'string');
@@ -567,32 +572,33 @@ describe('writer', () => {
       assert.deepEqual(scene.choices, []);
       assert.equal(scene.conclusion, null);
       const enumerableKeys = Object.keys(scene);
-      assert.ok(!enumerableKeys.includes('setting'), `setting should not be enumerable, got keys: ${enumerableKeys}`);
-      assert.ok(!enumerableKeys.includes('action'), 'action should not be enumerable');
-      assert.ok(!enumerableKeys.includes('dialogue'), 'dialogue should not be enumerable');
-      assert.ok(!enumerableKeys.includes('hook'), 'hook should not be enumerable');
+      assert.ok(enumerableKeys.includes('setting'), `setting should be enumerable, got keys: ${enumerableKeys}`);
+      assert.ok(enumerableKeys.includes('action'), 'action should be enumerable');
+      assert.ok(enumerableKeys.includes('dialogue'), 'dialogue should be enumerable');
+      assert.ok(enumerableKeys.includes('hook'), 'hook should be enumerable');
     });
 
-    test('JSON.stringify(scene) does not leak _beats or beat fields', async () => {
+    test('JSON.stringify(scene) carries beats through to the wire', async () => {
       const { parseClip } = await import('../src/drama-writer.js');
       const scene = await parseClip(rawClip());
       const json = JSON.stringify(scene);
-      assert.ok(!json.includes('"setting"'), `setting leaked into JSON: ${json}`);
-      assert.ok(!json.includes('"_beats"'), `_beats leaked into JSON: ${json}`);
-      assert.ok(!json.includes('"hook"'), `hook leaked into JSON: ${json}`);
-      assert.ok(!json.includes('"action"'), `action leaked into JSON: ${json}`);
+      assert.ok(json.includes('"setting"'), 'setting missing from wire');
+      assert.ok(json.includes('"hook"'), 'hook missing from wire');
+      assert.ok(json.includes('"action"'), 'action missing from wire');
+      assert.ok(json.includes('"durationSec"'), 'durationSec missing from wire');
+      assert.ok(!json.includes('"_beats"'), '_beats ride-along should not appear');
     });
 
-    test('_beats ride-along contains the original four beats plus durationSec/clipIndex/isConclusion', async () => {
+    test('beats are exposed on the scene object alongside content', async () => {
       const { parseClip } = await import('../src/drama-writer.js');
       const scene = await parseClip(rawClip());
-      assert.equal(scene._beats.setting, '夜雨破庙');
-      assert.equal(scene._beats.action, '陆衡踉跄推门');
-      assert.equal(scene._beats.dialogue, '[character:陆衡]\n三年了');
-      assert.equal(scene._beats.hook, '摩托声渐近');
-      assert.equal(scene._beats.durationSec, 12);
-      assert.equal(scene._beats.clipIndex, 0);
-      assert.equal(scene._beats.isConclusion, false);
+      assert.equal(scene.setting, '夜雨破庙');
+      assert.equal(scene.action, '陆衡踉跄推门');
+      assert.equal(scene.dialogue, '[character:陆衡]\n三年了');
+      assert.equal(scene.hook, '摩托声渐近');
+      assert.equal(scene.durationSec, 12);
+      assert.equal(scene.clipIndex, 0);
+      assert.equal(scene.isConclusion, false);
     });
 
     test('content is composed from beats per the composition rule', async () => {

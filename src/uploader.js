@@ -6,6 +6,33 @@ import { loadConfig } from './config.js';
 // job never returns. Configurable via config.uploadTimeout.
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60_000;
 
+// Whitelisted scene fields sent to the server. Drops writer-internal flags
+// (clipIndex, isConclusion) the server doesn't need (sort_order and the
+// conclusion table cover those).
+function pickSceneFields(scene) {
+  const out = {
+    content: scene.content,
+    choices: scene.choices || [],
+    conclusion: scene.conclusion || null,
+  };
+  if (Number.isFinite(scene.durationSec)) out.durationSec = scene.durationSec;
+  if (scene.setting)  out.setting  = scene.setting;
+  if (scene.action)   out.action   = scene.action;
+  if (scene.dialogue) out.dialogue = scene.dialogue;
+  if (scene.hook)     out.hook     = scene.hook;
+  if (scene.sceneType) out.sceneType = scene.sceneType;
+  return out;
+}
+
+function pickCharacterFields(c) {
+  if (!c?.name) return null;
+  const out = { name: c.name };
+  if (c.role)        out.role        = c.role;
+  if (c.description) out.description = c.description;
+  if (c.arc != null) out.arc         = c.arc;
+  return out;
+}
+
 export function buildRequest(drama, config, variationOptions = {}) {
   const url = `${config.autostoryUrl}/api/ai/stories`;
 
@@ -15,18 +42,33 @@ export function buildRequest(drama, config, variationOptions = {}) {
   // .filter(Boolean) drops empty/missing values without throwing.
   const genres = [drama.genre, ...(drama.genres || [])].filter(Boolean);
   const tags   = [drama.trope, ...(drama.tags   || [])].filter(Boolean);
+  const characters = (drama.characters || []).map(pickCharacterFields).filter(Boolean);
 
   const body = {
     title: drama.title,
     synopsis: drama.synopsis,
     genres,
     tags,
-    episodes: (drama.episodes || []).map(ep => ({
-      title: ep.title,
-      episodeIndex: ep.episodeIndex,
-      scenes: ep.scenes || [],
-    })),
+    episodes: (drama.episodes || []).map(ep => {
+      const epOut = {
+        title: ep.title,
+        episodeIndex: ep.episodeIndex,
+        scenes: (ep.scenes || []).map(pickSceneFields),
+      };
+      // isEnding/ending are dedicated columns on the server's episodes table,
+      // distinct from the per-scene conclusion record (the latter encodes the
+      // ending enum, the former is a raw CN label kept for analytics).
+      if (ep.isEnding) epOut.isEnding = true;
+      if (ep.ending)   epOut.ending   = ep.ending;
+      return epOut;
+    }),
   };
+
+  if (drama.lang)             body.lang         = drama.lang;
+  if (drama.trope)            body.trope        = drama.trope;
+  if (drama.genre)            body.primaryGenre = drama.genre;
+  if (drama.fandom)           body.fandom       = drama.fandom;
+  if (characters.length)      body.characters   = characters;
 
   if (variationOptions.variationGroupId) body.variationGroupId = variationOptions.variationGroupId;
   if (variationOptions.variationLabel)   body.variationLabel   = variationOptions.variationLabel;

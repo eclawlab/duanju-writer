@@ -223,31 +223,46 @@ describe('uploader', () => {
       assert.equal(body.genre, undefined);
     });
 
-    test('trope is pushed into tags[] on the wire', async () => {
+    test('trope appears in both top-level field and as the first tag', async () => {
+      // Top-level `trope` lets the server query/index by trope without parsing
+      // the tags JSON column; prepending into tags[] preserves the legacy
+      // surface for any consumer that still reads tags only.
       const { buildRequest } = await import('../src/uploader.js');
       const { options } = buildRequest(fullDrama(), { autostoryUrl: 'http://x', aiApiKey: 'k' });
       const body = JSON.parse(options.body);
       assert.deepEqual(body.tags, ['战神归来', '打脸']);
-      assert.equal(body.trope, undefined);
+      assert.equal(body.trope, '战神归来');
     });
 
-    test('wire payload omits format, lang, characters', async () => {
+    test('wire payload still omits the deprecated `format` discriminator', async () => {
       const { buildRequest } = await import('../src/uploader.js');
       const { options } = buildRequest(fullDrama(), { autostoryUrl: 'http://x', aiApiKey: 'k' });
       const body = JSON.parse(options.body);
       assert.equal(body.format, undefined);
-      assert.equal(body.lang, undefined);
-      assert.equal(body.characters, undefined);
     });
 
-    test('wire payload omits episode.isEnding and episode.ending', async () => {
+    test('wire payload includes lang, primaryGenre, trope, and characters[]', async () => {
       const { buildRequest } = await import('../src/uploader.js');
       const { options } = buildRequest(fullDrama(), { autostoryUrl: 'http://x', aiApiKey: 'k' });
       const body = JSON.parse(options.body);
-      for (const ep of body.episodes) {
-        assert.equal(ep.isEnding, undefined, 'isEnding leaked');
-        assert.equal(ep.ending, undefined, 'ending leaked');
-      }
+      assert.equal(body.lang, 'cn');
+      assert.equal(body.primaryGenre, '都市');
+      assert.equal(body.trope, '战神归来');
+      assert.equal(Array.isArray(body.characters), true);
+      assert.equal(body.characters[0].name, '陆衡');
+      assert.equal(body.characters[0].role, 'protagonist');
+    });
+
+    test('wire payload carries episode.isEnding and episode.ending', async () => {
+      const { buildRequest } = await import('../src/uploader.js');
+      const { options } = buildRequest(fullDrama(), { autostoryUrl: 'http://x', aiApiKey: 'k' });
+      const body = JSON.parse(options.body);
+      // Front episode: not an ending — uploader omits the falsy flag.
+      assert.equal(body.episodes[0].isEnding, undefined);
+      assert.equal(body.episodes[0].ending, undefined);
+      // Final episode: ending=true with raw CN label preserved for analytics.
+      assert.equal(body.episodes[1].isEnding, true);
+      assert.equal(body.episodes[1].ending, '爽爆');
     });
 
     test('episode wire shape carries title, episodeIndex, scenes', async () => {

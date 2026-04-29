@@ -1,16 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Test helper: build a scene-shaped object whose _beats matches what
-// parseClip / buildFallbackClip would produce. Non-enumerable so the
-// shape mirrors production exactly.
+// Test helper: build a scene-shaped object whose top-level fields match
+// what parseClip / buildFallbackClip produce — beats are now enumerable on
+// the scene itself so the uploader can carry them through to the server.
 function makeScene({ clipIndex, hook, isConclusion = false }) {
-  const scene = { content: 'x', choices: [], conclusion: null };
-  Object.defineProperty(scene, '_beats', {
-    value: { clipIndex, hook, isConclusion },
-    enumerable: false,
-  });
-  return scene;
+  return { content: 'x', choices: [], conclusion: null, clipIndex, hook, isConclusion };
 }
 
 describe('consistency', () => {
