@@ -133,6 +133,28 @@ export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '',
 
 export const VALID_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
 
+export const ENDING_LABEL_TO_ENUM = {
+  '爽爆':   'GOOD',     // unambiguous win
+  '苦尽甘来': 'NEUTRAL',  // bittersweet-but-positive
+  '反转':   'SPECIAL',  // final twist outside the standard taxonomy
+};
+
+/**
+ * Compose four-beat clip data into a single block-format `content` string.
+ * Each non-empty beat becomes a [narrator] block (dialogue is inserted verbatim
+ * because the LLM emits it pre-formatted with [narrator]/[character:Name] tags).
+ * Blocks are separated by a blank line. Throws if all beats are empty.
+ */
+export function composeScene({ setting, action, dialogue, hook }) {
+  const blocks = [];
+  if (setting && setting.trim()) blocks.push(`[narrator]\n${setting}`);
+  if (action  && action.trim())  blocks.push(`[narrator]\n${action}`);
+  if (dialogue && dialogue.trim()) blocks.push(dialogue);
+  if (hook    && hook.trim())    blocks.push(`[narrator]\n${hook}`);
+  if (blocks.length === 0) throw new Error('composeScene: empty content (all beats were empty)');
+  return blocks.join('\n\n');
+}
+
 export async function parseOutline(raw) {
   const data = await parseJsonWithRepair(raw, 'outline');
 

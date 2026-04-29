@@ -467,4 +467,65 @@ describe('writer', () => {
     const { VALID_TAIL_ENDINGS } = await import('../src/drama-writer.js');
     assert.deepEqual([...VALID_TAIL_ENDINGS].sort(), ['反转', '爽爆', '苦尽甘来']);
   });
+
+  describe('composeScene', () => {
+    test('joins setting / action / dialogue / hook into block-format content', async () => {
+      const { composeScene } = await import('../src/drama-writer.js');
+      const content = composeScene({
+        setting: '夜雨破庙',
+        action: '陆衡踉跄推门',
+        dialogue: '[narrator]\n气氛凝重\n[character:陆衡]\n三年了',
+        hook: '身后传来摩托引擎声',
+      });
+      assert.equal(
+        content,
+        '[narrator]\n夜雨破庙\n\n[narrator]\n陆衡踉跄推门\n\n[narrator]\n气氛凝重\n[character:陆衡]\n三年了\n\n[narrator]\n身后传来摩托引擎声'
+      );
+    });
+
+    test('omits the setting block when setting is empty', async () => {
+      const { composeScene } = await import('../src/drama-writer.js');
+      const content = composeScene({
+        setting: '',
+        action: '陆衡推门',
+        dialogue: '[narrator]\n气氛凝重',
+        hook: '钩点',
+      });
+      assert.equal(content, '[narrator]\n陆衡推门\n\n[narrator]\n气氛凝重\n\n[narrator]\n钩点');
+    });
+
+    test('omits the hook block when hook is empty (conclusion clip)', async () => {
+      const { composeScene } = await import('../src/drama-writer.js');
+      const content = composeScene({
+        setting: '终幕',
+        action: '灯熄',
+        dialogue: '[character:陆衡]\n这局我赢',
+        hook: '',
+      });
+      assert.equal(content, '[narrator]\n终幕\n\n[narrator]\n灯熄\n\n[character:陆衡]\n这局我赢');
+    });
+
+    test('throws when composition would produce empty content', async () => {
+      const { composeScene } = await import('../src/drama-writer.js');
+      assert.throws(
+        () => composeScene({ setting: '', action: '', dialogue: '', hook: '' }),
+        /empty content/
+      );
+    });
+  });
+
+  describe('ENDING_LABEL_TO_ENUM', () => {
+    test('maps 爽爆 to GOOD', async () => {
+      const { ENDING_LABEL_TO_ENUM } = await import('../src/drama-writer.js');
+      assert.equal(ENDING_LABEL_TO_ENUM['爽爆'], 'GOOD');
+    });
+    test('maps 苦尽甘来 to NEUTRAL', async () => {
+      const { ENDING_LABEL_TO_ENUM } = await import('../src/drama-writer.js');
+      assert.equal(ENDING_LABEL_TO_ENUM['苦尽甘来'], 'NEUTRAL');
+    });
+    test('maps 反转 to SPECIAL', async () => {
+      const { ENDING_LABEL_TO_ENUM } = await import('../src/drama-writer.js');
+      assert.equal(ENDING_LABEL_TO_ENUM['反转'], 'SPECIAL');
+    });
+  });
 });
