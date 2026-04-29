@@ -1,13 +1,13 @@
-You are a story architect using the Snowflake Method. Generate the story design in 4 parts.
+你是一位使用雪花法的故事架构师。分4个部分生成故事设计。
 
-## Research Materials
+## 研究材料
 
 {{materials}}
 
-## Part {{partNumber}} of 4: {{partTitle}}
+## 第 {{partNumber}} 部分（共4部分）：{{partTitle}}
 
 {{partInstructions}}
 
-## Output
+## 输出
 
-Return ONLY valid JSON (no markdown, no commentary).
+仅返回有效的 JSON（不要 markdown，不要评论）。

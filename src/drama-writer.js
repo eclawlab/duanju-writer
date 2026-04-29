@@ -20,9 +20,6 @@ import { loadConfig } from './config.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const OUTLINE_PATH = join(__dirname, '..', 'prompts', 'outline.md');
-const OUTLINE_PATH_CN = join(__dirname, '..', 'prompts', 'outline-cn.md');
-const SCENES_PATH = join(__dirname, '..', 'prompts', 'scenes.md');
-const SCENES_PATH_CN = join(__dirname, '..', 'prompts', 'scenes-cn.md');
 const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
 
 export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
@@ -155,7 +152,7 @@ async function parseJsonWithRepair(raw, label) {
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
 export function buildOutlinePrompt(materials, lang = 'en', styleKey, genre = '', referenceCharacter = '', referenceEvent = '') {
-  const templateFile = lang === 'cn' ? OUTLINE_PATH_CN : OUTLINE_PATH;
+  const templateFile = OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
   if (style) {
@@ -449,111 +446,6 @@ export function buildClipPrompt(ctx) {
     .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
     .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
     .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
-}
-
-// Legacy buildClipPrompt body kept below as `_legacyBuildClipPrompt` only for
-// reference until generateDrama is migrated in Task 11; not exported.
-function _legacyBuildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang = 'en', styleKey, narrativeContext, constraints = {}) {
-  const templateFile = lang === 'cn' ? SCENES_PATH_CN : SCENES_PATH;
-  let template = readFileSync(templateFile, 'utf8');
-  const style = getStyleSafe(styleKey);
-  if (style) {
-    template += `\n\n## Writing Style\n\n${style.scene}\n`;
-  }
-
-  // Inject genre + reference-character + reference-event constraints so individual scene prose
-  // stays aligned with the user-supplied constraints (outline/plan carry them transitively,
-  // but scene prose can drift without explicit reinforcement).
-  const genre = constraints.genre || '';
-  const referenceCharacter = constraints.referenceCharacter || '';
-  const referenceEvent = constraints.referenceEvent || '';
-  if (genre) {
-    template += lang === 'cn'
-      ? `\n\n## 题材要求\n\n本场景属于**${genre}**类型小说，语言、节奏、基调必须与此类型保持一致。\n`
-      : `\n\n## Novel Type Requirement\n\nThis scene is part of a **${genre}** novel. Language, pacing, and tone must stay consistent with this genre.\n`;
-  }
-  if (referenceCharacter) {
-    template += lang === 'cn'
-      ? `\n\n## 参考角色（必须保留）\n\n如本场景涉及以下预定义角色，请严格保留其姓名、身份、言谈方式与动机；不得改名或改变核心特征。\n\n---\n${referenceCharacter}\n---\n`
-      : `\n\n## Reference Character (PRESERVE)\n\nIf this scene involves the following predefined character, strictly preserve their name, identity, speech patterns, and motivations — do NOT rename or alter their core traits.\n\n---\n${referenceCharacter}\n---\n`;
-  }
-  if (referenceEvent) {
-    template += lang === 'cn'
-      ? `\n\n## 参考事件（必须尊重）\n\n本故事建构于以下预定义事件之上。任何对该事件的描写、回忆或后果都必须忠实于其事实与情感分量，不得淡化。\n\n---\n${referenceEvent}\n---\n`
-      : `\n\n## Reference Event (RESPECT)\n\nThis story is built around the following predefined event. Any depiction, recollection, or consequence of this event in the scene must remain faithful to its facts and emotional weight — do NOT sanitize.\n\n---\n${referenceEvent}\n---\n`;
-  }
-
-  // Inject narrative intelligence context
-  if (narrativeContext) {
-    if (narrativeContext.history) {
-      template += `\n\n## Story So Far\n\n${narrativeContext.history}\n`;
-    }
-    if (narrativeContext.stateContext) {
-      template += `\n\n## Current World State\n\n${narrativeContext.stateContext}\n`;
-    }
-    if (narrativeContext.revelations && narrativeContext.revelations.length > 0) {
-      const revList = narrativeContext.revelations.map(r =>
-        `- [${r.visibility}] ${r.info}`
-      ).join('\n');
-      template += `\n\n## Available Revelations\n\nYou may weave these into the scene naturally:\n${revList}\n`;
-    }
-    if (narrativeContext.events && narrativeContext.events.length > 0) {
-      template += `\n\n## Scene Beats\n\nThis scene should cover these beats:\n${narrativeContext.events.map(e => '- ' + e).join('\n')}\n`;
-    }
-    if (narrativeContext.pacing) {
-      template += `\n\n## Pacing\n\nThis scene's pacing should be: ${narrativeContext.pacing}\n`;
-    }
-    if (narrativeContext.suspenseDensity) {
-      template += `\n\n## Suspense\n\nSuspense density: ${narrativeContext.suspenseDensity}. Twist strength: ${narrativeContext.twistStrength || 1}/5.\n`;
-    }
-    if (narrativeContext.globalSummary) {
-      template += `\n\n## Global Story Summary\n\n${narrativeContext.globalSummary}\n`;
-    }
-    if (narrativeContext.knowledgeContext) {
-      template += `\n\n## Reference Knowledge\n\nRelevant context from prior clips and reference materials:\n${narrativeContext.knowledgeContext}\n`;
-    }
-    if (narrativeContext.consistencyNotes && narrativeContext.consistencyNotes.length > 0) {
-      template += `\n\n## Writing Notes\n\nAvoid these patterns:\n${narrativeContext.consistencyNotes.map(n => '- ' + n).join('\n')}\n`;
-    }
-    if (narrativeContext.clipTypeRules) {
-      template += `\n\n## Scene Type Guidelines\n\n${narrativeContext.clipTypeRules}\n`;
-    }
-  }
-
-  // Build a compact outline summary (without clipPlan details to save tokens)
-  const outlineSummary = {
-    title: outline.title,
-    synopsis: outline.synopsis,
-    genres: outline.genres,
-    episodes: outline.episodes.map(ep => ({
-      title: ep.title,
-      clips: ep.clipPlan.map((s, i) => `Scene ${i}: ${s.summary} (${s.clipType})`),
-    })),
-  };
-
-  template = template.replace('{{outline}}', () => JSON.stringify(outlineSummary, null, 2));
-  template = template.replace('{{clipIndex}}', () => String(clipIndex + 1));
-  template = template.replace('{{totalClips}}', () => String(totalClips));
-  template = template.replace('{{sceneSummary}}', () => clipPlan.summary);
-  template = template.replace('{{clipType}}', () => clipPlan.clipType || 'NARRATIVE');
-
-  // Handle conditional sections
-  if (clipPlan.hasChoices && clipPlan.choiceTexts) {
-    template = template.replace('{{#hasChoices}}', '').replace('{{/hasChoices}}', '');
-    template = template.replace('{{choiceTexts}}', () => clipPlan.choiceTexts.join(', '));
-  } else {
-    template = template.replace(/\{\{#hasChoices\}\}.*?\{\{\/hasChoices\}\}/gs, '');
-  }
-
-  if (clipPlan.isConclusion) {
-    template = template.replace('{{#isConclusion}}', '').replace('{{/isConclusion}}', '');
-    template = template.replace('{{conclusionType}}', () => clipPlan.conclusionType || 'EPISODE_END');
-    template = template.replace('{{ending}}', () => clipPlan.ending || '爽爆');
-  } else {
-    template = template.replace(/\{\{#isConclusion\}\}.*?\{\{\/isConclusion\}\}/gs, '');
-  }
-
-  return template;
 }
 
 const CLIP_LIMITS = { setting: 20, action: 80, dialogue: 60, hook: 30 };

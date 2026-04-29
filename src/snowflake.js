@@ -5,7 +5,6 @@ import { callLLM } from './llm.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = join(__dirname, '..', 'prompts', 'snowflake.md');
-const TEMPLATE_PATH_CN = join(__dirname, '..', 'prompts', 'snowflake-cn.md');
 
 const PARTS = [
   {
@@ -46,8 +45,7 @@ const PARTS_CN = [
 ];
 
 export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', genre = '', referenceCharacter = '', referenceEvent = '') {
-  const templateFile = lang === 'cn' ? TEMPLATE_PATH_CN : TEMPLATE_PATH;
-  let template = readFileSync(templateFile, 'utf8');
+  let template = readFileSync(TEMPLATE_PATH, 'utf8');
   const parts = lang === 'cn' ? PARTS_CN : PARTS;
   const part = parts[partIndex];
 

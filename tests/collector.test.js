@@ -22,8 +22,9 @@ describe('collector', () => {
   test('buildResearchPrompt includes template instructions', async () => {
     const { buildResearchPrompt } = await import('../src/collector.js');
     const prompt = buildResearchPrompt([], 'web data');
-    assert.ok(prompt.includes('trending fiction'));
-    assert.ok(prompt.includes('Output Format'));
+    // CN-only research prompt
+    assert.ok(prompt.includes('小说研究助手') || prompt.includes('短剧'));
+    assert.ok(prompt.includes('指令'));
   });
 
   test('buildResearchPrompt handles history with empty genres', async () => {

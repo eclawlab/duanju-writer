@@ -40,8 +40,7 @@ function extractJsonObject(text) {
  * @returns {string}
  */
 export function buildPlanPrompt(outline, lang = 'en', genre = '', referenceCharacter = '', referenceEvent = '') {
-  const templateFile = lang === 'cn' ? 'plan-cn.md' : 'plan.md';
-  const templatePath = join(__dirname, '..', 'prompts', templateFile);
+  const templatePath = join(__dirname, '..', 'prompts', 'plan.md');
   let template = readFileSync(templatePath, 'utf8');
   if (genre) {
     const section = lang === 'cn'

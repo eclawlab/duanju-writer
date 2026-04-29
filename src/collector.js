@@ -8,7 +8,6 @@ import { fetchPage } from './webfetch.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROMPT_PATH = join(__dirname, '..', 'prompts', 'research.md');
-const PROMPT_PATH_CN = join(__dirname, '..', 'prompts', 'research-cn.md');
 
 const MAX_WEB_RESEARCH_LENGTH = 15_000;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (short TTL since sites are randomly picked)
@@ -127,7 +126,7 @@ export function clearWebResearchCache() {
 }
 
 export function buildResearchPrompt(history, webResearch, lang = 'en', genre = '') {
-  const templateFile = lang === 'cn' ? PROMPT_PATH_CN : PROMPT_PATH;
+  const templateFile = PROMPT_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const historyText = history.length > 0
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')

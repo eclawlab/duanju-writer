@@ -1,71 +1,72 @@
-You are a story planning agent. Given a branching story outline (a tree of episodes), produce a detailed scene-by-scene execution plan.
+你是一个故事规划代理。根据分支故事大纲（一棵篇章之树），制定详细的逐场景执行计划。
 
-## Story Outline
+## 故事大纲
 
 {{outline}}
 
-## Your Task
+## 你的任务
 
-The outline contains multiple episodes forming a branching tree. Each episode has an `episodeIndex` and contains scenes internally.
+大纲包含多个篇章，形成一棵分支树。每个篇章都有一个 `episodeIndex`，内部包含场景。
 
-For each scene in every episode, produce:
-1. **Events**: Specific events that happen (not just the summary — break it into beats)
-2. **Threads**: Which plot threads this scene advances
-3. **Characters**: Who appears, their emotional state entering the scene, what they learn
-4. **Items**: Any items that change state (acquired, lost, used, destroyed)
-5. **Revelations**: Secrets or plot info with visibility tags
-6. **Pacing**: Whether this scene is fast/slow/building/climactic
+对于每个篇章中的每个场景，请提供：
+1. **事件**：发生的具体事件（不只是摘要——分解成节拍）
+2. **线索**：该场景推进了哪些情节线索
+3. **角色**：出场人物、进入场景时的情绪状态、他们学到了什么
+4. **道具**：状态发生变化的道具（获得、丢失、使用、摧毁）
+5. **揭示**：带有可见性标签的秘密或情节信息
+6. **节奏**：该场景是快节奏/慢节奏/蓄势/高潮
 
-Also produce:
-- A list of all characters with initial states (status, location, knowledge)
-- A list of all significant items with initial states
-- A list of all locations
-- A revelation schedule: secrets tagged as public/hidden/delayed/never_explicit with target reveal scenes
+还需提供：
+- 所有角色及其初始状态（状态、位置、知识）的列表
+- 所有重要道具及其初始状态的列表
+- 所有地点的列表
+- 揭示计划：标记为 public/hidden/delayed/never_explicit 的秘密，以及目标揭示篇章和场景
 
-## Output
+## 输出
 
-Return ONLY valid JSON (no markdown, no commentary):
+仅返回有效的 JSON（不要 markdown，不要评论）：
 
 {
   "characters": [
-    { "name": "Name", "status": "alive", "location": "starting location", "knowledge": ["what they know at start"], "emotional": "initial emotional state" }
+    { "name": "名字", "status": "alive", "location": "起始地点", "knowledge": ["开始时知道的内容"], "emotional": "初始情绪状态" }
   ],
   "items": [
-    { "name": "Item Name", "status": "active", "holder": "who has it or null", "location": "where it is" }
+    { "name": "道具名称", "status": "active", "holder": "持有者或null", "location": "所在位置" }
   ],
   "locations": [
-    { "name": "Location Name", "status": "accessible" }
+    { "name": "地点名称", "status": "accessible" }
   ],
   "revelations": [
-    { "id": "rev_1", "info": "description of the secret", "visibility": "hidden", "revealInEpisode": 0, "revealInScene": 3 }
+    { "id": "rev_1", "info": "秘密的描述", "visibility": "hidden", "revealInEpisode": 0, "revealInScene": 3 }
   ],
   "scenes": [
     {
       "episodeIndex": 0,
       "sceneIndex": 0,
-      "events": ["beat 1", "beat 2"],
-      "threads": ["main plot", "romance subplot"],
-      "characterChanges": [{ "name": "Name", "enteringState": "calm", "learns": ["new info"], "locationChange": "forest -> cave" }],
-      "itemChanges": [{ "name": "Item", "change": "acquired by Alice" }],
+      "events": ["节拍1", "节拍2"],
+      "threads": ["主线剧情", "爱情支线"],
+      "characterChanges": [{ "name": "名字", "enteringState": "平静", "learns": ["新信息"], "locationChange": "森林 -> 洞穴" }],
+      "itemChanges": [{ "name": "道具", "change": "被爱丽丝获得" }],
       "revealIds": ["rev_1"],
-      "pacing": "building",
+      "pacing": "蓄势",
       "suspenseDensity": "compact|gradual|explosive",
       "twistStrength": 3
     }
   ]
 }
 
-## Rules
+## 规则
 
-- Every scene must have at least 1 event
-- Each scene entry must include both `episodeIndex` and `sceneIndex` to identify it within the branching tree
-- Revelations tagged "hidden" must have both a `revealInEpisode` and `revealInScene`
-- Revelations tagged "public" have revealInEpisode/revealInScene: null (always available)
-- Revelations tagged "never_explicit" are never directly stated
-- Characters should only learn things when they're present in the scene
-- Track location changes explicitly
-- Each scene must have suspenseDensity (compact/gradual/explosive) and twistStrength (1-5)
-- Pacing requirement: ALL scenes should maintain high tension. No pure setup or pure transition low-tension scenes. Every scene must have twistStrength of at least 2
-- twistStrength 4-5 MUST appear at least once per episode (every episode needs a twist)
-- The last scene of every episode MUST end on a cliffhanger hook, with pacing marked as "climactic"
-- Scenes on different branches are independent — do NOT assume events from one branch occur in another
+- 每个场景必须至少有1个事件
+- 每个场景条目必须包含 `episodeIndex` 和 `sceneIndex` 以在分支树中定位
+- 标记为"hidden"的揭示必须有 `revealInEpisode` 和 `revealInScene`
+- 标记为"public"的揭示的 revealInEpisode/revealInScene 为 null（始终可用）
+- 标记为"never_explicit"的揭示从不被直接陈述
+- 角色只能在其出现的场景中学习信息
+- 明确追踪位置变化
+- 每个场景必须有 suspenseDensity（compact/gradual/explosive）和 twistStrength（1-5）
+- 节奏要求：所有场景都应保持高张力，不允许纯铺垫或纯过渡的低张力场景。每个场景的 twistStrength 至少为2
+- twistStrength 4-5 应出现在每个篇章中至少一次（每集必有反转）
+- 每个篇章的最后一个场景必须以悬念钩子结尾，pacing 标记为"climactic"
+- 不同分支上的场景是独立的——不要假设一个分支的事件发生在另一个分支中
+- 所有内容必须用中文撰写
