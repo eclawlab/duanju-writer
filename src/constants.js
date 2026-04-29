@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 export const VERSION = '0.3.0';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const NAME = 'duanju-writer';
 export const DATA_DIR = join(process.env.HOME || homedir(), '.duanju-writer');
 export const CONFIG_FILE = join(DATA_DIR, 'config.json');

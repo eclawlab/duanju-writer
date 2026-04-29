@@ -11,7 +11,7 @@ describe('constants', () => {
 
   test('exports SCHEMA_VERSION', async () => {
     const { SCHEMA_VERSION } = await import('../src/constants.js');
-    assert.equal(SCHEMA_VERSION, 2);
+    assert.equal(SCHEMA_VERSION, 3);
   });
 
   test('exports NAME', async () => {
