@@ -506,10 +506,69 @@ export function buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang =
   return template;
 }
 
+const CLIP_LIMITS = { setting: 20, action: 80, dialogue: 60, hook: 30 };
+
+function countCnChars(s) {
+  // Count Chinese-script characters only (Unicode CJK ranges).
+  // Whitespace, punctuation, and ASCII don't count toward the spoken-content budget.
+  return (s.match(/[一-鿿㐀-䶿]/g) || []).length;
+}
+
+function stripDialogueAnnotations(s) {
+  // Remove |voice:xxx attributes inside [character:Name|voice:X] tags.
+  let out = s.replace(/\|voice:[a-z]+/g, '');
+  // Remove entire [player]\n... blocks up to the next tag or end of string.
+  out = out.replace(/\[player\][^[]*?(?=\[|$)/g, '');
+  return out.trim();
+}
+
 export async function parseClip(raw) {
   const data = await parseJsonWithRepair(raw, 'clip');
 
-  if (!data.content) throw new Error('Scene missing content');
+  if (!Number.isInteger(data.clipIndex)) throw new Error('clip missing clipIndex');
+  for (const field of ['setting', 'action', 'dialogue']) {
+    if (typeof data[field] !== 'string' || data[field].length === 0) {
+      throw new Error(`clip missing ${field}`);
+    }
+  }
+
+  // Sanitize dialogue: drop voice IDs and player blocks.
+  data.dialogue = stripDialogueAnnotations(data.dialogue);
+
+  // CN-char length limits.
+  for (const [field, limit] of Object.entries(CLIP_LIMITS)) {
+    const value = data[field] || '';
+    const n = countCnChars(value);
+    if (n > limit) {
+      throw new Error(`clip.${field} has ${n} CN chars, max ${limit}`);
+    }
+  }
+
+  // Hook required for non-conclusion clips.
+  if (!data.isConclusion && (!data.hook || data.hook.trim().length === 0)) {
+    throw new Error('clip.hook required for non-conclusion clips');
+  }
+
+  // Conclusion validation.
+  if (data.isConclusion) {
+    if (!data.conclusion || typeof data.conclusion !== 'object') {
+      throw new Error('conclusion clip must have a conclusion object');
+    }
+    if (data.conclusion.type !== 'DRAMA_END') {
+      throw new Error(`conclusion.type must be 'DRAMA_END', got: ${data.conclusion.type}`);
+    }
+    if (!VALID_ENDINGS.includes(data.conclusion.ending)) {
+      throw new Error(`conclusion.ending must be one of ${VALID_ENDINGS.join('/')}, got: ${data.conclusion.ending}`);
+    }
+  } else {
+    data.conclusion = null;
+  }
+
+  // Default durationSec if missing/out-of-range.
+  if (typeof data.durationSec !== 'number' || data.durationSec < 6 || data.durationSec > 20) {
+    data.durationSec = 12;
+  }
+
   return data;
 }
 

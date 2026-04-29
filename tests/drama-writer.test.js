@@ -221,27 +221,95 @@ describe('writer', () => {
     assert.ok(prompt.includes('互动小说作家'));
   });
 
-  test('parseClip validates content field', async () => {
+  function validClip() {
+    return {
+      clipIndex: 0,
+      setting: '豪门别墅 · 夜 · 暴雨',
+      action: '陆衡推开大门，浑身湿透站在前妻苏晚面前。',
+      dialogue: '[narrator]\n五年了。\n[character:陆衡]\n我回来了。',
+      hook: '苏晚的手机响起，来电显示：林董事长。',
+      durationSec: 12,
+      isConclusion: false,
+      conclusion: null,
+    };
+  }
+
+  test('parseClip accepts a valid clip', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
-    const valid = { content: '[narrator]\nHello', clipType: 'NARRATIVE', choices: [], conclusion: null };
-    const result = await parseClip(JSON.stringify(valid));
-    assert.equal(result.content, '[narrator]\nHello');
+    const result = await parseClip(JSON.stringify(validClip()));
+    assert.equal(result.clipIndex, 0);
+    assert.ok(result.hook && result.hook.length > 0);
   });
 
-  test('parseClip throws on missing content', async () => {
+  test('parseClip rejects missing hook on non-conclusion clip', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
-    await assert.rejects(
-      () => parseClip(JSON.stringify({ clipType: 'NARRATIVE' })),
-      /Scene missing content/
-    );
+    const bad = validClip();
+    bad.hook = '';
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /hook required/);
   });
 
-  test('parseClip strips code fences', async () => {
+  test('parseClip rejects dialogue exceeding 60 CN chars', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
-    const scene = { content: '[narrator]\nTest', clipType: 'NARRATIVE' };
-    const wrapped = '```json\n' + JSON.stringify(scene) + '\n```';
+    const bad = validClip();
+    bad.dialogue = '[narrator]\n' + '一'.repeat(70);
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /dialogue.*60/);
+  });
+
+  test('parseClip rejects action exceeding 80 CN chars', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    bad.action = '一'.repeat(90);
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /action.*80/);
+  });
+
+  test('parseClip rejects setting exceeding 20 CN chars', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    bad.setting = '一'.repeat(25);
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /setting.*20/);
+  });
+
+  test('parseClip rejects hook exceeding 30 CN chars', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    bad.hook = '一'.repeat(35);
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /hook.*30/);
+  });
+
+  test('parseClip allows empty hook on conclusion clip with valid conclusion object', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const c = validClip();
+    c.isConclusion = true;
+    c.hook = '';
+    c.conclusion = { title: '结局', overview: '...', type: 'DRAMA_END', ending: '爽爆' };
+    const result = await parseClip(JSON.stringify(c));
+    assert.equal(result.isConclusion, true);
+    assert.equal(result.conclusion.type, 'DRAMA_END');
+  });
+
+  test('parseClip rejects conclusion clip with wrong conclusion.type', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    bad.isConclusion = true;
+    bad.hook = '';
+    bad.conclusion = { title: 't', overview: 'o', type: 'STORY_END', ending: '爽爆' };
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /conclusion\.type.*DRAMA_END/);
+  });
+
+  test('parseClip strips voice IDs and player blocks from dialogue', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    bad.dialogue = '[character:陆衡|voice:alloy]\n来了\n[player]\n好的';
+    const result = await parseClip(JSON.stringify(bad));
+    assert.ok(!result.dialogue.includes('|voice:'));
+    assert.ok(!result.dialogue.includes('[player]'));
+  });
+
+  test('parseClip strips markdown code fences', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const wrapped = '```json\n' + JSON.stringify(validClip()) + '\n```';
     const result = await parseClip(wrapped);
-    assert.equal(result.content, '[narrator]\nTest');
+    assert.equal(result.clipIndex, 0);
   });
 
   // ─── Retry and fallback tests ──────────────────────────────────────────────
