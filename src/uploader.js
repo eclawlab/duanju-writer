@@ -7,49 +7,42 @@ import { loadConfig } from './config.js';
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60_000;
 
 export function buildRequest(drama, config, variationOptions = {}) {
-  // Endpoint path preserved (`/api/ai/stories`) so the existing Duanju
-  // ingestion route stays stable — the body discriminator `format: "duanju"`
-  // tells the server to use the new short-drama schema.
   const url = `${config.autostoryUrl}/api/ai/stories`;
+
+  // Merge writer-only fields into the server's existing string-array columns:
+  //   - `genre` (singular) prepends to `genres[]`
+  //   - `trope` prepends to `tags[]`
+  // .filter(Boolean) drops empty/missing values without throwing.
+  const genres = [drama.genre, ...(drama.genres || [])].filter(Boolean);
+  const tags   = [drama.trope, ...(drama.tags   || [])].filter(Boolean);
+
   const body = {
-    format: 'duanju',
     title: drama.title,
     synopsis: drama.synopsis,
-    trope: drama.trope || '',
-    // Send both shapes: outline parser produces a singular `genre` (one of
-    // 都市/复仇/甜宠/古装/家庭/玄幻); the snowflake/research stage may have
-    // produced a `genres` array of finer-grained tags.
-    genre: drama.genre || '',
-    genres: drama.genres || [],
-    tags: drama.tags || [],
-    lang: drama.lang || 'cn',
-    characters: drama.characters || [],
+    genres,
+    tags,
     episodes: (drama.episodes || []).map(ep => ({
-      episodeIndex: ep.episodeIndex,
       title: ep.title,
-      isEnding: !!ep.isEnding,
-      ending: ep.ending || null,
-      clips: (ep.clips || []).map(clip => ({ ...clip })),
+      episodeIndex: ep.episodeIndex,
+      scenes: ep.scenes || [],
     })),
   };
 
   if (variationOptions.variationGroupId) body.variationGroupId = variationOptions.variationGroupId;
-  if (variationOptions.variationLabel) body.variationLabel = variationOptions.variationLabel;
-  if (variationOptions.idempotencyKey) body.idempotencyKey = variationOptions.idempotencyKey;
+  if (variationOptions.variationLabel)   body.variationLabel   = variationOptions.variationLabel;
   if (config.publishOnUpload !== undefined) body.publish = config.publishOnUpload;
 
   const timeoutMs = Number.isFinite(config.uploadTimeout) && config.uploadTimeout > 0
     ? config.uploadTimeout
     : DEFAULT_UPLOAD_TIMEOUT_MS;
 
-  // Surface the idempotency key as a header too, so a platform that
-  // dedupes at the request layer (rather than parsing the body) can also
-  // honor it. Header takes precedence in most idempotency middleware.
   const headers = {
     'Content-Type': 'application/json',
     'X-Api-Key': config.aiApiKey,
   };
   if (variationOptions.idempotencyKey) {
+    // Standard idempotency mechanism. Server doesn't dedup today, but the header
+    // is the agreed surface — body-level idempotencyKey was non-standard noise.
     headers['Idempotency-Key'] = variationOptions.idempotencyKey;
   }
 
