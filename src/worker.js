@@ -220,7 +220,7 @@ async function processJob(jobId, options = {}) {
       frontProgress = latestProgress || {
         episodes: frontStory.episodes,
         episodeContexts: {},
-        globalClipIndex: frontStory.episodes.reduce((s, ep) => s + (ep.clips?.length || 0), 0),
+        globalClipIndex: frontStory.episodes.reduce((s, ep) => s + (ep.scenes?.length || 0), 0),
       };
       saveArtifact(jobId, 'front.json', frontProgress);
       try {
@@ -229,7 +229,7 @@ async function processJob(jobId, options = {}) {
         log(`[front vector store save failed] ${err.message} — variant retrieval may be degraded until next full run`);
         wlog('front_store_save_failed', { error: err.message });
       }
-      const frontClipCount = frontProgress.episodes.reduce((s, ep) => s + (ep.clips?.length || 0), 0);
+      const frontClipCount = frontProgress.episodes.reduce((s, ep) => s + (ep.scenes?.length || 0), 0);
       log(`Front half done: ${frontProgress.episodes.length} episodes, ${frontClipCount} clips`);
       wlog('front_done', { episodes: frontProgress.episodes.length, clips: frontClipCount });
     } else {
@@ -359,9 +359,9 @@ async function processJob(jobId, options = {}) {
       }
 
       if (!sampleStory) sampleStory = variantStory;
-      const vClips = variantStory.episodes.reduce((sum, ep) => sum + (ep.clips?.length || 0), 0);
+      const vClips = variantStory.episodes.reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
       const vWords = variantStory.episodes.reduce(
-        (sum, ep) => sum + ep.clips.reduce((s, sc) => s + countWords(sc.content), 0), 0);
+        (sum, ep) => sum + ep.scenes.reduce((s, sc) => s + countWords(sc.content), 0), 0);
       totalClipsAcrossVariants += vClips;
       totalWordsAcrossVariants += vWords;
       log(`Variant ${v.key}: "${variantStory.title}" — ${variantStory.episodes.length} eps, ${vClips} clips, ${vWords} words`);
