@@ -80,9 +80,14 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         referenceEvent: options.referenceEvent ?? null,
       },
     };
-    mkdirSync(join(jobsDir, job.id), { recursive: true });
+    // Persist the job record FIRST. If a kill lands between mkdirSync and
+    // writeJobs, an orphan directory accumulates with no entry in jobs.json —
+    // not a correctness bug (claim* only operates on the json) but a slow
+    // filesystem leak. The worker creates the directory lazily on first
+    // artifact write anyway.
     jobs.push(job);
     writeJobs(filePath, jobs);
+    mkdirSync(join(jobsDir, job.id), { recursive: true });
     return job;
   });
 }
@@ -154,6 +159,28 @@ export function claimJobIn(filePath, jobId) {
   });
 }
 
+/**
+ * Reset a single stuck job back to 'pending' so it can be re-claimed.
+ * Used to recover from a SIGKILL that left a job in collecting/writing/
+ * uploading state (claimJob refuses non-pending jobs, so without this
+ * the only way to retry is to nuke ALL jobs).
+ *
+ * Returns the updated job, or null if the job doesn't exist or is in a
+ * terminal state ('done' or 'failed').
+ */
+export function unstickJobIn(filePath, jobId) {
+  return withLock(filePath, () => {
+    const jobs = readJobs(filePath);
+    const idx = jobs.findIndex(j => j.id === jobId);
+    if (idx === -1) return null;
+    const status = jobs[idx].status;
+    if (status === 'done' || status === 'failed' || status === 'pending') return null;
+    jobs[idx] = { ...jobs[idx], status: 'pending' };
+    writeJobs(filePath, jobs);
+    return jobs[idx];
+  });
+}
+
 export function resetJobsIn(filePath, jobsDir) {
   return withLock(filePath, () => {
     const prior = readJobs(filePath);
@@ -180,4 +207,5 @@ export function listJobs() { return listJobsFrom(JOBS_FILE); }
 export function hasBusyJob() { return hasBusyJobIn(JOBS_FILE); }
 export function claimNextPending() { return claimNextPendingIn(JOBS_FILE); }
 export function claimJob(id) { return claimJobIn(JOBS_FILE, id); }
+export function unstickJob(id) { return unstickJobIn(JOBS_FILE, id); }
 export function resetJobs() { return resetJobsIn(JOBS_FILE, JOBS_DIR); }

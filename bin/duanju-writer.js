@@ -408,7 +408,7 @@ switch (command) {
   case 'role': {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const sub = args[0];
-    const VALID_ROLES = ['research', 'outline', 'plan', 'clip', 'compress', 'consistency', 'style', 'repair'];
+    const VALID_ROLES = ['research', 'outline', 'tail-outline', 'plan', 'clip', 'compress', 'consistency', 'style', 'repair'];
 
     if (sub === 'set' && args[1] && args[2]) {
       const role = args[1];

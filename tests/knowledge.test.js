@@ -114,57 +114,6 @@ describe('knowledge', () => {
     }
   });
 
-  // ── queryKnowledge ───────────────────────────────────────────────────────
-
-  test('queryKnowledge returns results', async () => {
-    const { queryKnowledge } = await import('../src/knowledge.js');
-    const { createStore } = await import('../src/vectorstore.js');
-
-    const storePath = join(TEST_DIR, 'store3.json');
-    const store = createStore(storePath);
-
-    store.add('knowledge_lore_0', 'Ancient magic and dragon lore knowledge', {});
-    store.add('knowledge_lore_1', 'The history of wizards and spells', {});
-    store.add('knowledge_lore_2', 'Elven culture and traditions magic', {});
-
-    const results = await queryKnowledge(store, 'magic lore', 2, null);
-    assert.ok(results.length <= 2, 'should return at most k results');
-    assert.ok(results.length >= 1, 'should return at least one result');
-    // Each result should have expected shape
-    for (const r of results) {
-      assert.ok(typeof r.id === 'string');
-      assert.ok(typeof r.text === 'string');
-      assert.ok(typeof r.score === 'number');
-    }
-  });
-
-  test('queryKnowledge filters temporally close scene entries', async () => {
-    const { queryKnowledge } = await import('../src/knowledge.js');
-    const { createStore } = await import('../src/vectorstore.js');
-
-    const storePath = join(TEST_DIR, 'store4.json');
-    const store = createStore(storePath);
-
-    // Knowledge entries (no clipIndex) — always included
-    store.add('knowledge_lore_0', 'Ancient dragon lore and magic history', {});
-
-    // Scene entries — clipIndex within 3 of currentClipIndex=5 should be filtered
-    store.add('scene_4', 'Scene four dragon content magic lore', { clipIndex: 4 }); // distance 1 — filtered
-    store.add('scene_5', 'Scene five dragon content magic lore', { clipIndex: 5 }); // distance 0 — filtered
-    store.add('scene_6', 'Scene six dragon content magic lore', { clipIndex: 6 }); // distance 1 — filtered
-    store.add('scene_1', 'Scene one dragon magic content lore', { clipIndex: 1 }); // distance 4 — kept
-
-    const results = await queryKnowledge(store, 'dragon magic lore', 10, 5);
-
-    const ids = results.map(r => r.id);
-
-    // Scenes 4, 5, 6 should be filtered out
-    assert.ok(!ids.includes('scene_4'), 'scene_4 (distance 1) should be filtered');
-    assert.ok(!ids.includes('scene_5'), 'scene_5 (distance 0) should be filtered');
-    assert.ok(!ids.includes('scene_6'), 'scene_6 (distance 1) should be filtered');
-
-    // knowledge entry and distant scene should be included
-    assert.ok(ids.includes('knowledge_lore_0'), 'knowledge entry should be included');
-    assert.ok(ids.includes('scene_1'), 'scene_1 (distance 4) should be included');
-  });
+  // (queryKnowledge was deleted as dead code post-pivot — its only consumer
+  // in drama-writer.js was removed in the C1+H7 fix.)
 });

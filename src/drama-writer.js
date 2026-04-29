@@ -361,6 +361,10 @@ export async function parseTailOutline(raw, splitIdx, totalEpisodes, targetEndin
 
 export async function generateTailOutline(baseOutline, splitIdx, targetEnding, options = {}) {
   const snowflake = options.snowflake || null;
+  const totalEpisodes = baseOutline.episodes.length;
+  const lastIdx = totalEpisodes - 1;
+  const tailCount = totalEpisodes - splitIdx;
+  const log = options.log || (() => {});
   const prompt = buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake, {
     lang: options.lang,
     genre: options.genre,
@@ -369,7 +373,28 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
     newsSource: options.newsSource,
   });
   const raw = await callLLM(prompt, 'tail-outline');
-  return await parseTailOutline(raw, splitIdx, baseOutline.episodes.length, targetEnding);
+  try {
+    return await parseTailOutline(raw, splitIdx, totalEpisodes, targetEnding);
+  } catch (err) {
+    // The H6 strict validator rejects missing/duplicate/sparse indices. Give
+    // the LLM one corrective shot before propagating the failure — most
+    // index-shape mistakes are recoverable with a clearer instruction.
+    log(`[tail-outline retry] ${err.message} — sending corrective prompt`);
+    const corrective = [
+      'Your previous tail outline was rejected:',
+      err.message,
+      '',
+      'REQUIRED: Produce exactly the episodes with episodeIndex values in the contiguous range:',
+      `  ${Array.from({ length: tailCount }, (_, i) => splitIdx + i).join(', ')}`,
+      `(${tailCount} episodes total; the last episode (episodeIndex ${lastIdx}) must have isEnding: true and ending: "${targetEnding}").`,
+      '',
+      'Original prompt follows:',
+      '',
+      prompt,
+    ].join('\n');
+    const raw2 = await callLLM(corrective, 'tail-outline');
+    return await parseTailOutline(raw2, splitIdx, totalEpisodes, targetEnding);
+  }
 }
 
 // ─── Step 2: Generate clips one at a time ────────────────────────────────────
@@ -587,11 +612,12 @@ export function buildPickStylePrompt(materials) {
 export async function pickStyle(materials) {
   const prompt = buildPickStylePrompt(materials);
   const raw = await callLLM(prompt, 'style');
-  // Strip whitespace, surrounding quotes, and trailing punctuation. Keep CJK
-  // characters since trope keys are CN strings (e.g. "战神归来"). The validator
-  // below is the source of truth — anything not matching a real key falls
-  // back to default.
-  const key = raw.trim().replace(/^["'`]|["'`.,;:!?]+$/g, '').trim();
+  // Strip leading/trailing whitespace and any wrapping quotes/punctuation.
+  // Trope keys are CN strings (e.g. "战神归来"), so we must keep CJK chars but
+  // strip both ASCII punctuation (",.;:!?` and CJK punctuation (。，；：！？「」『』)
+  // that the LLM commonly appends.
+  const TRIM_CHARS = /^[\s"'`.,;:!?。，；：！？「」『』《》]+|[\s"'`.,;:!?。，；：！？「」『』《》]+$/g;
+  const key = raw.trim().replace(TRIM_CHARS, '');
   try {
     getStyle(key);
     return key;

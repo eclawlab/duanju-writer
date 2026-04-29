@@ -105,6 +105,27 @@ export function readPidfileFrom(filePath) {
   return readState(filePath);
 }
 
+/**
+ * Check whether a worker daemon (parent process) is alive based on the
+ * pidfile. Verifies both that the recorded PID is responsive AND that its
+ * command line still matches the duanju-writer signature, to defend against
+ * PID reuse. Returns false when no parent is recorded, or when the recorded
+ * PID is dead/reused.
+ *
+ * Used by `runOnce` to distinguish "another worker holds this job" (don't
+ * touch) from "previous worker SIGKILLed and orphaned this job" (recover).
+ */
+export function isWorkerAliveFrom(filePath, options = {}) {
+  const isAlive = options.isAlive || defaultIsAlive;
+  const commandFor = options.commandFor || defaultCommandFor;
+  const matchesSignature = options.matchesSignature || defaultMatchesSignature;
+  const state = readState(filePath);
+  if (state.parent === null || state.parent === process.pid) return false;
+  if (!isAlive(state.parent)) return false;
+  const cmd = commandFor(state.parent);
+  return matchesSignature(cmd, 'parent');
+}
+
 export function registerParentIn(filePath, pid) {
   return withLock(filePath, () => {
     const state = readState(filePath);
@@ -194,6 +215,7 @@ export function cleanupStaleIn(filePath, options = {}) {
 // ─── Module-level wrappers using the default PIDFILE path ────────────────────
 
 export function readPidfile() { return readPidfileFrom(PIDFILE); }
+export function isWorkerAlive(options) { return isWorkerAliveFrom(PIDFILE, options); }
 export function registerParent(pid) { return registerParentIn(PIDFILE, pid); }
 export function unregisterParent(pid) { return unregisterParentIn(PIDFILE, pid); }
 export function registerChild(pid) { return registerChildIn(PIDFILE, pid); }

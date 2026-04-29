@@ -355,6 +355,19 @@ export function addRelationship(state, char1, char2, type, description) {
   if (!state.characters[char1]) throw new Error(`Character not found: ${char1}`);
   if (!state.characters[char2]) throw new Error(`Character not found: ${char2}`);
   if (!state.relationships) state.relationships = [];
+  // Treat the relationship as undirected: if a relationship between this
+  // pair already exists in either direction, overwrite it instead of
+  // creating a duplicate (which would survive into prompt context as
+  // contradicting entries that updateRelationship can't reach).
+  const existing = state.relationships.find(r =>
+    (r.char1 === char1 && r.char2 === char2) ||
+    (r.char1 === char2 && r.char2 === char1)
+  );
+  if (existing) {
+    existing.type = type;
+    existing.description = description;
+    return;
+  }
   state.relationships.push({ char1, char2, type, description });
 }
 

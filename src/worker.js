@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
 import { loadConfig } from './config.js';
-import { updateJob, getJob, claimNextPending, claimJob } from './queue.js';
+import { updateJob, getJob, claimNextPending, claimJob, unstickJob } from './queue.js';
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
 import { generateDrama, generateOutline, generateTailOutline } from './drama-writer.js';
@@ -250,6 +250,13 @@ async function processJob(jobId, options = {}) {
       if (prior && prior.storyId) {
         log(`Variant ${v.key} (${v.label}) already uploaded: ${prior.storyId}`);
         storyIds.push(prior.storyId);
+        // Populate sampleStory from cached story so the post-loop addEntry
+        // has metadata to record (otherwise a job that fully completes via
+        // resume would skip history entirely).
+        if (!sampleStory) {
+          const cachedStory = loadArtifact(jobId, `story.${v.key}.json`);
+          if (cachedStory) sampleStory = cachedStory;
+        }
         continue;
       }
 
@@ -265,6 +272,7 @@ async function processJob(jobId, options = {}) {
           referenceCharacter,
           referenceEvent,
           newsSource: materials?.newsSource || null,
+          log,
         });
         saveArtifact(jobId, `tail-outline.${v.key}.json`, tailOutline);
         wlog('tail_outline_done', { variant: v.key, episodes: tailOutline.episodes.length });
@@ -365,12 +373,20 @@ async function processJob(jobId, options = {}) {
       // return the same storyId for repeated POSTs with the same key.
       const idempotencyKey = `${jobId}.${v.key}`;
       const pendingKey = `upload.${v.key}.pending.json`;
+      // If a previous attempt already started an upload for this variant, the
+      // pending artifact records the idempotency key and (after first response)
+      // the storyId. On retry, the platform should return the same storyId
+      // for the same key — log loudly if it changes (signals the platform
+      // didn't honor idempotency, so we'd be creating duplicates).
+      const priorPending = loadArtifact(jobId, pendingKey);
       saveArtifact(jobId, pendingKey, {
         idempotencyKey, variationGroupId, variationLabel: v.label, ending: v.ending,
-        startedAt: new Date().toISOString(),
+        startedAt: priorPending?.startedAt || new Date().toISOString(),
+        priorStoryId: priorPending?.storyId || null,
+        attempts: (priorPending?.attempts || 0) + 1,
       });
       log(`Variant ${v.key}: uploading (${v.label})...`);
-      wlog('variant_upload_start', { variant: v.key, label: v.label, variationGroupId, idempotencyKey });
+      wlog('variant_upload_start', { variant: v.key, label: v.label, variationGroupId, idempotencyKey, retryAttempt: priorPending?.attempts || 0 });
       const uploadStartTime = Date.now();
       const uploadResult = await upload(variantStory, {
         variationGroupId,
@@ -378,6 +394,23 @@ async function processJob(jobId, options = {}) {
         idempotencyKey,
       });
       const uploadDuration = Date.now() - uploadStartTime;
+      if (priorPending?.storyId && priorPending.storyId !== uploadResult.storyId) {
+        log(chalk.red(`[variant ${v.key}] DUPLICATE UPLOAD: previous attempt produced storyId=${priorPending.storyId}, retry returned ${uploadResult.storyId}. Platform did not honor Idempotency-Key=${idempotencyKey}.`));
+        wlog('variant_upload_duplicate_detected', {
+          variant: v.key, idempotencyKey,
+          priorStoryId: priorPending.storyId,
+          newStoryId: uploadResult.storyId,
+        });
+      }
+      // Persist the storyId in the pending artifact so a future retry can
+      // detect duplicates (above check) even after a crash before the final
+      // saveArtifact below.
+      saveArtifact(jobId, pendingKey, {
+        idempotencyKey, variationGroupId, variationLabel: v.label, ending: v.ending,
+        startedAt: priorPending?.startedAt || new Date().toISOString(),
+        storyId: uploadResult.storyId,
+        attempts: (priorPending?.attempts || 0) + 1,
+      });
       log(`Variant ${v.key} uploaded: ${uploadResult.storyId}`);
       wlog('variant_upload_done', {
         variant: v.key, storyId: uploadResult.storyId, durationMs: uploadDuration,
@@ -499,15 +532,38 @@ export async function runOnce(jobId, options = {}) {
   // Atomically take the job before processing. If the daemon worker is
   // running and has already claimed this job, bail out — running both would
   // produce duplicate uploads and racing artifact writes.
-  const claimed = claimJob(jobId);
+  let claimed = claimJob(jobId);
   if (!claimed) {
     const existing = getJob(jobId);
     if (!existing) {
       console.log(chalk.red(`  [${jobId}] Job not found.`));
-    } else {
-      console.log(chalk.yellow(`  [${jobId}] Job is already ${existing.status} (claimed by another process or already done) — skipping runOnce.`));
+      return;
     }
-    return;
+    if (existing.status === 'done' || existing.status === 'failed') {
+      console.log(chalk.yellow(`  [${jobId}] Job is already ${existing.status} — nothing to do.`));
+      return;
+    }
+    // Status is collecting/writing/uploading: either a live worker holds it,
+    // or a previous SIGKILL left it stuck. We can't tell the two apart from
+    // job state alone, so we use the pidfile as a liveness signal — if no
+    // worker pidfile exists, the job is orphaned and we recover it. If a
+    // worker IS alive, leave the job alone to avoid double-processing.
+    const { isWorkerAlive } = await import('./pidfile.js');
+    if (isWorkerAlive()) {
+      console.log(chalk.yellow(`  [${jobId}] Job is ${existing.status} and a worker daemon is running — skipping runOnce.`));
+      return;
+    }
+    const recovered = unstickJob(jobId);
+    if (!recovered) {
+      console.log(chalk.yellow(`  [${jobId}] Job is ${existing.status} and could not be recovered — skipping.`));
+      return;
+    }
+    console.log(chalk.dim(`  [${jobId}] Recovered orphaned job from status=${existing.status} (no live worker). Retrying.`));
+    claimed = claimJob(jobId);
+    if (!claimed) {
+      console.log(chalk.red(`  [${jobId}] Could not claim recovered job (race) — skipping.`));
+      return;
+    }
   }
 
   let success = await processJob(jobId, options);

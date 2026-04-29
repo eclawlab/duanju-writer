@@ -7,6 +7,17 @@ function ask(rl, question) {
 }
 
 export async function setup(args) {
+  // Setup is interactive (URL prompt + optional existing-key prompt). When
+  // stdin isn't a TTY, prompts read EOF and silently advance with empty
+  // strings — which collapses through the bootstrap path with defaults the
+  // user never confirmed. Reject early unless every required value can come
+  // from argv (currently only the URL can — keys are generated/prompted).
+  if (!process.stdin.isTTY && !args[0]) {
+    console.log(chalk.red('setup requires a TTY. To run non-interactively, pass the API URL as an argument:'));
+    console.log(chalk.dim('  duanju-writer setup https://your-duanju-instance.example.com'));
+    process.exit(1);
+  }
+
   const config = loadConfig();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 

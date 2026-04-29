@@ -1,6 +1,11 @@
 const DEFAULT_TIMEOUT_MS = 30_000;
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 const MAX_CONTENT_LENGTH = 50_000;
+// Cap on raw body bytes BEFORE extraction. Without this, a misbehaving or
+// malicious origin could return an unbounded body and exhaust memory before
+// the post-extraction MAX_CONTENT_LENGTH truncation runs. Set generously
+// (1 MB) so well-formed pages aren't truncated mid-document.
+const MAX_BODY_BYTES = 1_000_000;
 
 export async function fetchPage(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
   if (!url.trim()) throw new Error('URL cannot be empty');
@@ -20,7 +25,16 @@ export async function fetchPage(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
     });
 
     if (!resp.ok) throw new Error(`Fetch failed: HTTP ${resp.status}`);
-    const body = await resp.text();
+
+    // Reject obviously oversized responses based on Content-Length before
+    // reading the body. (Origins can lie about Content-Length, so we also
+    // cap the streamed read below.)
+    const declaredLen = Number(resp.headers.get('content-length'));
+    if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+      throw new Error(`Response body too large (Content-Length=${declaredLen} > ${MAX_BODY_BYTES})`);
+    }
+
+    const body = await readBodyCapped(resp, MAX_BODY_BYTES);
     const content = extractContent(body);
     const title = extractTitle(body);
 
@@ -33,6 +47,33 @@ export async function fetchPage(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function readBodyCapped(resp, maxBytes) {
+  if (!resp.body) return await resp.text();
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let result = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        // Decode what we have, including the chunk that crossed the limit
+        // (truncated to the cap), then bail.
+        const overflow = total - maxBytes;
+        result += decoder.decode(value.subarray(0, value.byteLength - overflow), { stream: false });
+        break;
+      }
+      result += decoder.decode(value, { stream: true });
+    }
+    result += decoder.decode();
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+  return result;
 }
 
 function stripBlocks(html, tag) {

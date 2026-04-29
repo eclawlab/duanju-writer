@@ -208,7 +208,14 @@ export function createProvider(providerConfig) {
 
 // Module-level model override — when set, all roles use this provider
 let _modelOverride = null;
-export function setModelOverride(providerName) { _modelOverride = providerName; }
+export function setModelOverride(providerName) {
+  _modelOverride = providerName;
+  // Drop cached provider instances so the next callLLM picks up the latest
+  // config (e.g., changed env vars / API keys) for the overridden provider.
+  // Without this, stale provider instances persist for the lifetime of the
+  // process even after the user runs `setup` to update credentials.
+  providerCache.clear();
+}
 export function getModelOverride() { return _modelOverride; }
 
 /**
