@@ -28,6 +28,19 @@ export function countWords(text) {
 }
 
 /**
+ * Count Chinese characters only — used for clip-length budgeting where the
+ * target is "spoken content per 10–15s clip". Whitespace, punctuation, and
+ * ASCII don't contribute to spoken duration.
+ * @param {string} text
+ * @returns {number}
+ */
+export function countChars(text) {
+  if (!text) return 0;
+  const stripped = stripTags(text);
+  return (stripped.match(/[一-鿿㐀-䶿]/g) || []).length;
+}
+
+/**
  * Returns true if the content word count is below 80% of targetWords.
  * Returns false if targetWords is 0 or falsy (feature disabled).
  * @param {string} content

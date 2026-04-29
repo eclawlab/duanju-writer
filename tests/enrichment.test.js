@@ -55,4 +55,26 @@ describe('enrichment', () => {
     assert.ok(prompt.includes('你正在扩写'), 'prompt should use Chinese opening');
     assert.ok(prompt.includes(content), 'prompt should include the content');
   });
+
+  describe('countChars', () => {
+    test('counts only CN characters, ignoring punctuation and ASCII', async () => {
+      const { countChars } = await import('../src/enrichment.js');
+      assert.equal(countChars('你好，world！这是测试。'), 6);  // 你好这是测试
+    });
+
+    test('returns 0 for empty string', async () => {
+      const { countChars } = await import('../src/enrichment.js');
+      assert.equal(countChars(''), 0);
+    });
+
+    test('handles mixed CN/EN/punctuation', async () => {
+      const { countChars } = await import('../src/enrichment.js');
+      assert.equal(countChars('陆衡推开大门'), 6);
+    });
+
+    test('strips scene tags before counting', async () => {
+      const { countChars } = await import('../src/enrichment.js');
+      assert.equal(countChars('[narrator]\n陆衡归来。'), 4);  // 陆衡归来
+    });
+  });
 });
