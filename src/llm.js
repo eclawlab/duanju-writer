@@ -175,6 +175,11 @@ export function createClaudeCliAdapter(config) {
           try { registerChild(trackedPid); } catch {}
         }
 
+        // Swallow EPIPE / stream errors here — the spawned process can close
+        // stdin before we finish writing (e.g. fast-exiting binary, test
+        // stubs like /bin/sleep). The actual call outcome is determined by
+        // the execFile callback above, which surfaces the real error.
+        child.stdin.on('error', () => {});
         child.stdin.write(prompt);
         child.stdin.end();
       });
