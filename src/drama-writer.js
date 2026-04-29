@@ -25,7 +25,7 @@ const SCENES_PATH = join(__dirname, '..', 'prompts', 'scenes.md');
 const SCENES_PATH_CN = join(__dirname, '..', 'prompts', 'scenes-cn.md');
 const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
 
-export const VALID_TAIL_ENDINGS = ['GOOD', 'BITTERSWEET', 'SPECIAL'];
+export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
 
 // ─── Scene content sanitization ──────────────────────────────────────────────
 
@@ -498,7 +498,7 @@ export function buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang =
   if (clipPlan.isConclusion) {
     template = template.replace('{{#isConclusion}}', '').replace('{{/isConclusion}}', '');
     template = template.replace('{{conclusionType}}', () => clipPlan.conclusionType || 'EPISODE_END');
-    template = template.replace('{{ending}}', () => clipPlan.ending || 'GOOD');
+    template = template.replace('{{ending}}', () => clipPlan.ending || '爽爆');
   } else {
     template = template.replace(/\{\{#isConclusion\}\}.*?\{\{\/isConclusion\}\}/gs, '');
   }
@@ -658,7 +658,7 @@ export function buildFallbackClip(clipPlan, clipIndex) {
       title: 'End',
       overview: summary,
       type: clipPlan.conclusionType || 'EPISODE_END',
-      ending: clipPlan.ending || 'GOOD',
+      ending: clipPlan.ending || '爽爆',
     };
   }
   if (clipPlan.hasChoices && clipPlan.choiceTexts) {

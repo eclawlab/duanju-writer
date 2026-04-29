@@ -126,7 +126,7 @@ describe('writer', () => {
   test('parseOutline rejects invalid ending value', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     const bad = validOutline();
-    bad.episodes[1].ending = 'GOOD';
+    bad.episodes[1].ending = 'GOOD';  // legacy enum, no longer accepted
     await assert.rejects(() => parseOutline(JSON.stringify(bad)), /ending must be one of/);
   });
 
@@ -204,11 +204,11 @@ describe('writer', () => {
     const { buildClipPrompt } = await import('../src/drama-writer.js');
     const outline = {
       title: 'T', synopsis: 'S', genres: [],
-      episodes: [{ title: 'E', clipPlan: [{ summary: 'End', clipType: 'NARRATIVE', isConclusion: true, conclusionType: 'EPISODE_END', ending: 'GOOD' }] }],
+      episodes: [{ title: 'E', clipPlan: [{ summary: 'End', clipType: 'NARRATIVE', isConclusion: true, conclusionType: 'EPISODE_END', ending: '爽爆' }] }],
     };
     const prompt = buildClipPrompt(outline, 0, outline.episodes[0].clipPlan[0], 1);
     assert.ok(prompt.includes('EPISODE_END'));
-    assert.ok(prompt.includes('GOOD'));
+    assert.ok(prompt.includes('爽爆'));
   });
 
   test('buildClipPrompt uses CN template when lang is cn', async () => {
@@ -345,11 +345,11 @@ describe('writer', () => {
       clipType: 'NARRATIVE',
       isConclusion: true,
       conclusionType: 'EPISODE_END',
-      ending: 'GOOD',
+      ending: '爽爆',
     });
     assert.ok(scene.conclusion);
     assert.equal(scene.conclusion.type, 'EPISODE_END');
-    assert.equal(scene.conclusion.ending, 'GOOD');
+    assert.equal(scene.conclusion.ending, '爽爆');
   });
 
   test('buildFallbackClip handles choice clips', async () => {
@@ -374,7 +374,7 @@ describe('writer', () => {
         episodeIndex: i,
         title: `Ep ${i}`,
         isEnding: i === episodeCount - 1,
-        ending: i === episodeCount - 1 ? 'GOOD' : undefined,
+        ending: i === episodeCount - 1 ? '爽爆' : undefined,
         clipPlan: [
           { summary: `Ep${i} scene 0`, clipType: 'NARRATIVE' },
           { summary: `Ep${i} scene 1`, clipType: 'NARRATIVE' },
@@ -392,8 +392,8 @@ describe('writer', () => {
   test('buildTailOutlinePrompt injects split point, target ending, and prior episodes', async () => {
     const { buildTailOutlinePrompt } = await import('../src/drama-writer.js');
     const base = makeBaseOutline(6);
-    const prompt = buildTailOutlinePrompt(base, 3, 'BITTERSWEET', null);
-    assert.ok(prompt.includes('BITTERSWEET'));
+    const prompt = buildTailOutlinePrompt(base, 3, '苦尽甘来', null);
+    assert.ok(prompt.includes('苦尽甘来'));
     assert.ok(prompt.includes('Shared Story'));
     // Prior episodes 0..2 should appear in the rendered prompt
     assert.ok(prompt.includes('Episode 0 "Ep 0"'));
@@ -408,14 +408,14 @@ describe('writer', () => {
       episodes: [
         { episodeIndex: 3, title: 'T1', isEnding: false, clipPlan: [{ summary: 's' }] },
         { episodeIndex: 4, title: 'T2', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 5, title: 'T3 Finale', isEnding: true, ending: 'SPECIAL', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 5, title: 'T3 Finale', isEnding: true, ending: '反转', clipPlan: [{ summary: 's' }] },
       ],
     });
-    const result = await parseTailOutline(raw, 3, 6, 'SPECIAL');
+    const result = await parseTailOutline(raw, 3, 6, '反转');
     assert.equal(result.episodes.length, 3);
     assert.equal(result.episodes[0].episodeIndex, 3);
     assert.equal(result.episodes[2].isEnding, true);
-    assert.equal(result.episodes[2].ending, 'SPECIAL');
+    assert.equal(result.episodes[2].ending, '反转');
     assert.equal(result.episodes[0].isEnding, false);
     assert.equal(result.episodes[0].ending, undefined);
   });
@@ -425,22 +425,22 @@ describe('writer', () => {
     const raw = JSON.stringify({
       episodes: [
         { episodeIndex: 2, title: 'T1', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 3, title: 'Finale', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 3, title: 'Finale', isEnding: true, ending: '爽爆', clipPlan: [{ summary: 's' }] },
       ],
     });
-    const result = await parseTailOutline(raw, 2, 4, 'BITTERSWEET');
-    assert.equal(result.episodes[1].ending, 'BITTERSWEET');
+    const result = await parseTailOutline(raw, 2, 4, '苦尽甘来');
+    assert.equal(result.episodes[1].ending, '苦尽甘来');
   });
 
   test('parseTailOutline rejects wrong episode count', async () => {
     const { parseTailOutline } = await import('../src/drama-writer.js');
     const raw = JSON.stringify({
       episodes: [
-        { episodeIndex: 3, title: 'Only', isEnding: true, ending: 'GOOD', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 3, title: 'Only', isEnding: true, ending: '爽爆', clipPlan: [{ summary: 's' }] },
       ],
     });
     await assert.rejects(
-      () => parseTailOutline(raw, 3, 6, 'GOOD'),
+      () => parseTailOutline(raw, 3, 6, '爽爆'),
       /exactly 3 episodes/
     );
   });
@@ -463,7 +463,7 @@ describe('writer', () => {
         { episodeIndex: 2, title: 'T3', clipPlan: [{ summary: 's' }] },
       ],
     });
-    const result = await parseTailOutline(raw, 4, 7, 'GOOD');
+    const result = await parseTailOutline(raw, 4, 7, '爽爆');
     assert.deepEqual(result.episodes.map(e => e.episodeIndex), [4, 5, 6]);
     assert.equal(result.episodes[2].isEnding, true);
   });
@@ -476,7 +476,7 @@ describe('writer', () => {
         { episodeIndex: 3, title: 'T2', clipPlan: [{ summary: 's' }], episodeChoices: [{ text: 'Y' }] },
       ],
     });
-    const result = await parseTailOutline(raw, 2, 4, 'GOOD');
+    const result = await parseTailOutline(raw, 2, 4, '爽爆');
     for (const ep of result.episodes) {
       assert.deepEqual(ep.episodeChoices, []);
     }
@@ -484,6 +484,6 @@ describe('writer', () => {
 
   test('VALID_TAIL_ENDINGS exposes the three supported endings', async () => {
     const { VALID_TAIL_ENDINGS } = await import('../src/drama-writer.js');
-    assert.deepEqual([...VALID_TAIL_ENDINGS].sort(), ['BITTERSWEET', 'GOOD', 'SPECIAL']);
+    assert.deepEqual([...VALID_TAIL_ENDINGS].sort(), ['反转', '爽爆', '苦尽甘来']);
   });
 });
