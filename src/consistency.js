@@ -161,7 +161,7 @@ export function checkConsistency(content, motifTracker, clipIndex) {
 export function buildRewritePrompt(content, issues, lang = 'en') {
   const issueList = issues.map(i => `- ${i}`).join('\n');
   if (lang === 'cn') {
-    return `你是一位专业的互动小说作家。请修改以下段落以解决文风问题，同时保留原有的故事内容和情节。
+    return `你是一位专业短剧编剧。请修改以下段落以解决文风问题，同时保留原有的剧情走向与人物关系。
 
 发现的问题：
 ${issueList}
@@ -171,7 +171,7 @@ ${content}
 
 请在保留情节和人物的前提下，改写内容以解决上述问题。只返回改写后的正文，不要添加任何解释。`;
   }
-  return `You are a professional interactive fiction writer. Please rewrite the following passage to fix the listed style issues while preserving the story content and plot.
+  return `You are a professional short-drama screenwriter. Please rewrite the following passage to fix the listed style issues while preserving the plot and character relationships.
 
 Issues to fix:
 ${issueList}

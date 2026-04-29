@@ -12,7 +12,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ─── JSON extraction helpers (same pattern as compressor.js / writer.js) ────────
+// ─── JSON extraction helpers (same pattern as compressor.js / drama-writer.js) ────────
 
 function cleanRaw(raw) {
   let cleaned = raw.trim();

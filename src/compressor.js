@@ -1,6 +1,6 @@
 import { callLLM } from './llm.js';
 
-// ─── JSON extraction helpers (same pattern as writer.js / collector.js) ────────
+// ─── JSON extraction helpers (same pattern as drama-writer.js / collector.js) ────────
 
 function cleanRaw(raw) {
   let cleaned = raw.trim();
