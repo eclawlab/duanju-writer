@@ -44,7 +44,7 @@ const PARTS_CN = [
   },
 ];
 
-export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', genre = '', referenceCharacter = '', referenceEvent = '') {
+export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '') {
   let template = readFileSync(TEMPLATE_PATH, 'utf8');
   const parts = lang === 'cn' ? PARTS_CN : PARTS;
   const part = parts[partIndex];
@@ -92,7 +92,7 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
 }
 
 export async function generateSnowflake(materials, options = {}) {
-  const lang = options.lang || 'en';
+  const lang = options.lang || 'cn';
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';

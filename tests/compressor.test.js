@@ -92,16 +92,16 @@ describe('compressor', () => {
 
   test('buildGlobalSummaryPrompt includes current summary and new content', async () => {
     const { buildGlobalSummaryPrompt } = await import('../src/compressor.js');
-    const prompt = buildGlobalSummaryPrompt('Hero has entered the dungeon.', 'Hero fights a dragon.');
+    const prompt = buildGlobalSummaryPrompt('Hero has entered the dungeon.', 'Hero fights a dragon.', 'en');
     assert.ok(prompt.includes('Hero has entered the dungeon.'));
     assert.ok(prompt.includes('Hero fights a dragon.'));
   });
 
   test('buildGlobalSummaryPrompt handles first scene (no current summary)', async () => {
     const { buildGlobalSummaryPrompt } = await import('../src/compressor.js');
-    const promptNull = buildGlobalSummaryPrompt(null, 'First scene content.');
+    const promptNull = buildGlobalSummaryPrompt(null, 'First scene content.', 'en');
     assert.ok(promptNull.includes('No summary yet'));
-    const promptEmpty = buildGlobalSummaryPrompt('', 'First scene content.');
+    const promptEmpty = buildGlobalSummaryPrompt('', 'First scene content.', 'en');
     assert.ok(promptEmpty.includes('No summary yet'));
   });
 

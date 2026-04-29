@@ -6,16 +6,20 @@ import { callLLM } from './llm.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
 import { compressClips, buildHistoryContext } from './compressor.js';
-import { updateCharacter, updateItem, getAvailableRevelations, markRevealed, toPromptContext, validate } from './drama-state.js';
-import { checkConsistency, rewriteForConsistency, updateMotifTracker } from './consistency.js';
-import { createStore } from './vectorstore.js';
-import { queryKnowledge } from './knowledge.js';
+import {
+  updateCharacter,
+  updateItem,
+  markRevealed,
+  addPlotArc,
+  addForeshadowing,
+  reinforceForeshadowing,
+  resolveForeshadowing,
+  addRelationship,
+  setCharacterArc,
+} from './drama-state.js';
+import { checkHookDensity } from './consistency.js';
 import { generateSnowflake } from './snowflake.js';
-import { updateGlobalSummary } from './compressor.js';
-import { addPlotArc, addForeshadowing, reinforceForeshadowing, resolveForeshadowing, addRelationship, setCharacterArc } from './drama-state.js';
-import { getSceneTypeRules } from './clip-types.js';
-import { needsEnrichment, enrichScene, countWords } from './enrichment.js';
-import { loadConfig } from './config.js';
+import { countWords } from './enrichment.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -23,65 +27,6 @@ const OUTLINE_PATH = join(__dirname, '..', 'prompts', 'outline.md');
 const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
 
 export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
-
-// ─── Scene content sanitization ──────────────────────────────────────────────
-
-const SCENE_TAG_RE = /\[(narrator|character:[^\]]*|player|choice)\]/i;
-
-/**
- * Sanitize raw LLM output that should be scene content.
- * Strips leading preamble (explanations before the first scene tag),
- * trailing commentary after the last meaningful content,
- * and markdown code fences.
- *
- * If the output doesn't contain any scene tags, returns it as-is
- * (better to keep imperfect content than lose it entirely).
- */
-export function sanitizeSceneContent(raw, originalContent) {
-  if (!raw || typeof raw !== 'string') return originalContent;
-
-  let text = raw.trim();
-
-  // Strip markdown code fences
-  if (text.startsWith('```')) {
-    text = text.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-  }
-
-  // If it looks like JSON (LLM wrapped it in an object), try to extract content field
-  if (text.startsWith('{')) {
-    try {
-      const obj = JSON.parse(text);
-      if (obj.content && typeof obj.content === 'string') {
-        return obj.content;
-      }
-    } catch {
-      // Not valid JSON — continue with text processing
-    }
-  }
-
-  // Find the first scene tag and strip any preamble before it
-  const tagMatch = text.match(SCENE_TAG_RE);
-  if (tagMatch) {
-    const tagStart = text.indexOf(tagMatch[0]);
-    // Only strip preamble if the tag isn't at the very start
-    // and the text before it looks like explanation (no scene tags in it)
-    if (tagStart > 0) {
-      const preamble = text.slice(0, tagStart);
-      // If preamble has no scene tags, it's likely LLM explanation — strip it
-      if (!SCENE_TAG_RE.test(preamble)) {
-        text = text.slice(tagStart);
-      }
-    }
-  }
-
-  // If the result is substantially shorter than the original (>50% loss),
-  // the sanitization likely went wrong — keep the original
-  if (text.length < originalContent.length * 0.5) {
-    return originalContent;
-  }
-
-  return text.trim();
-}
 
 // ─── JSON extraction and repair ───────────────────────────────────────────────
 
@@ -151,7 +96,7 @@ async function parseJsonWithRepair(raw, label) {
 
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
-export function buildOutlinePrompt(materials, lang = 'en', styleKey, genre = '', referenceCharacter = '', referenceEvent = '') {
+export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '', referenceCharacter = '', referenceEvent = '') {
   const templateFile = OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
@@ -251,7 +196,7 @@ export async function parseOutline(raw) {
 }
 
 export async function generateOutline(materials, options = {}) {
-  const lang = options.lang || 'en';
+  const lang = options.lang || 'cn';
   const style = options.style;
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
@@ -309,7 +254,7 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
     .replace(/\{\{snowflakeSummary\}\}/g, () => summarizeSnowflakeForTail(snowflake));
 
   // Append constraint sections so the back half respects the same genre / character / event / news context as the front half.
-  const lang = options.lang || 'en';
+  const lang = options.lang || 'cn';
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
@@ -354,13 +299,42 @@ export async function parseTailOutline(raw, splitIdx, totalEpisodes, targetEndin
     throw new Error(`Tail outline must have exactly ${expectedCount} episodes (got ${data.episodes.length})`);
   }
 
-  const sorted = [...data.episodes].sort((a, b) => (a.episodeIndex ?? 0) - (b.episodeIndex ?? 0));
+  // Validate episodeIndex values strictly: every episode must declare an
+  // integer episodeIndex, no duplicates, and the set must equal
+  // {splitIdx..lastIdx}. We accept off-by-N where indices are unique and
+  // contiguous (LLMs sometimes start from 0 or from 1) — the renumber on
+  // line below recovers those cases. We REJECT missing/duplicate/sparse
+  // indices because renumbering them by sort order can land the intended
+  // ending episode at a non-final position.
+  const indices = data.episodes.map(ep => ep.episodeIndex);
+  const allIntegers = indices.every(idx => Number.isInteger(idx));
+  if (!allIntegers) {
+    throw new Error(`Tail outline episodes must all declare an integer episodeIndex (got ${JSON.stringify(indices)})`);
+  }
+  const indexSet = new Set(indices);
+  if (indexSet.size !== indices.length) {
+    throw new Error(`Tail outline has duplicate episodeIndex values: ${JSON.stringify(indices)}`);
+  }
+  const sorted = [...data.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
+  // Determine renumber offset: if the indices form a contiguous run of length
+  // expectedCount (regardless of where they start), shift them to start at
+  // splitIdx. Otherwise we have gaps — reject.
+  const minIdx = sorted[0].episodeIndex;
+  const maxIdx = sorted[sorted.length - 1].episodeIndex;
+  if (maxIdx - minIdx + 1 !== expectedCount) {
+    throw new Error(`Tail outline episodeIndex values are not contiguous: ${JSON.stringify(indices)}`);
+  }
+  const offset = splitIdx - minIdx;
+
   for (let i = 0; i < sorted.length; i++) {
     const ep = sorted[i];
+    if (offset !== 0) {
+      ep.episodeIndex += offset;
+    }
     const expectedIdx = splitIdx + i;
     if (ep.episodeIndex !== expectedIdx) {
-      // Coerce to expected index rather than fail — LLMs frequently misnumber.
-      ep.episodeIndex = expectedIdx;
+      // Should not happen given the contiguity check above — defensive guard.
+      throw new Error(`Tail outline episode at position ${i} has episodeIndex ${ep.episodeIndex}, expected ${expectedIdx}`);
     }
     if (!ep.title) throw new Error(`Tail episode ${expectedIdx} missing title`);
     if (!ep.clipPlan || ep.clipPlan.length === 0) {
@@ -606,15 +580,18 @@ export function buildPickStylePrompt(materials) {
     '## Instructions',
     '',
     'Consider the genres, themes, setting, and tone of the materials. Pick the style whose strengths best complement this story.',
-    'Return ONLY the style key as a single word (e.g. "sanderson"). No explanation, no quotes, no punctuation.',
+    'Return ONLY the trope key as a single phrase (e.g. "战神归来"). No explanation, no quotes, no punctuation.',
   ].join('\n');
 }
 
 export async function pickStyle(materials) {
   const prompt = buildPickStylePrompt(materials);
   const raw = await callLLM(prompt, 'style');
-  const key = raw.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-  // Validate the key — fall back to null (default) if unrecognized
+  // Strip whitespace, surrounding quotes, and trailing punctuation. Keep CJK
+  // characters since trope keys are CN strings (e.g. "战神归来"). The validator
+  // below is the source of truth — anything not matching a real key falls
+  // back to default.
+  const key = raw.trim().replace(/^["'`]|["'`.,;:!?]+$/g, '').trim();
   try {
     getStyle(key);
     return key;
@@ -626,23 +603,25 @@ export async function pickStyle(materials) {
 // ─── Full pipeline: outline → clips ──────────────────────────────────────────
 
 export async function generateDrama(materials, options = {}) {
-  const lang = options.lang || 'en';
+  const lang = options.lang || 'cn';
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
-  const { targetCharsPerClip } = loadConfig();
 
-  // Auto-pick style if not specified
+  // Auto-pick trope if not specified
   if (!style || style === 'default') {
-    log('Selecting best writing style for this story...');
+    log('Selecting best 短剧 trope for this story...');
     const picked = await pickStyle(materials);
     if (picked) {
       const def = getStyle(picked);
       style = picked;
-      log(`Selected style: ${def.name}`);
+      log(`Selected trope: ${def.name}`);
+    } else {
+      log('[trope auto-pick] LLM returned an unrecognized key — generating without a fixed trope');
+      wlog('trope_pick_failed');
     }
   }
 
@@ -699,9 +678,13 @@ export async function generateDrama(materials, options = {}) {
   const story = {
     title: outline.title,
     synopsis: outline.synopsis,
-    fandom: outline.fandom || null,
+    trope: outline.trope || '',
+    genre: outline.genre || '',
     genres: outline.genres || [],
     tags: outline.tags || [],
+    lang: outline.lang || lang,
+    characters: outline.characters || [],
+    fandom: outline.fandom || null,
     characterQuestions: outline.characterQuestions || [],
     episodes: [],
   };
@@ -790,8 +773,6 @@ export async function generateDrama(materials, options = {}) {
     // Reconstruct branch-local narrative context from ancestor path
     const ancestorPath = getAncestorPath(ep.episodeIndex);
     const branchHistory = [];
-    let branchSummary = '';
-    const branchMotifTracker = {};
 
     // Rebuild state from initial plan state (fresh copy per branch)
     const branchState = initStateFromPlan(plan);
@@ -821,11 +802,6 @@ export async function generateDrama(materials, options = {}) {
       const ctx = episodeContexts[ancestorIdx];
       if (ctx) {
         branchHistory.push(...(ctx.compressedHistory || []));
-        if (ctx.globalSummary) branchSummary = ctx.globalSummary;
-        // Merge motif tracker
-        for (const [key, val] of Object.entries(ctx.motifTracker || {})) {
-          branchMotifTracker[key] = val;
-        }
         // Apply state changes from ancestor (older snapshots may lack some fields)
         const sc = ctx.stateChanges || {};
         for (const [name, char] of Object.entries(sc.characters || {})) {
@@ -871,55 +847,27 @@ export async function generateDrama(materials, options = {}) {
     const episodeReinforcedForeshadowing = []; // { id, clipIndex }
     const episodeResolvedForeshadowing = [];  // { id, clipIndex }
     const episodeCompressedHistory = [];
-    let episodeSummary = branchSummary;
-    const episodeMotifTracker = { ...branchMotifTracker };
-    const recentConsistencyNotes = [];
 
     for (let i = 0; i < totalClips; i++) {
       const plan_clip = ep.clipPlan[i];
       log(`  Scene ${i + 1}/${totalClips}: ${plan_clip.summary.slice(0, 60)}...`);
 
-      // Build narrative context from branch-local state
-      // Use branch-local scene position for revelation scheduling (not flat globalClipIndex)
+      // Branch-local clip position is used only for foreshadowing/revelation
+      // scheduling (state.js operations). The clip prompt itself is fed
+      // priorClipDigest only — state context is intentionally not threaded
+      // through (the planner's clipSummary already encodes the relevant beat).
       const branchLocalSceneIndex = branchSceneCount + i;
       const history = buildHistoryContext([...branchHistory, ...episodeCompressedHistory]);
-      const ancestorSet = new Set(ancestorPath);
-      const revelations = getAvailableRevelations(branchState, branchLocalSceneIndex, ancestorSet);
-      const stateContext = toPromptContext(branchState);
-
-      // Validate state and log warnings
-      const stateWarnings = validate(branchState);
-      for (const warning of stateWarnings) {
-        log(`[state warning] ${warning}`);
-      }
 
       // Get plan scene data for events/pacing using composite key (episodeIndex:clipIndex)
       const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || {};
 
-      // Query vector store for relevant prior context
-      // Only include clips from ancestor episodes to prevent cross-branch leakage
-      let knowledgeContext = '';
-      if (options.vectorStore) {
-        try {
-          const query = plan_clip.summary + ' ' + (planScene.events || []).join(' ');
-          const results = await queryKnowledge(options.vectorStore, query, 3, branchLocalSceneIndex, ancestorSet);
-          if (results.length > 0) {
-            knowledgeContext = results.map(r => r.text).join('\n\n');
-          }
-        } catch (err) {
-          log(`[knowledge retrieval failed] ${err.message}`);
-        }
-      }
-
       // Generate clip via the new ctx-object pipeline (with retry and fallback).
-      // Trope `## Clip` section is resolved from the style key; richer narrative
-      // context (history, state, revelations, etc.) is no longer threaded through
-      // the prompt — it lives in the planner output and is reflected in
-      // plan_clip.summary. If we re-enable narrative context injection, it goes
-      // through prompts/clips.md additions, not new ctx fields here.
+      // Trope `## Clip` section is resolved from the style key.
       const tropeStyle = getStyleSafe(style);
       const tropeSection = tropeStyle?.clip || '';
       const isConcl = !!plan_clip.isConclusion || (ep.isEnding && i === ep.clipPlan.length - 1);
+      const concEnding = plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆');
       let scene;
       try {
         scene = await generateClip({
@@ -941,8 +889,8 @@ export async function generateDrama(materials, options = {}) {
           const retryPrompt = buildRetryClipPrompt({
             clipSummary: plan_clip.summary || '',
             prevError: firstErr.message,
-            isConclusion: !!plan_clip.isConclusion,
-            ending: plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆'),
+            isConclusion: isConcl,
+            ending: concEnding,
           });
           const retryRaw = await callLLM(retryPrompt, 'clip');
           scene = await parseClip(retryRaw);
@@ -952,13 +900,20 @@ export async function generateDrama(materials, options = {}) {
           scene = buildFallbackClip({
             clipIndex: i,
             summary: plan_clip.summary || '',
-            isConclusion: !!plan_clip.isConclusion,
-            ending: plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆'),
+            isConclusion: isConcl,
+            ending: concEnding,
           });
         }
       }
 
-      // Index scene in vector store for future retrieval
+      // Derived "view" string: structured fields concatenated for downstream
+      // consumers (vectorstore retrieval, log word counts) that historically
+      // read scene.content. The structured fields remain authoritative for
+      // upload; this is just a convenience join.
+      scene.content = [scene.setting, scene.action, scene.dialogue, scene.hook]
+        .filter(Boolean).join('\n\n');
+
+      // Index clip in vector store for future similarity retrieval
       if (options.vectorStore) {
         try {
           options.vectorStore.add(
@@ -970,43 +925,6 @@ export async function generateDrama(materials, options = {}) {
           log(`[scene indexing failed] ${err.message}`);
         }
       }
-
-      // Check and fix consistency issues (use branch-local index for cooldown accuracy)
-      const consistencyResult = checkConsistency(scene.content, episodeMotifTracker, branchLocalSceneIndex);
-      if (consistencyResult.issues.length > 0) {
-        log(`Fixing ${consistencyResult.issues.length} consistency issue(s)...`);
-        // Feed issues forward so future clips avoid the same patterns
-        recentConsistencyNotes.push(...consistencyResult.issues);
-        // Keep only the most recent issues (last 2 clips worth)
-        while (recentConsistencyNotes.length > 10) recentConsistencyNotes.shift();
-        try {
-          const rewritten = await rewriteForConsistency(scene.content, consistencyResult.issues, lang);
-          scene.content = sanitizeSceneContent(rewritten, scene.content);
-        } catch (err) {
-          log(`[consistency rewrite failed] ${err.message}`);
-        }
-      }
-
-      // Enrich scene if below word count target
-      if (needsEnrichment(scene.content, targetCharsPerClip)) {
-        log(`Scene below word target (${targetCharsPerClip}) — enriching...`);
-        try {
-          const enriched = await enrichScene(scene.content, targetCharsPerClip, lang);
-          scene.content = sanitizeSceneContent(enriched, scene.content);
-        } catch (err) {
-          log(`[enrichment failed] ${err.message}`);
-        }
-      }
-
-      // Update branch-local narrative summary
-      try {
-        episodeSummary = await updateGlobalSummary(episodeSummary, scene.content, lang);
-      } catch (err) {
-        log(`[global summary update failed] ${err.message}`);
-      }
-
-      // Update motif tracker
-      updateMotifTracker(episodeMotifTracker, scene.content, branchLocalSceneIndex);
 
       // Apply character changes from plan
       for (const cc of (planScene.characterChanges || [])) {
@@ -1102,8 +1020,6 @@ export async function generateDrama(materials, options = {}) {
     // Save this episode's context snapshot for descendant episodes
     episodeContexts[ep.episodeIndex] = {
       compressedHistory: episodeCompressedHistory,
-      globalSummary: episodeSummary,
-      motifTracker: episodeMotifTracker,
       stateChanges: {
         characters: episodeCharChanges,
         items: episodeItemChanges,
@@ -1116,14 +1032,16 @@ export async function generateDrama(materials, options = {}) {
     // For ending episodes, ensure the last scene has a conclusion
     if (ep.isEnding) {
       const lastClip = episode.clips[episode.clips.length - 1];
+      const fallbackEnding = VALID_ENDINGS.includes(ep.ending) ? ep.ending : '爽爆';
       if (!lastClip.conclusion) {
         log(`  Ending episode "${ep.title}" missing conclusion — injecting fallback`);
         lastClip.conclusion = {
           title: ep.title,
           overview: ep.clipPlan[ep.clipPlan.length - 1]?.summary || ep.title,
           type: 'DRAMA_END',
-          ending: ep.ending || 'NEUTRAL',
+          ending: fallbackEnding,
         };
+        lastClip.isConclusion = true;
       }
     }
 
@@ -1155,6 +1073,8 @@ export async function generateDrama(materials, options = {}) {
   if (!story.episodes.length) throw new Error('Story must have at least 1 episode');
   for (const ep of story.episodes) {
     if (!ep.clips.length) throw new Error(`Episode "${ep.title}" has no clips`);
+    const hookIssues = checkHookDensity(ep);
+    for (const issue of hookIssues) log(`[hook density] ${issue}`);
   }
 
   return story;

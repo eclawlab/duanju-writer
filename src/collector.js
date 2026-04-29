@@ -125,7 +125,7 @@ export function clearWebResearchCache() {
   webResearchCacheTime = 0;
 }
 
-export function buildResearchPrompt(history, webResearch, lang = 'en', genre = '') {
+export function buildResearchPrompt(history, webResearch, lang = 'cn', genre = '') {
   const templateFile = PROMPT_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const historyText = history.length > 0
@@ -300,7 +300,7 @@ async function gatherNewsResearch(newsUrl, lang) {
   return { research: sections.join('\n\n'), keywords };
 }
 
-function buildNewsResearchPrompt(history, newsResearch, lang = 'en', genre = '') {
+function buildNewsResearchPrompt(history, newsResearch, lang = 'cn', genre = '') {
   const historyText = history.length > 0
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')
     : lang === 'cn' ? '（无——这是首次运行）' : '(none — this is the first run)';
@@ -435,7 +435,7 @@ function buildNewsResearchPrompt(history, newsResearch, lang = 'en', genre = '')
 }
 
 export async function collect(history, options = {}) {
-  const lang = options.lang || 'en';
+  const lang = options.lang || 'cn';
   const genre = options.genre || '';
   const newsUrl = options.newsUrl || '';
 

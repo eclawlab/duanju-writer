@@ -59,7 +59,7 @@ export function needsEnrichment(content, targetWords) {
  * @param {string} [lang='en']
  * @returns {string}
  */
-export function buildEnrichmentPrompt(content, targetWords, lang = 'en') {
+export function buildEnrichmentPrompt(content, targetWords, lang = 'cn') {
   if (lang === 'cn') {
     return [
       '你正在扩写一个场景以达到字数目标。当前场景内容太短。',
@@ -104,7 +104,7 @@ export function buildEnrichmentPrompt(content, targetWords, lang = 'en') {
  * @param {string} [lang='en']
  * @returns {Promise<string>}
  */
-export async function enrichScene(content, targetWords, lang = 'en') {
+export async function enrichScene(content, targetWords, lang = 'cn') {
   const prompt = buildEnrichmentPrompt(content, targetWords, lang);
   return callLLM(prompt, 'clip');
 }

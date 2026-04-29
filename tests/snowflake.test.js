@@ -10,18 +10,25 @@ describe('snowflake', () => {
     assert.ok(prompt.includes('Machines gain free will'));
   });
 
-  test('buildSnowflakePrompt includes part title for partIndex 0', async () => {
+  test('buildSnowflakePrompt includes part title for partIndex 0 (en)', async () => {
+    const { buildSnowflakePrompt } = await import('../src/snowflake.js');
+    const materials = { topics: [] };
+    const prompt = buildSnowflakePrompt(materials, 0, [], 'en');
+    assert.ok(prompt.includes('Core Seed'));
+  });
+
+  test('buildSnowflakePrompt defaults to cn and uses CN part title for partIndex 0', async () => {
     const { buildSnowflakePrompt } = await import('../src/snowflake.js');
     const materials = { topics: [] };
     const prompt = buildSnowflakePrompt(materials, 0, []);
-    assert.ok(prompt.includes('Core Seed'));
+    assert.ok(prompt.includes('核心种子'), 'default lang=cn should produce CN part title');
   });
 
   test('buildSnowflakePrompt includes prior parts in instructions', async () => {
     const { buildSnowflakePrompt } = await import('../src/snowflake.js');
     const materials = { topics: [] };
     const priorParts = [{ coreSeed: 'A hero must save the world' }];
-    const prompt = buildSnowflakePrompt(materials, 1, priorParts);
+    const prompt = buildSnowflakePrompt(materials, 1, priorParts, 'en');
     assert.ok(prompt.includes('A hero must save the world'));
     assert.ok(prompt.includes('Previous parts for context'));
   });

@@ -32,7 +32,7 @@ function clipBody(c) {
   return parts.join('\n');
 }
 
-export function buildCompressPrompt(clips, lang = 'en') {
+export function buildCompressPrompt(clips, lang = 'cn') {
   const clipBlocks = clips.map((s, i) =>
     `### Clip ${i + 1}\n${clipBody(s)}`
   ).join('\n\n');
@@ -103,7 +103,7 @@ export function parseCompressorOutput(raw) {
 
 // ─── Compress via Claude ───────────────────────────────────────────────────────
 
-export async function compressClips(clips, lang = 'en') {
+export async function compressClips(clips, lang = 'cn') {
   const prompt = buildCompressPrompt(clips, lang);
   const raw = await callLLM(prompt, 'compress');
   return parseCompressorOutput(raw);
@@ -111,7 +111,7 @@ export async function compressClips(clips, lang = 'en') {
 
 // ─── Global narrative summary ──────────────────────────────────────────────────
 
-export function buildGlobalSummaryPrompt(currentSummary, newSceneContent, lang = 'en') {
+export function buildGlobalSummaryPrompt(currentSummary, newSceneContent, lang = 'cn') {
   if (lang === 'cn') {
     return [
       '你是叙事摘要专家。请更新以下全局故事摘要，整合新场景的内容。',
@@ -153,7 +153,7 @@ export function buildGlobalSummaryPrompt(currentSummary, newSceneContent, lang =
   ].join('\n');
 }
 
-export async function updateGlobalSummary(currentSummary, newSceneContent, lang = 'en') {
+export async function updateGlobalSummary(currentSummary, newSceneContent, lang = 'cn') {
   const prompt = buildGlobalSummaryPrompt(currentSummary, newSceneContent, lang);
   const result = await callLLM(prompt, 'compress');
   // Safety: truncate to 2000 chars

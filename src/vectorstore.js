@@ -28,10 +28,14 @@ const CJK_RE = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
 
 /**
  * Tokenize text: handles both Latin (word-split) and CJK (bigram) text.
+ * Returns an empty array for non-string / empty input rather than throwing —
+ * upstream callers (e.g., drama-writer.js) historically passed scene.content
+ * which was undefined post-pivot.
  * @param {string} text
  * @returns {string[]}
  */
 export function tokenize(text) {
+  if (typeof text !== 'string' || text.length === 0) return [];
   const lower = text.toLowerCase();
   const tokens = [];
 

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
 import { loadConfig } from './config.js';
-import { updateJob, getJob, claimNextPending } from './queue.js';
+import { updateJob, getJob, claimNextPending, claimJob } from './queue.js';
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
 import { generateDrama, generateOutline, generateTailOutline } from './drama-writer.js';
@@ -36,9 +36,11 @@ function saveArtifact(jobId, filename, data) {
   const dir = join(JOBS_DIR, jobId);
   // Tag JSON-object artifacts with schemaVersion so the loader can refuse to
   // resume jobs whose artifacts predate this pivot. Arrays and primitives pass
-  // through untouched.
+  // through untouched. Spread `data` first so the literal SCHEMA_VERSION wins
+  // over any stale schemaVersion already present (re-saving a previously
+  // loaded artifact must update the tag, not preserve the old one).
   const tagged = (data && typeof data === 'object' && !Array.isArray(data))
-    ? { schemaVersion: SCHEMA_VERSION, ...data }
+    ? { ...data, schemaVersion: SCHEMA_VERSION }
     : data;
   writeFileSync(join(dir, filename), JSON.stringify(tagged, null, 2) + '\n', 'utf8');
 }
@@ -67,7 +69,7 @@ function loadArtifact(jobId, filename) {
 async function processJob(jobId, options = {}) {
   const config = loadConfig();
   const maxRetries = config.maxRetries || MAX_RETRIES;
-  const lang = options.lang || config.lang || 'en';
+  const lang = options.lang || config.lang || 'cn';
   const genre = options.genre || config.genre || '';
   const newsUrl = options.newsUrl || '';
   const style = options.style || config.style || 'default';
@@ -189,17 +191,26 @@ async function processJob(jobId, options = {}) {
     frontStore.load();
 
     let frontProgress = loadArtifact(jobId, 'front.json');
+    // If the run crashed mid-front, the final front.json was never written
+    // but front.progress.json persists each episode. Re-seed from progress
+    // rather than regenerating the entire front (30+ minutes of LLM time).
+    const partialFront = !frontProgress ? loadArtifact(jobId, 'front.progress.json') : null;
+    if (partialFront) {
+      log(`Resuming front-half from partial progress (${partialFront.episodes?.length || 0}/${splitIdx} episodes done).`);
+      wlog('front_resumed_partial', { completedEpisodes: partialFront.episodes?.length || 0, splitIdx });
+    }
     if (!frontProgress) {
       log(`Generating front-half clips (episodes 0..${splitIdx - 1})...`);
       wlog('front_start', { splitIdx, totalEpisodes });
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
-      let latestProgress = null;
+      let latestProgress = partialFront || null;
       const frontStory = await generateDrama(materials, {
         lang, genre, referenceCharacter, referenceEvent, style, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
         savedPlan: basePlan,
+        progress: partialFront || undefined,
         onEpisode: (pd) => {
           latestProgress = pd;
           saveArtifact(jobId, 'front.progress.json', pd);
@@ -347,11 +358,25 @@ async function processJob(jobId, options = {}) {
       totalWordsAcrossVariants += vWords;
       log(`Variant ${v.key}: "${variantStory.title}" — ${variantStory.episodes.length} eps, ${vClips} clips, ${vWords} words`);
 
-      // Upload
+      // Upload — write a "pending" artifact with the idempotency key BEFORE
+      // the HTTP call so a crash between request-success and artifact-save
+      // doesn't produce a duplicate platform story on retry. The platform
+      // is expected to honor the Idempotency-Key header / body field and
+      // return the same storyId for repeated POSTs with the same key.
+      const idempotencyKey = `${jobId}.${v.key}`;
+      const pendingKey = `upload.${v.key}.pending.json`;
+      saveArtifact(jobId, pendingKey, {
+        idempotencyKey, variationGroupId, variationLabel: v.label, ending: v.ending,
+        startedAt: new Date().toISOString(),
+      });
       log(`Variant ${v.key}: uploading (${v.label})...`);
-      wlog('variant_upload_start', { variant: v.key, label: v.label, variationGroupId });
+      wlog('variant_upload_start', { variant: v.key, label: v.label, variationGroupId, idempotencyKey });
       const uploadStartTime = Date.now();
-      const uploadResult = await upload(variantStory, { variationGroupId, variationLabel: v.label });
+      const uploadResult = await upload(variantStory, {
+        variationGroupId,
+        variationLabel: v.label,
+        idempotencyKey,
+      });
       const uploadDuration = Date.now() - uploadStartTime;
       log(`Variant ${v.key} uploaded: ${uploadResult.storyId}`);
       wlog('variant_upload_done', {
@@ -363,16 +388,25 @@ async function processJob(jobId, options = {}) {
         variationGroupId,
         variationLabel: v.label,
         ending: v.ending,
+        idempotencyKey,
         success: uploadResult.success,
       });
 
-      addEntry({
-        topic: variantStory.title,
-        genres: variantStory.genres || [],
-        storyId: uploadResult.storyId,
-      });
-
       storyIds.push(uploadResult.storyId);
+    }
+
+    // Record exactly one history entry per drama group (not per variant —
+    // three variants with the same title would push the same topic three
+    // times into the dedupe window). Use the first variant's storyId as a
+    // group reference; downstream history consumers only care about topic
+    // freshness and genre coverage.
+    if (sampleStory && storyIds.length > 0) {
+      addEntry({
+        topic: sampleStory.title,
+        genres: sampleStory.genres || [],
+        variationGroupId,
+        storyId: storyIds[0],
+      });
     }
 
     // ─── Done ──────────────────────────────────────────────────────────────
@@ -462,11 +496,33 @@ async function processJob(jobId, options = {}) {
 }
 
 export async function runOnce(jobId, options = {}) {
+  // Atomically take the job before processing. If the daemon worker is
+  // running and has already claimed this job, bail out — running both would
+  // produce duplicate uploads and racing artifact writes.
+  const claimed = claimJob(jobId);
+  if (!claimed) {
+    const existing = getJob(jobId);
+    if (!existing) {
+      console.log(chalk.red(`  [${jobId}] Job not found.`));
+    } else {
+      console.log(chalk.yellow(`  [${jobId}] Job is already ${existing.status} (claimed by another process or already done) — skipping runOnce.`));
+    }
+    return;
+  }
+
   let success = await processJob(jobId, options);
   let attempt = 0;
   while (!success) {
     const job = getJob(jobId);
     if (!job || job.status !== 'pending') break;
+    // Re-claim after the previous attempt flipped the job back to pending
+    // for retry. If another worker grabbed it in between, stop retrying
+    // here — that worker now owns the job.
+    const reclaimed = claimJob(jobId);
+    if (!reclaimed) {
+      console.log(chalk.yellow(`  [${jobId}] Another process claimed the job during retry — stepping back.`));
+      break;
+    }
     attempt += 1;
     // Backoff with jitter so transient failures (rate limit, network
     // blip) don't hammer the LLM API in a tight retry loop.
@@ -480,7 +536,7 @@ export async function runOnce(jobId, options = {}) {
 
 export function startWorker() {
   const config = loadConfig();
-  console.log(chalk.cyan(`Worker started — polling for jobs (lang=${config.lang || 'en'}, type=${config.genre || 'any'}, style=${config.style || 'default'})...`));
+  console.log(chalk.cyan(`Worker started — polling for jobs (lang=${config.lang || 'cn'}, type=${config.genre || 'any'}, style=${config.style || 'default'})...`));
 
   let stopped = false;
   let timer = null;

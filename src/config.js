@@ -26,6 +26,7 @@ const DEFAULTS = {
   roles: {
     research: 'claude',
     outline: 'claude',
+    'tail-outline': 'claude',
     plan: 'claude',
     clip: 'claude',
     compress: 'claude',

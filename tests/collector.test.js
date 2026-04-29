@@ -15,7 +15,7 @@ describe('collector', () => {
 
   test('buildResearchPrompt works with empty history', async () => {
     const { buildResearchPrompt } = await import('../src/collector.js');
-    const prompt = buildResearchPrompt([], 'web data');
+    const prompt = buildResearchPrompt([], 'web data', 'en');
     assert.ok(prompt.includes('(none — this is the first run)'));
   });
 
@@ -51,7 +51,7 @@ describe('collector', () => {
 
   test('buildResearchPrompt handles missing web research', async () => {
     const { buildResearchPrompt } = await import('../src/collector.js');
-    const prompt = buildResearchPrompt([], null);
+    const prompt = buildResearchPrompt([], null, 'en');
     assert.ok(prompt.includes('(no web research available)'));
   });
 

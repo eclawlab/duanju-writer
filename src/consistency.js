@@ -158,7 +158,7 @@ export function checkConsistency(content, motifTracker, clipIndex) {
  * Builds a prompt asking Claude to rewrite content to fix the listed issues.
  * Uses Chinese instructions for lang === 'cn'.
  */
-export function buildRewritePrompt(content, issues, lang = 'en') {
+export function buildRewritePrompt(content, issues, lang = 'cn') {
   const issueList = issues.map(i => `- ${i}`).join('\n');
   if (lang === 'cn') {
     return `你是一位专业短剧编剧。请修改以下段落以解决文风问题，同时保留原有的剧情走向与人物关系。
@@ -185,7 +185,7 @@ Rewrite the content to address the issues above while keeping the plot and chara
 /**
  * Calls Claude to rewrite content for consistency. Not tested directly.
  */
-export async function rewriteForConsistency(content, issues, lang = 'en') {
+export async function rewriteForConsistency(content, issues, lang = 'cn') {
   const prompt = buildRewritePrompt(content, issues, lang);
   return callLLM(prompt, 'consistency');
 }

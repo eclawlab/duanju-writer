@@ -132,6 +132,28 @@ export function claimNextPendingIn(filePath) {
   });
 }
 
+/**
+ * Atomically claim a specific job by id. Used by `runOnce` so a CLI invocation
+ * can't race a daemon worker that's already grabbed the same job. Returns the
+ * claimed job on success; returns null if the job doesn't exist or is no
+ * longer pending (already claimed by another process).
+ */
+export function claimJobIn(filePath, jobId) {
+  return withLock(filePath, () => {
+    const jobs = readJobs(filePath);
+    const idx = jobs.findIndex(j => j.id === jobId);
+    if (idx === -1) return null;
+    if (jobs[idx].status !== 'pending') return null;
+    jobs[idx] = {
+      ...jobs[idx],
+      status: 'collecting',
+      startedAt: jobs[idx].startedAt || new Date().toISOString(),
+    };
+    writeJobs(filePath, jobs);
+    return jobs[idx];
+  });
+}
+
 export function resetJobsIn(filePath, jobsDir) {
   return withLock(filePath, () => {
     const prior = readJobs(filePath);
@@ -157,4 +179,5 @@ export function getJob(id) { return getJobFrom(JOBS_FILE, id); }
 export function listJobs() { return listJobsFrom(JOBS_FILE); }
 export function hasBusyJob() { return hasBusyJobIn(JOBS_FILE); }
 export function claimNextPending() { return claimNextPendingIn(JOBS_FILE); }
+export function claimJob(id) { return claimJobIn(JOBS_FILE, id); }
 export function resetJobs() { return resetJobsIn(JOBS_FILE, JOBS_DIR); }

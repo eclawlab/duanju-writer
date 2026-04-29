@@ -39,7 +39,7 @@ function extractJsonObject(text) {
  * @param {string} lang - 'en' or 'cn'
  * @returns {string}
  */
-export function buildPlanPrompt(outline, lang = 'en', genre = '', referenceCharacter = '', referenceEvent = '') {
+export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '') {
   const templatePath = join(__dirname, '..', 'prompts', 'plan.md');
   let template = readFileSync(templatePath, 'utf8');
   if (genre) {
@@ -150,7 +150,7 @@ export function initStateFromPlan(plan) {
  * @returns {Promise<object>}
  */
 export async function generatePlan(outline, options = {}) {
-  const lang = options.lang || 'en';
+  const lang = options.lang || 'cn';
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
