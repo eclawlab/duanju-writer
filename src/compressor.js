@@ -20,16 +20,20 @@ function extractJsonObject(text) {
 
 // ─── Prompt builder ────────────────────────────────────────────────────────────
 
-// Render a clip's spoken/action content for LLM compression. Accepts both the
-// legacy `{content}` shape and the duanju `{setting, action, dialogue, hook}` shape.
+// Render a clip's spoken/action content for LLM compression. Reads the
+// non-enumerable _beats ride-along that parseClip / buildFallbackClip set.
+// Falls back to direct fields (pre-pivot fallback shape) and to a flat
+// `content` string (legacy audio-novel shape) so this helper degrades
+// gracefully on artifacts produced by older code paths.
 function clipBody(c) {
-  if (c.content) return c.content;
+  const beats = c._beats || c;
   const parts = [];
-  if (c.setting) parts.push(`场景：${c.setting}`);
-  if (c.action) parts.push(`动作：${c.action}`);
-  if (c.dialogue) parts.push(c.dialogue);
-  if (c.hook) parts.push(`钩点：${c.hook}`);
-  return parts.join('\n');
+  if (beats.setting)  parts.push(`场景：${beats.setting}`);
+  if (beats.action)   parts.push(`动作：${beats.action}`);
+  if (beats.dialogue) parts.push(beats.dialogue);
+  if (beats.hook)     parts.push(`钩点：${beats.hook}`);
+  if (parts.length > 0) return parts.join('\n');
+  return c.content || '';
 }
 
 export function buildCompressPrompt(clips, lang = 'cn') {
