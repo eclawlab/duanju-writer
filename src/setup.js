@@ -19,7 +19,7 @@ export async function setup(args) {
       autostoryUrl = args[0];
     } else {
       const currentUrl = config.autostoryUrl || 'http://localhost:3001';
-      const urlInput = await ask(rl, `AutoStory API URL [${currentUrl}]: `);
+      const urlInput = await ask(rl, `Duanju API URL [${currentUrl}]: `);
       autostoryUrl = urlInput.trim() || currentUrl;
     }
 
@@ -38,7 +38,7 @@ export async function setup(args) {
     } catch (err) {
       const msg = err.name === 'AbortError' ? 'Connection timed out (15s)' : err.message;
       console.log(chalk.red(`  Cannot reach API: ${msg}`));
-      console.log(chalk.red('  Make sure the autostory API is running.'));
+      console.log(chalk.red('  Make sure the Duanju API is running.'));
       process.exit(1);
     }
 

@@ -7,9 +7,9 @@ import { loadConfig } from './config.js';
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60_000;
 
 export function buildRequest(drama, config, variationOptions = {}) {
-  // Endpoint path preserved (`/api/ai/stories`) so the existing AutoStory
+  // Endpoint path preserved (`/api/ai/stories`) so the existing Duanju
   // ingestion route stays stable — the body discriminator `format: "duanju"`
-  // tells AutoStory to use the new short-drama schema.
+  // tells the server to use the new short-drama schema.
   const url = `${config.autostoryUrl}/api/ai/stories`;
   const body = {
     format: 'duanju',
