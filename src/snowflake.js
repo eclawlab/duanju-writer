@@ -45,7 +45,7 @@ const PARTS_CN = [
   },
 ];
 
-export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', novelType = '', referenceCharacter = '', referenceEvent = '') {
+export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'en', genre = '', referenceCharacter = '', referenceEvent = '') {
   const templateFile = lang === 'cn' ? TEMPLATE_PATH_CN : TEMPLATE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const parts = lang === 'cn' ? PARTS_CN : PARTS;
@@ -59,10 +59,10 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
   if (priorParts.length > 0) {
     instructions = 'Previous parts for context:\n' + JSON.stringify(priorParts, null, 2) + '\n\n' + instructions;
   }
-  if (novelType) {
+  if (genre) {
     const constraint = lang === 'cn'
-      ? `\n\n重要：这个故事必须是**${novelType}**类型。所有角色、世界观、情节都必须符合此类型。`
-      : `\n\nIMPORTANT: This story MUST be a **${novelType}** novel. All characters, world-building, and plot must align with this genre/type.`;
+      ? `\n\n重要：这个故事必须是**${genre}**类型。所有角色、世界观、情节都必须符合此类型。`
+      : `\n\nIMPORTANT: This story MUST be a **${genre}** novel. All characters, world-building, and plot must align with this genre/type.`;
     instructions += constraint;
   }
   if (referenceCharacter) {
@@ -95,7 +95,7 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'e
 
 export async function generateSnowflake(materials, options = {}) {
   const lang = options.lang || 'en';
-  const novelType = options.novelType || '';
+  const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
   const log = options.log || (() => {});
@@ -104,7 +104,7 @@ export async function generateSnowflake(materials, options = {}) {
 
   for (let i = 0; i < localized.length; i++) {
     log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
-    const prompt = buildSnowflakePrompt(materials, i, parts, lang, novelType, referenceCharacter, referenceEvent);
+    const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent);
     const raw = await callLLM(prompt, 'outline');
     // Try to parse JSON, fall back to raw text
     try {

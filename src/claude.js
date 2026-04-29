@@ -21,5 +21,5 @@ export function parseClaudeOutput(stdout) {
 }
 
 export function callClaude(prompt, options = {}) {
-  return callLLM(prompt, options.role || 'scene');
+  return callLLM(prompt, options.role || 'clip');
 }

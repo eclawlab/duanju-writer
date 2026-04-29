@@ -120,16 +120,16 @@ export function clearWebResearchCache() {
   webResearchCacheTime = 0;
 }
 
-export function buildResearchPrompt(history, webResearch, lang = 'en', novelType = '') {
+export function buildResearchPrompt(history, webResearch, lang = 'en', genre = '') {
   const templateFile = lang === 'cn' ? PROMPT_PATH_CN : PROMPT_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const historyText = history.length > 0
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')
     : lang === 'cn' ? '（无——这是首次运行）' : '(none — this is the first run)';
-  if (novelType) {
+  if (genre) {
     const section = lang === 'cn'
-      ? `\n\n## 小说类型要求\n\n你必须专注于以下小说类型：**${novelType}**。所有研究主题、情节灵感和角色设定都必须围绕这个类型。不要偏离此类型。\n`
-      : `\n\n## Novel Type Requirement\n\nYou MUST focus exclusively on the following novel type: **${novelType}**. All research topics, plot hooks, and character ideas must be within this genre/type. Do not deviate from this type.\n`;
+      ? `\n\n## 题材要求\n\n你必须专注于以下题材：**${genre}**。所有研究主题、情节灵感和角色设定都必须围绕这个类型。不要偏离此类型。\n`
+      : `\n\n## Novel Type Requirement\n\nYou MUST focus exclusively on the following novel type: **${genre}**. All research topics, plot hooks, and character ideas must be within this genre/type. Do not deviate from this type.\n`;
     template += section;
   }
   return template
@@ -295,7 +295,7 @@ async function gatherNewsResearch(newsUrl, lang) {
   return { research: sections.join('\n\n'), keywords };
 }
 
-function buildNewsResearchPrompt(history, newsResearch, lang = 'en', novelType = '') {
+function buildNewsResearchPrompt(history, newsResearch, lang = 'en', genre = '') {
   const historyText = history.length > 0
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')
     : lang === 'cn' ? '（无——这是首次运行）' : '(none — this is the first run)';
@@ -323,7 +323,7 @@ function buildNewsResearchPrompt(history, newsResearch, lang = 'en', novelType =
       '   - 不要直接照搬新闻，而是以新闻为灵感进行艺术加工',
       '   - 可以改变时代背景、添加虚构元素、放大戏剧冲突',
       '   - 参考搜索到的类似小说，找到已验证受欢迎的叙事方式',
-      '   - 小说类型由新闻内容自然决定（都市、悬疑、科幻等）',
+      '   - 题材由新闻内容自然决定（都市、悬疑、科幻等）',
       '',
       '3. 不要重复使用以下最近用过的主题：',
       historyText,
@@ -419,10 +419,10 @@ function buildNewsResearchPrompt(history, newsResearch, lang = 'en', novelType =
     ].join('\n');
   }
 
-  if (novelType) {
+  if (genre) {
     const section = lang === 'cn'
-      ? `\n\n## 小说类型要求\n\n你必须专注于以下小说类型：**${novelType}**。所有研究主题、情节灵感和角色设定都必须围绕这个类型。不要偏离此类型。\n`
-      : `\n\n## Novel Type Requirement\n\nYou MUST focus exclusively on the following novel type: **${novelType}**. All research topics, plot hooks, and character ideas must be within this genre/type. Do not deviate from this type.\n`;
+      ? `\n\n## 题材要求\n\n你必须专注于以下题材：**${genre}**。所有研究主题、情节灵感和角色设定都必须围绕这个类型。不要偏离此类型。\n`
+      : `\n\n## Novel Type Requirement\n\nYou MUST focus exclusively on the following novel type: **${genre}**. All research topics, plot hooks, and character ideas must be within this genre/type. Do not deviate from this type.\n`;
     prompt += section;
   }
 
@@ -431,13 +431,13 @@ function buildNewsResearchPrompt(history, newsResearch, lang = 'en', novelType =
 
 export async function collect(history, options = {}) {
   const lang = options.lang || 'en';
-  const novelType = options.novelType || '';
+  const genre = options.genre || '';
   const newsUrl = options.newsUrl || '';
 
   if (newsUrl) {
     // News-based collection: fetch article, extract keywords, search for context & similar novels
     const { research, keywords } = await gatherNewsResearch(newsUrl, lang);
-    const prompt = buildNewsResearchPrompt(history, research, lang, novelType);
+    const prompt = buildNewsResearchPrompt(history, research, lang, genre);
     const raw = await callLLM(prompt, 'research');
     const materials = await parseMaterials(raw);
     // Attach news metadata so downstream steps have context
@@ -446,7 +446,7 @@ export async function collect(history, options = {}) {
   }
 
   const webResearch = await gatherWebResearch();
-  const prompt = buildResearchPrompt(history, webResearch, lang, novelType);
+  const prompt = buildResearchPrompt(history, webResearch, lang, genre);
   const raw = await callLLM(prompt, 'research');
   return await parseMaterials(raw);
 }

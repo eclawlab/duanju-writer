@@ -11,9 +11,11 @@ const DEFAULTS = {
   maxRetries: 3,
   maxConcurrentJobs: 1,
   publishOnUpload: true,
-  targetCharsPerClip: 0,  // 0 = disabled, set to e.g. 200 to enable
+  targetCharsPerClip: 50,         // 0 = disabled
+  episodesPerDrama: 20,
+  clipsPerEpisode: 6,
   lang: 'cn',
-  novelType: '',
+  genre: '',
   referenceCharacter: '',
   referenceEvent: '',
   style: 'default',
@@ -25,7 +27,7 @@ const DEFAULTS = {
     research: 'claude',
     outline: 'claude',
     plan: 'claude',
-    scene: 'claude',
+    clip: 'claude',
     compress: 'claude',
     consistency: 'claude',
     style: 'claude',

@@ -93,5 +93,5 @@ export function buildEnrichmentPrompt(content, targetWords, lang = 'en') {
  */
 export async function enrichScene(content, targetWords, lang = 'en') {
   const prompt = buildEnrichmentPrompt(content, targetWords, lang);
-  return callLLM(prompt, 'scene');
+  return callLLM(prompt, 'clip');
 }

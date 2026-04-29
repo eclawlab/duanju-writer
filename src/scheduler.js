@@ -40,7 +40,7 @@ function tick() {
   const options = {
     lang: config.lang || undefined,
     style: config.style || undefined,
-    novelType: config.novelType || undefined,
+    genre: config.genre || undefined,
     referenceCharacter: resolveReferenceFile('character', config.referenceCharacter) || undefined,
     referenceEvent: resolveReferenceFile('event', config.referenceEvent) || undefined,
   };

@@ -74,7 +74,7 @@ export function createJobIn(filePath, jobsDir, options = {}) {
       options: {
         lang: options.lang ?? null,
         style: options.style ?? null,
-        novelType: options.novelType ?? null,
+        genre: options.genre ?? null,
         newsUrl: options.newsUrl ?? null,
         referenceCharacter: options.referenceCharacter ?? null,
         referenceEvent: options.referenceEvent ?? null,

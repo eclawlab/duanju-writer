@@ -90,7 +90,26 @@ describe('config', () => {
     const { loadConfigFrom } = await import('../src/config.js');
     const config = loadConfigFrom(join(TEST_DIR, 'nonexistent.json'));
     assert.equal(config.providers.claude.type, 'claude-cli');
-    assert.equal(config.roles.scene, 'claude');
+    assert.equal(config.roles.clip, 'claude');
+  });
+
+  test('DEFAULTS includes new duanju keys', async () => {
+    const { loadConfigFrom } = await import('../src/config.js');
+    const cfg = loadConfigFrom(join(TEST_DIR, 'nonexistent.json'));
+    assert.equal(cfg.episodesPerDrama, 20);
+    assert.equal(cfg.clipsPerEpisode, 6);
+    assert.equal(cfg.targetCharsPerClip, 50);
+    assert.equal(cfg.genre, '');
+    assert.equal(cfg.lang, 'cn');
+    assert.equal(cfg.roles.clip, 'claude');
+  });
+
+  test('DEFAULTS no longer has retired keys', async () => {
+    const { loadConfigFrom } = await import('../src/config.js');
+    const cfg = loadConfigFrom(join(TEST_DIR, 'nonexistent.json'));
+    assert.equal(cfg.targetWordsPerScene, undefined);
+    assert.equal(cfg.novelType, undefined);
+    assert.equal(cfg.roles.scene, undefined);
   });
 
   test('loadConfigFrom migrates legacy claudePath into providers', async () => {

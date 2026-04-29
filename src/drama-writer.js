@@ -154,17 +154,17 @@ async function parseJsonWithRepair(raw, label) {
 
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
-export function buildOutlinePrompt(materials, lang = 'en', styleKey, novelType = '', referenceCharacter = '', referenceEvent = '') {
+export function buildOutlinePrompt(materials, lang = 'en', styleKey, genre = '', referenceCharacter = '', referenceEvent = '') {
   const templateFile = lang === 'cn' ? OUTLINE_PATH_CN : OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.outline}\n`;
   }
-  if (novelType) {
+  if (genre) {
     const section = lang === 'cn'
-      ? `\n\n## 小说类型要求\n\n这个故事必须是**${novelType}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。\n`
-      : `\n\n## Novel Type Requirement\n\nThis story MUST be a **${novelType}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.\n`;
+      ? `\n\n## 题材要求\n\n这个故事必须是**${genre}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。\n`
+      : `\n\n## Novel Type Requirement\n\nThis story MUST be a **${genre}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.\n`;
     template += section;
   }
   if (referenceCharacter) {
@@ -241,10 +241,10 @@ export async function parseOutline(raw) {
 export async function generateOutline(materials, options = {}) {
   const lang = options.lang || 'en';
   const style = options.style;
-  const novelType = options.novelType || '';
+  const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
-  const prompt = buildOutlinePrompt(materials, lang, style, novelType, referenceCharacter, referenceEvent);
+  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent);
   const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }
@@ -298,15 +298,15 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
 
   // Append constraint sections so the back half respects the same genre / character / event / news context as the front half.
   const lang = options.lang || 'en';
-  const novelType = options.novelType || '';
+  const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
   const newsSource = options.newsSource || null;
 
-  if (novelType) {
+  if (genre) {
     filled += lang === 'cn'
-      ? `\n\n## 小说类型要求\n\n本故事必须保持**${novelType}**类型。后半段的所有情节、基调、语言必须与此类型一致，不得偏移。\n`
-      : `\n\n## Novel Type Requirement\n\nThis story MUST remain a **${novelType}** novel. All plot, tone, and language in the back half must stay consistent with this genre — do NOT drift.\n`;
+      ? `\n\n## 题材要求\n\n本故事必须保持**${genre}**类型。后半段的所有情节、基调、语言必须与此类型一致，不得偏移。\n`
+      : `\n\n## Novel Type Requirement\n\nThis story MUST remain a **${genre}** novel. All plot, tone, and language in the back half must stay consistent with this genre — do NOT drift.\n`;
   }
   if (referenceCharacter) {
     filled += lang === 'cn'
@@ -377,7 +377,7 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
   const snowflake = options.snowflake || null;
   const prompt = buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake, {
     lang: options.lang,
-    novelType: options.novelType,
+    genre: options.genre,
     referenceCharacter: options.referenceCharacter,
     referenceEvent: options.referenceEvent,
     newsSource: options.newsSource,
@@ -399,13 +399,13 @@ export function buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang =
   // Inject genre + reference-character + reference-event constraints so individual scene prose
   // stays aligned with the user-supplied constraints (outline/plan carry them transitively,
   // but scene prose can drift without explicit reinforcement).
-  const novelType = constraints.novelType || '';
+  const genre = constraints.genre || '';
   const referenceCharacter = constraints.referenceCharacter || '';
   const referenceEvent = constraints.referenceEvent || '';
-  if (novelType) {
+  if (genre) {
     template += lang === 'cn'
-      ? `\n\n## 小说类型要求\n\n本场景属于**${novelType}**类型小说，语言、节奏、基调必须与此类型保持一致。\n`
-      : `\n\n## Novel Type Requirement\n\nThis scene is part of a **${novelType}** novel. Language, pacing, and tone must stay consistent with this genre.\n`;
+      ? `\n\n## 题材要求\n\n本场景属于**${genre}**类型小说，语言、节奏、基调必须与此类型保持一致。\n`
+      : `\n\n## Novel Type Requirement\n\nThis scene is part of a **${genre}** novel. Language, pacing, and tone must stay consistent with this genre.\n`;
   }
   if (referenceCharacter) {
     template += lang === 'cn'
@@ -492,7 +492,7 @@ export function buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang =
 }
 
 export async function parseClip(raw) {
-  const data = await parseJsonWithRepair(raw, 'scene');
+  const data = await parseJsonWithRepair(raw, 'clip');
 
   if (!data.content) throw new Error('Scene missing content');
   return data;
@@ -503,12 +503,12 @@ export async function generateClip(outline, clipIndex, clipPlan, totalClips, opt
   const style = options.style;
   const narrativeContext = options.narrativeContext;
   const constraints = {
-    novelType: options.novelType || '',
+    genre: options.genre || '',
     referenceCharacter: options.referenceCharacter || '',
     referenceEvent: options.referenceEvent || '',
   };
   const prompt = buildClipPrompt(outline, clipIndex, clipPlan, totalClips, lang, style, narrativeContext, constraints);
-  const raw = await callLLM(prompt, 'scene');
+  const raw = await callLLM(prompt, 'clip');
   return await parseClip(raw);
 }
 
@@ -517,7 +517,7 @@ export async function generateClip(outline, clipIndex, clipPlan, totalClips, opt
 export function buildRetryClipPrompt(clipPlan, lang = 'en', constraints = {}) {
   const summary = clipPlan.summary || 'A scene in the story';
   const clipType = clipPlan.clipType || 'NARRATIVE';
-  const novelType = constraints.novelType || '';
+  const genre = constraints.genre || '';
   const referenceCharacter = constraints.referenceCharacter || '';
   const referenceEvent = constraints.referenceEvent || '';
 
@@ -526,10 +526,10 @@ export function buildRetryClipPrompt(clipPlan, lang = 'en', constraints = {}) {
   // Without this, every first-attempt scene failure drifts away from the user's
   // --type / --character / --event flags on the regenerated scene.
   const constraintSections = [];
-  if (novelType) {
+  if (genre) {
     constraintSections.push(lang === 'cn'
-      ? `\n## 小说类型要求\n本场景属于**${novelType}**类型，语言、节奏、基调必须一致。`
-      : `\n## Novel Type Requirement\nThis scene is part of a **${novelType}** novel. Keep language, pacing, and tone consistent.`);
+      ? `\n## 题材要求\n本场景属于**${genre}**类型，语言、节奏、基调必须一致。`
+      : `\n## Novel Type Requirement\nThis scene is part of a **${genre}** novel. Keep language, pacing, and tone consistent.`);
   }
   if (referenceCharacter) {
     constraintSections.push(lang === 'cn'
@@ -644,7 +644,7 @@ export async function pickStyle(materials) {
 
 export async function generateDrama(materials, options = {}) {
   const lang = options.lang || 'en';
-  const novelType = options.novelType || '';
+  const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
   let style = options.style;
@@ -668,7 +668,7 @@ export async function generateDrama(materials, options = {}) {
   if (!snowflake) {
     try {
       log('Building story architecture (Snowflake method)...');
-      snowflake = await generateSnowflake(materials, { lang, novelType, referenceCharacter, referenceEvent, log });
+      snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, log });
       if (options.onSnowflake) options.onSnowflake(snowflake);
       log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
     } catch (err) {
@@ -685,7 +685,7 @@ export async function generateDrama(materials, options = {}) {
     const enrichedMaterials = snowflake
       ? { ...materials, snowflake }
       : materials;
-    outline = await generateOutline(enrichedMaterials, { lang, style, novelType, referenceCharacter, referenceEvent });
+    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent });
     if (options.onOutline) options.onOutline(outline);
   } else {
     log('Resuming — outline already generated');
@@ -701,7 +701,7 @@ export async function generateDrama(materials, options = {}) {
     plan = { clips: [], characters: [], items: [], locations: [], revelations: [] };
     try {
       log('Planning scene details, events, and revelations...');
-      plan = await generatePlan(outline, { lang, novelType, referenceCharacter, referenceEvent });
+      plan = await generatePlan(outline, { lang, genre, referenceCharacter, referenceEvent });
       if (options.onPlan) options.onPlan(plan);
       log(`Plan: ${plan.clips.length} clips planned, ${(plan.revelations || []).length} revelations scheduled`);
     } catch (planErr) {
@@ -935,7 +935,7 @@ export async function generateDrama(materials, options = {}) {
         scene = await generateClip(outline, i, plan_clip, totalClips, {
           lang,
           style,
-          novelType,
+          genre,
           referenceCharacter,
           referenceEvent,
           narrativeContext: {
@@ -957,11 +957,11 @@ export async function generateDrama(materials, options = {}) {
         wlog('scene_retry', { episodeIndex: ep.episodeIndex, clipIndex: i, error: firstErr.message });
         try {
           const retryPrompt = buildRetryClipPrompt(plan_clip, lang, {
-            novelType,
+            genre,
             referenceCharacter,
             referenceEvent,
           });
-          const retryRaw = await callLLM(retryPrompt, 'scene');
+          const retryRaw = await callLLM(retryPrompt, 'clip');
           scene = await parseClip(retryRaw);
         } catch (retryErr) {
           log(`[scene retry failed] ${retryErr.message} — using fallback scene`);

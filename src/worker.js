@@ -53,7 +53,7 @@ async function processJob(jobId, options = {}) {
   const config = loadConfig();
   const maxRetries = config.maxRetries || MAX_RETRIES;
   const lang = options.lang || config.lang || 'en';
-  const novelType = options.novelType || config.novelType || '';
+  const genre = options.genre || config.genre || '';
   const newsUrl = options.newsUrl || '';
   const style = options.style || config.style || 'default';
   // Reference character/event: prefer snapshotted content from job options; otherwise read config path.
@@ -81,7 +81,7 @@ async function processJob(jobId, options = {}) {
   const jobStartTime = Date.now();
   resetLLMStats();
   wlog('job_start', {
-    lang, style, novelType, newsUrl,
+    lang, style, genre, newsUrl,
     referenceCharacter: referenceCharacter ? `${referenceCharacter.length} chars` : '(none)',
     referenceEvent: referenceEvent ? `${referenceEvent.length} chars` : '(none)',
   });
@@ -94,7 +94,7 @@ async function processJob(jobId, options = {}) {
       log(newsUrl ? `Collecting news-based research from ${newsUrl}...` : 'Collecting research materials...');
       wlog('collecting_start', newsUrl ? { newsUrl } : {});
       const history = getHistory();
-      materials = await collect(history, { lang, novelType, newsUrl });
+      materials = await collect(history, { lang, genre, newsUrl });
       saveArtifact(jobId, 'materials.json', materials);
       const topicCount = materials.topics.length;
       const hookCount = materials.plotHooks?.length ?? 0;
@@ -112,7 +112,7 @@ async function processJob(jobId, options = {}) {
     if (!snowflake) {
       try {
         log('Building story architecture (Snowflake method)...');
-        snowflake = await generateSnowflake(materials, { lang, novelType, referenceCharacter, referenceEvent, log });
+        snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, log });
         saveArtifact(jobId, 'snowflake.json', snowflake);
       } catch (err) {
         log(`[snowflake failed] ${err.message} — continuing without`);
@@ -125,7 +125,7 @@ async function processJob(jobId, options = {}) {
     if (!baseOutline) {
       log('Generating base story outline...');
       const enrichedMaterials = snowflake ? { ...materials, snowflake } : materials;
-      baseOutline = await generateOutline(enrichedMaterials, { lang, style, novelType, referenceCharacter, referenceEvent });
+      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent });
       saveArtifact(jobId, 'outline.json', baseOutline);
     } else {
       log('Resuming — outline already generated');
@@ -136,7 +136,7 @@ async function processJob(jobId, options = {}) {
       let planSucceeded = false;
       try {
         log('Generating base scene plan...');
-        basePlan = await generatePlan(baseOutline, { lang, novelType, referenceCharacter, referenceEvent });
+        basePlan = await generatePlan(baseOutline, { lang, genre, referenceCharacter, referenceEvent });
         planSucceeded = true;
       } catch (err) {
         log(`[planning failed] ${err.message} — continuing without plan for this attempt; will retry on next run`);
@@ -178,7 +178,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = null;
       const frontStory = await generateDrama(materials, {
-        lang, novelType, referenceCharacter, referenceEvent, style, log, wlog,
+        lang, genre, referenceCharacter, referenceEvent, style, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -233,7 +233,7 @@ async function processJob(jobId, options = {}) {
         tailOutline = await generateTailOutline(baseOutline, splitIdx, v.ending, {
           snowflake,
           lang,
-          novelType,
+          genre,
           referenceCharacter,
           referenceEvent,
           newsSource: materials?.newsSource || null,
@@ -255,7 +255,7 @@ async function processJob(jobId, options = {}) {
         let variantPlanSucceeded = false;
         try {
           log(`Variant ${v.key}: planning tail clips...`);
-          variantPlan = await generatePlan(variantOutline, { lang, novelType, referenceCharacter, referenceEvent });
+          variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent });
           variantPlanSucceeded = true;
         } catch (err) {
           log(`[variant ${v.key} planning failed] ${err.message} — using base plan as in-memory fallback for this attempt; will retry on next run`);
@@ -302,7 +302,7 @@ async function processJob(jobId, options = {}) {
           globalClipIndex: 0,
         };
         variantStory = await generateDrama(materials, {
-          lang, novelType, referenceCharacter, referenceEvent, style, log, wlog,
+          lang, genre, referenceCharacter, referenceEvent, style, log, wlog,
           vectorStore: variantStore,
           savedSnowflake: snowflake,
           savedOutline: variantOutline,
@@ -394,7 +394,7 @@ async function processJob(jobId, options = {}) {
       `Job ID:          ${jobId}`,
       `Title:           ${sampleStory?.title || '(unknown)'}`,
       `Language:        ${lang}`,
-      `Type:            ${novelType || '(any)'}`,
+      `Type:            ${genre || '(any)'}`,
       `News:            ${newsUrl || '(none)'}`,
       `Ref character:   ${referenceCharacter ? `${referenceCharacter.length} chars` : '(none)'}`,
       `Ref event:       ${referenceEvent ? `${referenceEvent.length} chars` : '(none)'}`,
@@ -461,7 +461,7 @@ export async function runOnce(jobId, options = {}) {
 
 export function startWorker() {
   const config = loadConfig();
-  console.log(chalk.cyan(`Worker started — polling for jobs (lang=${config.lang || 'en'}, type=${config.novelType || 'any'}, style=${config.style || 'default'})...`));
+  console.log(chalk.cyan(`Worker started — polling for jobs (lang=${config.lang || 'en'}, type=${config.genre || 'any'}, style=${config.style || 'default'})...`));
 
   let stopped = false;
   let timer = null;
@@ -480,7 +480,7 @@ export function startWorker() {
         await processJob(claimed.id, {
           lang: opts.lang || undefined,
           style: opts.style || undefined,
-          novelType: opts.novelType || undefined,
+          genre: opts.genre || undefined,
           newsUrl: opts.newsUrl || undefined,
           referenceCharacter: opts.referenceCharacter || undefined,
           referenceEvent: opts.referenceEvent || undefined,

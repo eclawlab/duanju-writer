@@ -88,29 +88,32 @@ switch (command) {
   case 'run': {
     const { runOnce } = await import('../src/worker.js');
     const { createJob } = await import('../src/queue.js');
-    // Parse count, lang, style, type, news, character, event, and model from args
-    // run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--character path.md] [--event path.md] [--model claude|openai|<provider>]
+    // Parse count, lang, style, type, news, character, event, model, episodes, clips-per-episode from args
+    // run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--character path.md] [--event path.md]
+    //     [--model claude|openai|<provider>] [--episodes N] [--clips-per-episode K]
     let count = 1;
     let lang;
     let style;
-    let novelType;
+    let genre;
     let newsUrl;
     let characterPath;
     let eventPath;
     let model;
+    let episodesPerDrama;
+    let clipsPerEpisode;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
-        if (lang !== 'cn' && lang !== 'en') {
-          console.log(`Invalid --lang "${args[a + 1]}". Supported: cn, en.`);
+        if (lang !== 'cn') {
+          console.log(`--lang ${args[a + 1]} is not supported (CN only).`);
           process.exit(1);
         }
         a++;
       } else if (args[a] === '--style' && args[a + 1]) {
-        style = args[a + 1].toLowerCase();
+        style = args[a + 1];
         a++;
       } else if (args[a] === '--type' && args[a + 1]) {
-        novelType = args[a + 1];
+        genre = args[a + 1];
         a++;
       } else if (args[a] === '--news' && args[a + 1]) {
         newsUrl = args[a + 1];
@@ -123,6 +126,22 @@ switch (command) {
         a++;
       } else if (args[a] === '--model' && args[a + 1]) {
         model = args[a + 1];
+        a++;
+      } else if (args[a] === '--episodes' && args[a + 1]) {
+        const n = Number(args[a + 1]);
+        if (!Number.isInteger(n) || n < 10 || n > 40) {
+          console.log(`--episodes must be an integer in [10, 40], got: ${args[a + 1]}`);
+          process.exit(1);
+        }
+        episodesPerDrama = n;
+        a++;
+      } else if (args[a] === '--clips-per-episode' && args[a + 1]) {
+        const k = Number(args[a + 1]);
+        if (!Number.isInteger(k) || k < 4 || k > 10) {
+          console.log(`--clips-per-episode must be an integer in [4, 10], got: ${args[a + 1]}`);
+          process.exit(1);
+        }
+        clipsPerEpisode = k;
         a++;
       } else if (!isNaN(args[a]) && args[a].trim() !== '') {
         count = Math.max(0, parseInt(args[a], 10));
@@ -195,9 +214,9 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, novelType, newsUrl, referenceCharacter, referenceEvent });
+      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, episodesPerDrama, clipsPerEpisode });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, novelType, newsUrl, referenceCharacter, referenceEvent });
+      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, episodesPerDrama, clipsPerEpisode });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -219,13 +238,20 @@ switch (command) {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
-      'maxRetries', 'publishOnUpload', 'lang', 'novelType',
-      'referenceCharacter', 'referenceEvent', 'style', 'targetCharsPerClip',
+      'maxRetries', 'publishOnUpload', 'lang', 'genre',
+      'referenceCharacter', 'referenceEvent', 'style',
+      'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
-        console.log(`Unknown config key: ${args[1]}`);
-        console.log(`Valid keys: ${VALID_KEYS.join(', ')}`);
+        if (args[1] === 'novelType') {
+          console.log(`'novelType' has been renamed to 'genre'. Use: duanju-writer config set genre <value>`);
+        } else if (args[1] === 'targetWordsPerScene') {
+          console.log(`'targetWordsPerScene' has been renamed to 'targetCharsPerClip'. Use: duanju-writer config set targetCharsPerClip <value>`);
+        } else {
+          console.log(`Unknown config key: ${args[1]}`);
+          console.log(`Valid keys: ${VALID_KEYS.join(', ')}`);
+        }
         process.exit(1);
       }
       const config = loadConfig();
@@ -245,8 +271,8 @@ switch (command) {
         }
       }
       // Validate lang values
-      if (args[1] === 'lang' && value !== 'cn' && value !== 'en') {
-        console.log(`Invalid lang "${value}". Supported: cn, en.`);
+      if (args[1] === 'lang' && value !== 'cn') {
+        console.log(`Invalid lang "${value}". Only 'cn' is supported.`);
         process.exit(1);
       }
       config[args[1]] = value;
@@ -382,7 +408,7 @@ switch (command) {
   case 'role': {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const sub = args[0];
-    const VALID_ROLES = ['research', 'outline', 'plan', 'scene', 'compress', 'consistency', 'style', 'repair'];
+    const VALID_ROLES = ['research', 'outline', 'plan', 'clip', 'compress', 'consistency', 'style', 'repair'];
 
     if (sub === 'set' && args[1] && args[2]) {
       const role = args[1];
@@ -507,6 +533,6 @@ switch (command) {
   default:
     console.log(`Unknown command: ${command}`);
     console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
-    console.log('\nRun options: duanju-writer run [count] [--lang en|cn] [--style sanderson] [--type thriller] [--news URL] [--character path.md] [--event path.md] [--model claude|openai]');
+    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
     process.exit(1);
 }
