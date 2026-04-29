@@ -129,9 +129,9 @@ describe('R3 Fix #2 — drama-state silent overwrite warnings', () => {
   test('addRevelation warns on duplicate id (markRevealed is non-deterministic with dups)', async () => {
     const { createState, addRevelation } = await import('../src/drama-state.js');
     const state = createState();
-    addRevelation(state, { id: 'r1', info: 'first', visibility: 'public', revealInScene: 0 });
+    addRevelation(state, { id: 'r1', info: 'first', visibility: 'public', revealInClip: 0 });
     const warnings = captureWarn(() =>
-      addRevelation(state, { id: 'r1', info: 'second', visibility: 'public', revealInScene: 1 }),
+      addRevelation(state, { id: 'r1', info: 'second', visibility: 'public', revealInClip: 1 }),
     );
     assert.ok(warnings.some(w => w.includes('addRevelation') && w.includes('r1')));
   });

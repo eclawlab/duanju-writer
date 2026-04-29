@@ -86,26 +86,26 @@ describe('drama-state', () => {
 
   test('addRevelation adds tagged plot info', () => {
     const state = createState();
-    addRevelation(state, { id: 'rev1', info: 'The butler did it', visibility: 'hidden', revealInScene: 3 });
+    addRevelation(state, { id: 'rev1', info: 'The butler did it', visibility: 'hidden', revealInClip: 3 });
     assert.equal(state.revelations.length, 1);
     assert.equal(state.revelations[0].id, 'rev1');
     assert.equal(state.revelations[0].info, 'The butler did it');
     assert.equal(state.revelations[0].visibility, 'hidden');
-    assert.equal(state.revelations[0].revealInScene, 3);
+    assert.equal(state.revelations[0].revealInClip, 3);
     assert.equal(state.revelations[0].revealed, false);
   });
 
   test('getAvailableRevelations returns only scheduled + public revelations', () => {
     const state = createState();
-    addRevelation(state, { id: 'pub1', info: 'Public info', visibility: 'public', revealInScene: 0 });
-    addRevelation(state, { id: 'hid1', info: 'Hidden scene 2', visibility: 'hidden', revealInScene: 2 });
-    addRevelation(state, { id: 'del1', info: 'Delayed scene 5', visibility: 'delayed', revealInScene: 5 });
-    addRevelation(state, { id: 'nev1', info: 'Never explicit', visibility: 'never_explicit', revealInScene: 1 });
+    addRevelation(state, { id: 'pub1', info: 'Public info', visibility: 'public', revealInClip: 0 });
+    addRevelation(state, { id: 'hid1', info: 'Hidden scene 2', visibility: 'hidden', revealInClip: 2 });
+    addRevelation(state, { id: 'del1', info: 'Delayed scene 5', visibility: 'delayed', revealInClip: 5 });
+    addRevelation(state, { id: 'nev1', info: 'Never explicit', visibility: 'never_explicit', revealInClip: 1 });
 
     const atScene2 = getAvailableRevelations(state, 2);
     const ids2 = atScene2.map(r => r.id);
     assert.ok(ids2.includes('pub1'), 'public always included');
-    assert.ok(ids2.includes('hid1'), 'hidden with revealInScene <= 2 included');
+    assert.ok(ids2.includes('hid1'), 'hidden with revealInClip <= 2 included');
     assert.ok(!ids2.includes('del1'), 'delayed scene 5 not yet available at scene 2');
     assert.ok(!ids2.includes('nev1'), 'never_explicit excluded');
 
@@ -116,7 +116,7 @@ describe('drama-state', () => {
 
   test('markRevealed marks revelation', () => {
     const state = createState();
-    addRevelation(state, { id: 'rev1', info: 'Secret', visibility: 'hidden', revealInScene: 1 });
+    addRevelation(state, { id: 'rev1', info: 'Secret', visibility: 'hidden', revealInClip: 1 });
     markRevealed(state, 'rev1');
     assert.equal(state.revelations[0].revealed, true);
 
@@ -179,7 +179,7 @@ describe('drama-state', () => {
     addCharacter(state, { name: 'Alice', status: 'alive', location: 'forest', knowledge: ['magic'], emotional: 'calm' });
     addItem(state, { name: 'Sword', status: 'active', holder: 'Alice', location: null });
     addLocation(state, { name: 'forest', status: 'intact' });
-    addRevelation(state, { id: 'rev1', info: 'Secret', visibility: 'hidden', revealInScene: 2 });
+    addRevelation(state, { id: 'rev1', info: 'Secret', visibility: 'hidden', revealInClip: 2 });
 
     const json = serialize(state);
     assert.equal(typeof json, 'string');

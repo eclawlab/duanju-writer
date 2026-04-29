@@ -116,13 +116,13 @@ export function updateLocation(state, name, updates) {
  * a revelation with the same id already exists (markRevealed looks them up
  * by id, so duplicates make state queries non-deterministic).
  * @param {object} state
- * @param {{ id: string, info: string, visibility: string, revealInScene: number, revealInEpisode?: number }} revelation
+ * @param {{ id: string, info: string, visibility: string, revealInClip: number, revealInEpisode?: number }} revelation
  */
-export function addRevelation(state, { id, info, visibility, revealInScene, revealInEpisode }) {
+export function addRevelation(state, { id, info, visibility, revealInClip, revealInEpisode }) {
   if (state.revelations.some(r => r.id === id)) {
     console.warn(`[drama-state] addRevelation: duplicate revelation id "${id}" — markRevealed lookups will return the first match`);
   }
-  state.revelations.push({ id, info, visibility, revealInScene, revealInEpisode: revealInEpisode ?? null, revealed: false });
+  state.revelations.push({ id, info, visibility, revealInClip, revealInEpisode: revealInEpisode ?? null, revealed: false });
 }
 
 /**
@@ -140,8 +140,8 @@ export function markRevealed(state, id) {
  * Return unrevealed revelations available at a given scene index.
  *
  * Rules:
- *  - Always include `public` visibility (regardless of revealInScene).
- *  - Include `hidden` and `delayed` when revealInScene <= clipIndex.
+ *  - Always include `public` visibility (regardless of revealInClip).
+ *  - Include `hidden` and `delayed` when revealInClip <= clipIndex.
  *  - If `revealInEpisode` is set, only include if that episode is on the current branch.
  *  - Never include `never_explicit`.
  *  - Never include already-revealed entries.
@@ -161,7 +161,7 @@ export function getAvailableRevelations(state, clipIndex, ancestorEpisodeIndices
     }
     if (r.visibility === 'public') return true;
     if (r.visibility === 'hidden' || r.visibility === 'delayed') {
-      return r.revealInScene <= clipIndex;
+      return r.revealInClip <= clipIndex;
     }
     return false;
   });
