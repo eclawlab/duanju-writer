@@ -1019,45 +1019,50 @@ export async function generateDrama(materials, options = {}) {
         }
       }
 
-      // Generate scene with narrative context (with retry and fallback)
-      const clipTypeRules = getSceneTypeRules(plan_clip.clipType || 'NARRATIVE', lang);
+      // Generate clip via the new ctx-object pipeline (with retry and fallback).
+      // Trope `## Clip` section is resolved from the style key; richer narrative
+      // context (history, state, revelations, etc.) is no longer threaded through
+      // the prompt — it lives in the planner output and is reflected in
+      // plan_clip.summary. If we re-enable narrative context injection, it goes
+      // through prompts/clips.md additions, not new ctx fields here.
+      const tropeStyle = getStyleSafe(style);
+      const tropeSection = tropeStyle?.clip || '';
+      const isConcl = !!plan_clip.isConclusion || (ep.isEnding && i === ep.clipPlan.length - 1);
       let scene;
       try {
-        scene = await generateClip(outline, i, plan_clip, totalClips, {
-          lang,
-          style,
-          genre,
+        scene = await generateClip({
+          outline,
+          episode: ep,
+          clipIndex: i,
+          totalClips,
+          clipSummary: plan_clip.summary || '',
+          isConclusion: isConcl,
+          priorClipDigest: history || '',
+          tropeSection,
           referenceCharacter,
           referenceEvent,
-          narrativeContext: {
-            history,
-            stateContext,
-            revelations,
-            events: planScene.events,
-            pacing: planScene.pacing,
-            knowledgeContext,
-            suspenseDensity: planScene.suspenseDensity,
-            twistStrength: planScene.twistStrength,
-            globalSummary: episodeSummary,
-            consistencyNotes: recentConsistencyNotes.length > 0 ? recentConsistencyNotes : undefined,
-            clipTypeRules,
-          },
         });
       } catch (firstErr) {
-        log(`[scene failed] ${firstErr.message} — retrying with simplified prompt...`);
-        wlog('scene_retry', { episodeIndex: ep.episodeIndex, clipIndex: i, error: firstErr.message });
+        log(`[clip failed] ${firstErr.message} — retrying with simplified prompt...`);
+        wlog('clip_retry', { episodeIndex: ep.episodeIndex, clipIndex: i, error: firstErr.message });
         try {
-          const retryPrompt = buildRetryClipPrompt(plan_clip, lang, {
-            genre,
-            referenceCharacter,
-            referenceEvent,
+          const retryPrompt = buildRetryClipPrompt({
+            clipSummary: plan_clip.summary || '',
+            prevError: firstErr.message,
+            isConclusion: !!plan_clip.isConclusion,
+            ending: plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆'),
           });
           const retryRaw = await callLLM(retryPrompt, 'clip');
           scene = await parseClip(retryRaw);
         } catch (retryErr) {
-          log(`[scene retry failed] ${retryErr.message} — using fallback scene`);
-          wlog('scene_fallback', { episodeIndex: ep.episodeIndex, clipIndex: i, error: retryErr.message });
-          scene = buildFallbackClip(plan_clip, i);
+          log(`[clip retry failed] ${retryErr.message} — using fallback clip`);
+          wlog('clip_fallback', { episodeIndex: ep.episodeIndex, clipIndex: i, error: retryErr.message });
+          scene = buildFallbackClip({
+            clipIndex: i,
+            summary: plan_clip.summary || '',
+            isConclusion: !!plan_clip.isConclusion,
+            ending: plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆'),
+          });
         }
       }
 
