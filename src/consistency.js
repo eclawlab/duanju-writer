@@ -189,3 +189,18 @@ export async function rewriteForConsistency(content, issues, lang = 'en') {
   const prompt = buildRewritePrompt(content, issues, lang);
   return callLLM(prompt, 'consistency');
 }
+
+/**
+ * Hook-density consistency check. Every non-conclusion clip must end on a hook.
+ * Returns an array of issue strings (empty when the episode is hook-clean).
+ */
+export function checkHookDensity(episode) {
+  const issues = [];
+  for (const clip of episode.clips || []) {
+    if (clip.isConclusion) continue;
+    if (!clip.hook || clip.hook.trim().length === 0) {
+      issues.push(`clip ${clip.clipIndex} of episode ${episode.episodeIndex} missing hook`);
+    }
+  }
+  return issues;
+}

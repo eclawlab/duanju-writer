@@ -92,4 +92,34 @@ describe('consistency', () => {
     assert.ok(prompt.includes('Repetitive opener'), 'prompt should include the issue text');
     assert.ok(prompt.includes('She walked'), 'prompt should include original content');
   });
+
+  describe('hook density check', () => {
+    test('detects clip missing hook on non-conclusion', async () => {
+      const { checkHookDensity } = await import('../src/consistency.js');
+      const episode = {
+        episodeIndex: 0,
+        isEnding: false,
+        clips: [
+          { clipIndex: 0, hook: '来电响起', isConclusion: false },
+          { clipIndex: 1, hook: '', isConclusion: false },
+        ],
+      };
+      const issues = checkHookDensity(episode);
+      assert.equal(issues.length, 1);
+      assert.match(issues[0], /clip 1.*missing hook/);
+    });
+
+    test('allows empty hook on conclusion clip', async () => {
+      const { checkHookDensity } = await import('../src/consistency.js');
+      const episode = {
+        episodeIndex: 0,
+        isEnding: true,
+        clips: [
+          { clipIndex: 0, hook: '反派出现', isConclusion: false },
+          { clipIndex: 1, hook: '', isConclusion: true },
+        ],
+      };
+      assert.deepEqual(checkHookDensity(episode), []);
+    });
+  });
 });
