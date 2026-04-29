@@ -293,8 +293,8 @@ switch (command) {
       if (!byCategory.has(cat)) byCategory.set(cat, []);
       byCategory.get(cat).push(s);
     }
-    console.log('Available writing styles:\n');
-    console.log('  default — Standard interactive fiction style\n');
+    console.log('Available 短剧 tropes:\n');
+    console.log('  default — Use materials/snowflake-derived theme without a fixed trope\n');
     for (const [category, items] of byCategory) {
       console.log(`  [${category}]`);
       for (const s of items) {
@@ -302,8 +302,8 @@ switch (command) {
       }
       console.log();
     }
-    console.log('Usage: duanju-writer run --style sanderson');
-    console.log('   or: duanju-writer config set style sanderson');
+    console.log('Usage: duanju-writer run --style 战神归来');
+    console.log('   or: duanju-writer config set style 战神归来');
     break;
   }
   case 'setup': {

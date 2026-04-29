@@ -1,5 +1,5 @@
-// Loads writing style definitions from .md files in the styles/ directory.
-// Each .md file has YAML-like frontmatter (name, category) and ## Outline / ## Scene sections.
+// Loads 短剧 trope definitions from .md files in the styles/ directory.
+// Each .md file has YAML-like frontmatter (name, category) and ## Outline / ## Clip sections.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
@@ -52,13 +52,13 @@ function loadStylesFromDisk() {
       const raw = readFileSync(join(catDir, file), 'utf8');
       const { meta, body } = parseFrontmatter(raw);
       const outline = extractSection(body, 'Outline');
-      const scene = extractSection(body, 'Scene');
-      if (!outline && !scene) continue;
+      const clip = extractSection(body, 'Clip');
+      if (!outline && !clip) continue;
       styles[key] = {
         name: meta.name || key,
         category: meta.category || category,
         outline,
-        scene,
+        clip,
       };
     }
   }
