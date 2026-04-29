@@ -38,6 +38,12 @@ function getSearchQueries() {
     `Qidian trending novels ${year}`,
     `JJWXC trending novels ${year}`,
     `Zongheng popular novels ${year}`,
+    // 短剧 trend sources
+    `抖音热门短剧 ${year}`,
+    `红果短剧 排行榜 ${year}`,
+    `ReelShort trending drama ${year}`,
+    `微博热搜 反转剧情`,
+    `快手 爆款短剧 ${year}`,
   ];
   return pickRandom(pool, 5);
 }

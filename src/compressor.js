@@ -20,9 +20,21 @@ function extractJsonObject(text) {
 
 // ─── Prompt builder ────────────────────────────────────────────────────────────
 
+// Render a clip's spoken/action content for LLM compression. Accepts both the
+// legacy `{content}` shape and the duanju `{setting, action, dialogue, hook}` shape.
+function clipBody(c) {
+  if (c.content) return c.content;
+  const parts = [];
+  if (c.setting) parts.push(`场景：${c.setting}`);
+  if (c.action) parts.push(`动作：${c.action}`);
+  if (c.dialogue) parts.push(c.dialogue);
+  if (c.hook) parts.push(`钩点：${c.hook}`);
+  return parts.join('\n');
+}
+
 export function buildCompressPrompt(clips, lang = 'en') {
   const clipBlocks = clips.map((s, i) =>
-    `### Scene ${i + 1}\n${s.content}`
+    `### Clip ${i + 1}\n${clipBody(s)}`
   ).join('\n\n');
 
   if (lang === 'cn') {
@@ -159,7 +171,7 @@ export function buildHistoryContext(compressedScenes) {
   if (!compressedScenes || compressedScenes.length === 0) return '';
 
   return compressedScenes.map((scene, i) => {
-    const label = `Scene ${i + 1}`;
+    const label = `Clip ${i + 1}`;
     const actions = (scene.characterActions || []).join('; ');
     const plot = (scene.plotProgress || []).join('; ');
     const tone = scene.emotionalArc || '';

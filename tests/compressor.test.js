@@ -78,8 +78,8 @@ describe('compressor', () => {
       },
     ];
     const result = buildHistoryContext(compressed);
-    assert.ok(result.includes('Scene 1'));
-    assert.ok(result.includes('Scene 2'));
+    assert.ok(result.includes('Clip 1'));
+    assert.ok(result.includes('Clip 2'));
     assert.ok(result.includes('Hero arrives at the castle.'));
     assert.ok(result.includes('Hero sneaks inside.'));
   });
