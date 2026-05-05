@@ -491,10 +491,14 @@ export function buildClipPrompt(ctx) {
     tropeSection = '',
     referenceCharacter = '',
     referenceEvent = '',
+    bible = null,
+    chapters = null,
+    fidelity = null,
+    episodeChapterRange = null,
   } = ctx || {};
 
   let template = readFileSync(CLIPS_PROMPT_PATH, 'utf8');
-  return template
+  let rendered = template
     .replace(/\{\{title\}\}/g, outline.title || '')
     .replace(/\{\{synopsis\}\}/g, outline.synopsis || '')
     .replace(/\{\{characters\}\}/g, JSON.stringify(outline.characters || [], null, 2))
@@ -508,6 +512,17 @@ export function buildClipPrompt(ctx) {
     .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
     .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
     .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
+
+  if (bible && fidelity && episodeChapterRange) {
+    const compressed = compressBibleForEpisode(bible, episodeChapterRange);
+    rendered += '\n\n' + buildBibleBlock(compressed, fidelity) + '\n';
+    if (chapters) {
+      const proseBlock = buildProseBlock(chapters, episodeChapterRange, fidelity, 4000);
+      if (proseBlock) rendered += '\n\n' + proseBlock + '\n';
+    }
+  }
+
+  return rendered;
 }
 
 const CLIP_LIMITS = { setting: 20, action: 80, dialogue: 60, hook: 30 };
@@ -726,6 +741,9 @@ export async function generateDrama(materials, options = {}) {
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
+  const bible = options.bible || null;
+  const chapters = options.chapters || null;
+  const fidelity = options.fidelity || null;
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -766,7 +784,11 @@ export async function generateDrama(materials, options = {}) {
     const enrichedMaterials = snowflake
       ? { ...materials, snowflake }
       : materials;
-    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent });
+    const totalChapters = chapters ? chapters.length : 0;
+    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters });
+    if (bible && fidelity === 'tight') {
+      validateOutlineChapterCoverage(outline, fidelity, totalChapters);
+    }
     if (options.onOutline) options.onOutline(outline);
   } else {
     log('Resuming — outline already generated');
@@ -782,7 +804,8 @@ export async function generateDrama(materials, options = {}) {
     plan = { clips: [], characters: [], items: [], locations: [], revelations: [] };
     try {
       log('Planning scene details, events, and revelations...');
-      plan = await generatePlan(outline, { lang, genre, referenceCharacter, referenceEvent });
+      const aggregateChapterRange = chapters && chapters.length ? [1, chapters.length] : null;
+      plan = await generatePlan(outline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters, fidelity, aggregateChapterRange });
       if (options.onPlan) options.onPlan(plan);
       log(`Plan: ${plan.clips.length} clips planned, ${(plan.revelations || []).length} revelations scheduled`);
     } catch (planErr) {
@@ -988,6 +1011,7 @@ export async function generateDrama(materials, options = {}) {
       const isConcl = !!plan_clip.isConclusion || (ep.isEnding && i === ep.clipPlan.length - 1);
       const concEnding = plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆');
       let scene;
+      const episodeChapterRange = bible && Array.isArray(ep.sourceChapterRange) ? ep.sourceChapterRange : null;
       try {
         scene = await generateClip({
           outline,
@@ -1000,6 +1024,10 @@ export async function generateDrama(materials, options = {}) {
           tropeSection,
           referenceCharacter,
           referenceEvent,
+          bible,
+          chapters,
+          fidelity,
+          episodeChapterRange,
         });
       } catch (firstErr) {
         log(`[clip failed] ${firstErr.message} — retrying with simplified prompt...`);

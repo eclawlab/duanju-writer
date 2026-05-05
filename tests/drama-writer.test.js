@@ -747,3 +747,56 @@ describe('validateOutlineChapterCoverage', () => {
     assert.doesNotThrow(() => validateOutlineChapterCoverage(outline, 'loose', 5));
   });
 });
+
+describe('clip-stage bible injection', () => {
+  test('buildClipPrompt injects compressed bible and per-episode prose', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const bible = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [
+        { name: '陆衡', role: 'protagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 1, lastChapter: 1 },
+        { name: '林董', role: 'antagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 9, lastChapter: 9 },
+      ],
+      events: [{ eventIndex: 0, summary: 's', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      hooks: [], themes: [], world: 'w', ending: 'e',
+    };
+    const chapters = [{ chapterIndex: 1, title: '一', charCount: 10, prose: 'helloworld' }];
+    const out = buildClipPrompt({
+      outline: { title: 't', synopsis: 's', characters: [] },
+      episode: { title: 'e1', episodeIndex: 0 },
+      clipIndex: 0,
+      totalClips: 1,
+      clipSummary: 'x',
+      bible, chapters, fidelity: 'medium', episodeChapterRange: [1, 1],
+    });
+    assert.ok(out.includes('## 参考小说'));
+    assert.ok(out.includes('陆衡'));
+    assert.ok(!out.includes('林董'), 'compressed bible omits out-of-range chars');
+    assert.ok(out.includes('## 原文片段'));
+    assert.ok(out.includes('helloworld'));
+  });
+
+  test('buildClipPrompt without bible or with loose fidelity skips both blocks', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const bible = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [{ name: '陆衡', role: 'protagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 1, lastChapter: 1 }],
+      events: [{ eventIndex: 0, summary: 's', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      hooks: [], themes: [], world: 'w', ending: 'e',
+    };
+    const chapters = [{ chapterIndex: 1, title: '一', charCount: 10, prose: 'helloworld' }];
+
+    const noBible = buildClipPrompt({
+      outline: { title: 't' }, episode: {}, clipIndex: 0, totalClips: 1, clipSummary: '',
+    });
+    assert.ok(!noBible.includes('## 参考小说'));
+    assert.ok(!noBible.includes('## 原文片段'));
+
+    const loose = buildClipPrompt({
+      outline: { title: 't' }, episode: {}, clipIndex: 0, totalClips: 1, clipSummary: '',
+      bible, chapters, fidelity: 'loose', episodeChapterRange: [1, 1],
+    });
+    assert.ok(loose.includes('## 参考小说'));
+    assert.ok(!loose.includes('## 原文片段'));
+  });
+});
