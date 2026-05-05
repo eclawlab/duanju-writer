@@ -35,7 +35,7 @@ describe('worker story-extraction phase', () => {
       let callIdx = 0;
       const fakeLlm = async (prompt) => {
         callIdx++;
-        if (prompt.includes('Per-Chapter Extraction') || prompt.includes('章节编号')) {
+        if (prompt.includes('章节编号')) {
           return JSON.stringify({
             characters: [{ name: '陆衡', role: 'protagonist', identity: 'x', motivation: 'y' }],
             events: [{ summary: 'e', actors: [], isTurningPoint: false, isReveal: false }],
