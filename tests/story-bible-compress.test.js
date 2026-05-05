@@ -1,5 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const SAMPLE_BIBLE = {
   schemaVersion: 1,
@@ -107,5 +110,48 @@ describe('selectChapterProse', () => {
     assert.ok(out.includes('BBBBBBBBBB'));
     assert.ok(!out.includes('AAAAAAAAAA'));
     assert.ok(!out.includes('CCCCCCCCCC'));
+  });
+});
+
+describe('loadStoryArtifacts / saveStoryArtifacts', () => {
+  test('save then load round-trips bible and chapters', async () => {
+    const { saveStoryArtifacts, loadStoryArtifacts } = await import('../src/story-bible.js');
+    const dir = mkdtempSync(join(tmpdir(), 'story-test-'));
+    try {
+      const bible = { schemaVersion: 1, title: 't', logline: 'l', characters: [], events: [], hooks: [], themes: [], world: '', ending: '' };
+      const chapters = { schemaVersion: 1, totalChars: 5, chapters: [{ chapterIndex: 1, title: '', charCount: 5, prose: 'hello' }] };
+      saveStoryArtifacts(dir, { bible, chapters });
+      assert.ok(existsSync(join(dir, 'story', 'bible.json')));
+      assert.ok(existsSync(join(dir, 'story', 'chapters.json')));
+      const loaded = loadStoryArtifacts(dir);
+      assert.deepEqual(loaded.bible, bible);
+      assert.deepEqual(loaded.chapters, chapters);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('returns null when artifacts missing', async () => {
+    const { loadStoryArtifacts } = await import('../src/story-bible.js');
+    const dir = mkdtempSync(join(tmpdir(), 'story-test-'));
+    try {
+      assert.equal(loadStoryArtifacts(dir), null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('returns null on schemaVersion mismatch', async () => {
+    const { saveStoryArtifacts, loadStoryArtifacts } = await import('../src/story-bible.js');
+    const dir = mkdtempSync(join(tmpdir(), 'story-test-'));
+    try {
+      saveStoryArtifacts(dir, {
+        bible: { schemaVersion: 999, title: '', logline: '', characters: [], events: [], hooks: [], themes: [], world: '', ending: '' },
+        chapters: { schemaVersion: 1, totalChars: 0, chapters: [] },
+      });
+      assert.equal(loadStoryArtifacts(dir), null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

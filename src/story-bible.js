@@ -98,3 +98,30 @@ export function selectChapterProse(chapters, range, budgetChars) {
   const omitted = full.length - 2 * halfBudget;
   return `${full.slice(0, halfBudget)}\n…[省略 ${omitted} 字]…\n${full.slice(-halfBudget)}`;
 }
+
+// ─── Artifact I/O ─────────────────────────────────────────────────────────────
+
+const SCHEMA_VERSION = 1;
+
+export function saveStoryArtifacts(jobDir, { bible, chapters }) {
+  const storyDir = join(jobDir, 'story');
+  if (!existsSync(storyDir)) mkdirSync(storyDir, { recursive: true });
+  writeFileSync(join(storyDir, 'bible.json'), JSON.stringify(bible, null, 2));
+  writeFileSync(join(storyDir, 'chapters.json'), JSON.stringify(chapters, null, 2));
+}
+
+export function loadStoryArtifacts(jobDir) {
+  const biblePath = join(jobDir, 'story', 'bible.json');
+  const chaptersPath = join(jobDir, 'story', 'chapters.json');
+  if (!existsSync(biblePath) || !existsSync(chaptersPath)) return null;
+  let bible, chapters;
+  try {
+    bible = JSON.parse(readFileSync(biblePath, 'utf8'));
+    chapters = JSON.parse(readFileSync(chaptersPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (bible.schemaVersion !== SCHEMA_VERSION) return null;
+  if (chapters.schemaVersion !== SCHEMA_VERSION) return null;
+  return { bible, chapters };
+}
