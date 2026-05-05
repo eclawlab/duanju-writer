@@ -1,12 +1,21 @@
+// End-to-end contract test against a live `../duanju` server. Excluded from
+// the default `npm test` glob (`tests/*.test.js` is non-recursive). Run with
+// `npm run test:integration` and DUANJU_SERVER_URL + DUANJU_API_KEY set.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 const SERVER_URL = process.env.DUANJU_SERVER_URL;
 const API_KEY    = process.env.DUANJU_API_KEY;
 
+if (!SERVER_URL || !API_KEY) {
+  throw new Error(
+    'integration test requires DUANJU_SERVER_URL and DUANJU_API_KEY env vars'
+  );
+}
+
 describe('server contract — end-to-end POST /api/ai/stories', () => {
-  test('writer payload is accepted by ../duanju server (returns 201 + story.id)', { skip: !SERVER_URL || !API_KEY ? 'set DUANJU_SERVER_URL and DUANJU_API_KEY to run; see plan task 10' : false }, async () => {
-    const { buildRequest } = await import('../src/uploader.js');
+  test('writer payload is accepted by ../duanju server (returns 201 + story.id)', async () => {
+    const { buildRequest } = await import('../../src/uploader.js');
 
     // Hand-built drama in the post-Task-9 in-memory shape: episodes[].scenes[]
     // with composed content + structured conclusion. Mirrors what parseClip
