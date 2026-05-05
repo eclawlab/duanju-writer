@@ -79,6 +79,9 @@
 ### 👤 参考人物 / 参考事件注入
 支持把预定义的人物档案或事件描述注入到雪花、大纲、规划、片段四个阶段，确保 LLM 不会任意改名或淡化关键事件。
 
+### 📚 整本小说改编
+提供一本完整小说作为参考（`--story path.txt`），系统先按章节切分并通过 LLM 抽取出 story bible（人物 / 事件 / 钩点 / 主题 / 世界观 / 原结局），然后将其注入到雪花、大纲、规划、片段四个阶段。`--fidelity tight|medium|loose` 控制改编紧密度：tight 完全按原作章节顺序、loose 仅取灵感、medium 在保留主线的同时压缩节奏（默认）。bible.json 与 chapters.json 持久化在 `~/.duanju-copier/jobs/<id>/story/`，断点续传时直接复用。
+
 ### 🔌 多模型供应商
 可插拔的 LLM 后端：默认 Claude CLI，亦支持任何 OpenAI 兼容 API。可为 8 个任务角色（research / outline / plan / clip / compress / repair / consistency / enrichment）分别配置不同模型。
 
@@ -153,6 +156,8 @@ node bin/duanju-copier.js run
 | `--clips-per-episode <4..10>` | 每集片段数（默认 6） |
 | `--reference-character <path.md>` | 注入预定义人物档案 |
 | `--reference-event <path.md>` | 注入预定义事件描述 |
+| `--story <path.{txt,md}>` | 注入参考小说（≤1MB），抽取 story bible 注入下游阶段 |
+| `--fidelity <tight\|medium\|loose>` | 配合 `--story`：改编紧密度（默认 medium）|
 | `--no-publish` | 只生成不上传 |
 
 ### 守护进程模式
