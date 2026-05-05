@@ -101,7 +101,7 @@ describe('pidfile', () => {
     const result = cleanupStaleIn(f, {
       isAlive: () => true,
       commandFor: (pid) => (pid === 111
-        ? 'node /usr/local/bin/duanju-writer start'
+        ? 'node /usr/local/bin/duanju-copier start'
         : 'claude -p --output-format json --no-session-persistence'),
       sendSignal: (pid, sig) => { signals.push([pid, sig]); },
       graceMs: 0,

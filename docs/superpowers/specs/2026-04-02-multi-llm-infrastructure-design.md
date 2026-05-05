@@ -65,7 +65,7 @@ callLLM(prompt, role)
 
 ## Config Structure
 
-Added to `~/.duanju-writer/config.json` alongside existing keys:
+Added to `~/.duanju-copier/config.json` alongside existing keys:
 
 ```json
 {
@@ -92,14 +92,14 @@ Added to `~/.duanju-writer/config.json` alongside existing keys:
 
 ```bash
 # Provider management
-duanju-writer provider add <name> --type openai --base-url <url> --model <model> --api-key <key> [--temperature 0.7] [--max-tokens 8192] [--timeout 120000]
-duanju-writer provider list
-duanju-writer provider remove <name>
-duanju-writer provider test <name>
+duanju-copier provider add <name> --type openai --base-url <url> --model <model> --api-key <key> [--temperature 0.7] [--max-tokens 8192] [--timeout 120000]
+duanju-copier provider list
+duanju-copier provider remove <name>
+duanju-copier provider test <name>
 
 # Role assignment
-duanju-writer role set <role> <provider>
-duanju-writer role list
+duanju-copier role set <role> <provider>
+duanju-copier role list
 ```
 
 `provider test` sends a simple prompt ("Say hello in one word.") and verifies a response is returned.
@@ -124,7 +124,7 @@ duanju-writer role list
 | `src/planner.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'plan')` |
 | `src/compressor.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'compress')` |
 | `src/consistency.js` | Change `callClaude(prompt)` → `callLLM(prompt, 'consistency')` |
-| `bin/duanju-writer.js` | Add `provider` and `role` commands |
+| `bin/duanju-copier.js` | Add `provider` and `role` commands |
 
 ## Error Handling
 

@@ -1,6 +1,6 @@
 <div align="center">
 
-# Duanju Writer (短剧编剧机)
+# Duanju Copier (短剧编剧机)
 
 ### 短剧自动剧本生成器
 
@@ -31,7 +31,7 @@
 
 ## 项目简介
 
-**Duanju Writer** 是为 [Duanju](https://usaduanju.com) 短视频短剧平台打造的全自动剧本生成系统。每部剧由 10-40 集组成，每集包含 4-10 个 10-15 秒的竖屏片段（clip）；每个 clip 输出结构化剧本：场景（setting）、视觉动作（action）、对白（dialogue）、片尾钩点（hook）。
+**Duanju Copier** 是为 [Duanju](https://usaduanju.com) 短视频短剧平台打造的全自动剧本生成系统。每部剧由 10-40 集组成，每集包含 4-10 个 10-15 秒的竖屏片段（clip）；每个 clip 输出结构化剧本：场景（setting）、视觉动作（action）、对白（dialogue）、片尾钩点（hook）。
 
 从趋势调研、雪花架构、大纲规划、片段编排到自动上线，整套流程无需人工干预。每次生成会输出三个不同结局变体（爽爆 / 苦尽甘来 / 反转），可用于 A/B 测试。
 
@@ -83,7 +83,7 @@
 可插拔的 LLM 后端：默认 Claude CLI，亦支持任何 OpenAI 兼容 API。可为 8 个任务角色（research / outline / plan / clip / compress / repair / consistency / enrichment）分别配置不同模型。
 
 ### 🔄 断点续传 + 上传幂等
-每个流水线阶段产物（materials / snowflake / outline / plan / drama / variants）持久化在 `~/.duanju-writer/jobs/<id>/`。任务中断自动从断点恢复，已上线的剧不会重复发布。Artifact 带 `schemaVersion` 标记防止旧数据混入。
+每个流水线阶段产物（materials / snowflake / outline / plan / drama / variants）持久化在 `~/.duanju-copier/jobs/<id>/`。任务中断自动从断点恢复，已上线的剧不会重复发布。Artifact 带 `schemaVersion` 标记防止旧数据混入。
 
 ---
 
@@ -132,15 +132,15 @@ npm install
 ### 初始化
 
 ```bash
-node bin/duanju-writer.js setup
+node bin/duanju-copier.js setup
 ```
 
-交互式向导会询问 Duanju API URL，自动获取 API key，并写入 `~/.duanju-writer/config.json`。
+交互式向导会询问 Duanju API URL，自动获取 API key，并写入 `~/.duanju-copier/config.json`。
 
 ### 单次运行（前台）
 
 ```bash
-node bin/duanju-writer.js run
+node bin/duanju-copier.js run
 ```
 
 支持以下旗标：
@@ -158,10 +158,10 @@ node bin/duanju-writer.js run
 ### 守护进程模式
 
 ```bash
-node bin/duanju-writer.js start          # 后台调度器 + worker
-node bin/duanju-writer.js scheduler      # 单独跑调度器
-node bin/duanju-writer.js worker         # 单独跑 worker
-node bin/duanju-writer.js jobs           # 查看任务队列状态
+node bin/duanju-copier.js start          # 后台调度器 + worker
+node bin/duanju-copier.js scheduler      # 单独跑调度器
+node bin/duanju-copier.js worker         # 单独跑 worker
+node bin/duanju-copier.js jobs           # 查看任务队列状态
 ```
 
 ---
@@ -169,17 +169,17 @@ node bin/duanju-writer.js jobs           # 查看任务队列状态
 ## 命令行参考
 
 ```
-duanju-writer setup          交互式初始化（API URL + 自动获取 key）
-duanju-writer run [flags]    单次生成 + 上传
-duanju-writer start          启动调度器 + worker 守护进程
-duanju-writer scheduler      单独运行调度器
-duanju-writer worker         单独运行 worker
-duanju-writer jobs           查看任务队列
-duanju-writer styles         列出全部 30 个套路
-duanju-writer config         查看 / 修改配置
-duanju-writer provider       管理 LLM 供应商
-duanju-writer role           为不同任务角色分配模型
-duanju-writer knowledge      管理知识库（导入 / 列表 / 清空）
+duanju-copier setup          交互式初始化（API URL + 自动获取 key）
+duanju-copier run [flags]    单次生成 + 上传
+duanju-copier start          启动调度器 + worker 守护进程
+duanju-copier scheduler      单独运行调度器
+duanju-copier worker         单独运行 worker
+duanju-copier jobs           查看任务队列
+duanju-copier styles         列出全部 30 个套路
+duanju-copier config         查看 / 修改配置
+duanju-copier provider       管理 LLM 供应商
+duanju-copier role           为不同任务角色分配模型
+duanju-copier knowledge      管理知识库（导入 / 列表 / 清空）
 ```
 
 注：`--lang en` 已不再支持（本工具为短剧定制，仅生成中文剧本）。
@@ -227,8 +227,8 @@ category: 复仇
 默认使用 Claude CLI（`claude` 命令）。配置其他 OpenAI 兼容 API：
 
 ```bash
-duanju-writer provider add deepseek --base-url https://api.deepseek.com --model deepseek-chat
-duanju-writer role assign clip deepseek    # 让片段写作走 deepseek
+duanju-copier provider add deepseek --base-url https://api.deepseek.com --model deepseek-chat
+duanju-copier role assign clip deepseek    # 让片段写作走 deepseek
 ```
 
 可为 8 个角色独立配置：`research`、`outline`、`plan`、`clip`、`compress`、`repair`、`consistency`、`enrichment`。
@@ -237,7 +237,7 @@ duanju-writer role assign clip deepseek    # 让片段写作走 deepseek
 
 ## 配置说明
 
-配置文件：`~/.duanju-writer/config.json`
+配置文件：`~/.duanju-copier/config.json`
 
 ```json
 {
@@ -271,7 +271,7 @@ duanju-writer role assign clip deepseek    # 让片段写作走 deepseek
 ```
 duanju/
 ├── bin/
-│   └── duanju-writer.js     # CLI 入口
+│   └── duanju-copier.js     # CLI 入口
 ├── src/
 │   ├── collector.js         # 趋势调研 + 素材收集
 │   ├── snowflake.js         # 雪花法 4 步规划

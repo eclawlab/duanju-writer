@@ -1470,7 +1470,7 @@ Expected: All tests PASS (existing 121 + new planner/state/compressor/consistenc
 
 - [ ] **Step 2: Verify styles still work**
 
-Run: `node bin/duanju-writer.js styles | head -10`
+Run: `node bin/duanju-copier.js styles | head -10`
 Expected: Shows categories and styles as before
 
 - [ ] **Step 3: Commit everything and push**

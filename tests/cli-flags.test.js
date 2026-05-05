@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
-const BIN = new URL('../bin/duanju-writer.js', import.meta.url).pathname;
+const BIN = new URL('../bin/duanju-copier.js', import.meta.url).pathname;
 
 function runCli(args) {
   try {

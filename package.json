@@ -1,17 +1,17 @@
 {
-  "name": "duanju-writer",
+  "name": "duanju-copier",
   "version": "0.2.2",
   "description": "Autonomous story generation daemon for autostory",
   "type": "module",
   "main": "src/constants.js",
   "bin": {
-    "duanju-writer": "bin/duanju-writer.js"
+    "duanju-copier": "bin/duanju-copier.js"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node bin/duanju-writer.js start",
+    "start": "node bin/duanju-copier.js start",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
