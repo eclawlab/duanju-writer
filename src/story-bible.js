@@ -176,3 +176,55 @@ export async function synthesizeBible(chapterFacts, opts = {}) {
   }
   return { schemaVersion: SCHEMA_VERSION, ...bible };
 }
+
+// ─── Prompt block builders ────────────────────────────────────────────────────
+
+const FIDELITY_NOTES = {
+  tight:  '雪花/大纲/规划/片段必须严格反映上述事件顺序与人物弧光，禁止改名、换设定或重排时序。',
+  medium: '可在保留核心冲突与主要人物弧光的前提下，压缩或合并相邻事件以适配短剧节奏。',
+  loose:  '上述内容仅作灵感来源，可大幅改编情节与人物。',
+};
+
+export function buildBibleBlock(bible, fidelity) {
+  if (!FIDELITY_NOTES[fidelity]) {
+    throw new Error(`buildBibleBlock: unknown fidelity "${fidelity}", expected tight|medium|loose`);
+  }
+  const charLines = (bible.characters || []).map(c =>
+    `- ${c.name}（${c.role}）：${c.identity} | 动机：${c.motivation}${c.arc ? ' | 弧光：' + c.arc : ''}`
+  ).join('\n');
+  const eventLines = (bible.events || []).map(e =>
+    `${(e.eventIndex ?? '?')}. [章 ${e.chapterRange?.[0]}-${e.chapterRange?.[1]}] ${e.summary}${e.isTurningPoint ? ' ⚡转折' : ''}${e.isReveal ? ' 💡揭示' : ''}`
+  ).join('\n');
+  const themes = (bible.themes || []).join('、');
+  return [
+    '## 参考小说（必须遵循）',
+    '本剧改编自下列小说。Logline、人物、事件、主题已抽取如下。',
+    '',
+    `【Logline】${bible.logline}`,
+    '【人物】',
+    charLines,
+    '【事件（按时序）】',
+    eventLines,
+    `【主题】${themes}`,
+    `【世界观】${bible.world}`,
+    `【原结局】${bible.ending}`,
+    '',
+    `Fidelity = ${fidelity}.`,
+    `- ${fidelity}: ${FIDELITY_NOTES[fidelity]}`,
+  ].join('\n');
+}
+
+export function buildProseBlock(chapters, range, fidelity, budgetChars) {
+  if (fidelity === 'loose') return '';
+  if (!range) return '';
+  const prose = selectChapterProse(chapters, range, budgetChars);
+  if (!prose) return '';
+  return [
+    '## 原文片段（参考用语与细节）',
+    '以下为本集对应的原文章节内容（节选）。请在保持短剧节奏（钩点、字数限制）的前提下，',
+    '借鉴其用词、画面感、人物语气，使台词与动作更具体、更生动。',
+    '不得逐字抄录超过 20 字的段落。',
+    '',
+    prose,
+  ].join('\n');
+}
