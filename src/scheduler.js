@@ -58,6 +58,13 @@ function tick() {
     console.log(chalk.yellow(`[scheduler] Skipping tick — referenceEvent "${config.referenceEvent}" unresolved.`));
     return;
   }
+  const storyContent = config.referenceStory
+    ? resolveReferenceFile('story', config.referenceStory)
+    : null;
+  if (config.referenceStory && !storyContent) {
+    console.log(chalk.yellow(`[scheduler] Skipping tick — referenceStory "${config.referenceStory}" unresolved.`));
+    return;
+  }
 
   const options = {
     lang: config.lang || undefined,
@@ -65,6 +72,8 @@ function tick() {
     genre: config.genre || undefined,
     referenceCharacter: charContent || undefined,
     referenceEvent: eventContent || undefined,
+    referenceStory: storyContent || undefined,
+    fidelity: config.fidelity || 'medium',
   };
 
   const job = createJob(options);

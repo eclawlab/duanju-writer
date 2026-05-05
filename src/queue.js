@@ -103,6 +103,8 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         newsUrl: options.newsUrl ?? null,
         referenceCharacter: options.referenceCharacter ?? null,
         referenceEvent: options.referenceEvent ?? null,
+        referenceStory: options.referenceStory ?? null,
+        fidelity: options.fidelity ?? null,
       },
     };
     // Create the artifact directory BEFORE writing the job record. The first

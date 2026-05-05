@@ -18,6 +18,8 @@ const DEFAULTS = {
   genre: '',
   referenceCharacter: '',
   referenceEvent: '',
+  referenceStory: '',
+  fidelity: 'medium',
   style: 'default',
   providers: {
     claude: { type: 'claude-cli', claudePath: 'claude', timeout: 1500000 },
