@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-28
 **Status:** Spec — pending implementation plan
-**Related repos:** `duanju-copier` (this), `../duanju` (server)
+**Related repos:** `duanju-writer` (this), `../duanju` (server)
 
 ## Problem
 

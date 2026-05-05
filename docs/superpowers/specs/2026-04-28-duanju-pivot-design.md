@@ -5,7 +5,7 @@
 
 ## 1. Goal & High-Level Architecture
 
-Pivot duanju-copier from a Chinese/English audio-novel generator into a Chinese-only short-form vertical-drama (短剧) script writer. Each job produces one full drama series of 40–400 short clips (default 120 = 20 episodes × 6 clips), where each clip carries 10–15 seconds of structured screenplay content (`{setting, action, dialogue, hook, durationSec}`). Output is uploaded to the existing `/api/ai/stories` endpoint with a new short-drama payload shape, with the existing 3-variant ending pipeline preserved.
+Pivot duanju-writer from a Chinese/English audio-novel generator into a Chinese-only short-form vertical-drama (短剧) script writer. Each job produces one full drama series of 40–400 short clips (default 120 = 20 episodes × 6 clips), where each clip carries 10–15 seconds of structured screenplay content (`{setting, action, dialogue, hook, durationSec}`). Output is uploaded to the existing `/api/ai/stories` endpoint with a new short-drama payload shape, with the existing 3-variant ending pipeline preserved.
 
 The 7-stage pipeline survives — research → snowflake → outline → plan → clip-writing → variant-split → upload. What changes is the *content* at each stage and the *vocabulary* used throughout the codebase.
 
@@ -263,7 +263,7 @@ AutoStory's `/api/ai/stories` ingestion needs to accept `format: "duanju"` and t
 | Flag | Status | Notes |
 |---|---|---|
 | `--lang en\|cn` | Frozen to `cn` | Internal pipeline still threads `lang`. Passing `--lang en` errors out cleanly: "English not supported; CN only." |
-| `--style <trope>` | Repurposed | Values are trope keys (`战神归来`, `重生复仇`, etc.). `duanju-copier styles` lists by category. |
+| `--style <trope>` | Repurposed | Values are trope keys (`战神归来`, `重生复仇`, etc.). `duanju-writer styles` lists by category. |
 | `--type <genre>` | Repurposed | Internally renamed `novelType → genre`. Values: `都市\|古装\|玄幻\|重生\|甜宠\|复仇\|校园\|家庭`. |
 | `--news <url>` | Kept | Still useful for "based on trending event/scandal" 短剧. |
 | `--character <path>` | Kept | Reference character markdown — fan-fic-style 短剧. |
@@ -273,7 +273,7 @@ AutoStory's `/api/ai/stories` ingestion needs to accept `format: "duanju"` and t
 | `--clips-per-episode <K>` | NEW | Clips per episode. Range 4–10. Default 6. |
 | `<count>` (positional) | Kept | Number of dramas to generate sequentially. |
 
-### 6.2 Config schema (`~/.duanju-copier/config.json`)
+### 6.2 Config schema (`~/.duanju-writer/config.json`)
 
 | Key | Status | Default |
 |---|---|---|
@@ -286,14 +286,14 @@ AutoStory's `/api/ai/stories` ingestion needs to accept `format: "duanju"` and t
 | `episodesPerDrama` | NEW | `20` |
 | `clipsPerEpisode` | NEW | `6` |
 
-`VALID_KEYS` list in `bin/duanju-copier.js` updated. Setting an old key (`novelType`, `targetWordsPerScene`) errors out: `Unknown config key — did you mean 'genre' / 'targetCharsPerClip'?`.
+`VALID_KEYS` list in `bin/duanju-writer.js` updated. Setting an old key (`novelType`, `targetWordsPerScene`) errors out: `Unknown config key — did you mean 'genre' / 'targetCharsPerClip'?`.
 
 The `autostoryUrl` config key is **deliberately preserved** to avoid forcing every existing user to migrate config for a cosmetic rename.
 
 ### 6.3 `styles` command (lists tropes)
 
 ```
-$ duanju-copier styles
+$ duanju-writer styles
 Available 短剧 tropes:
 
   [都市]
@@ -307,13 +307,13 @@ Available 短剧 tropes:
     校园复仇 — 校园霸凌反转，从受害者到主导者
     ...
 
-Usage: duanju-copier run --style 战神归来
-   or: duanju-copier config set style 战神归来
+Usage: duanju-writer run --style 战神归来
+   or: duanju-writer config set style 战神归来
 ```
 
 ### 6.4 Breaking changes (no backwards-compat)
 
-- Job artifacts under `~/.duanju-copier/jobs/<jobId>/` now contain `outline.json` (new schema), `clips.json` (was `scenes.json`), `state.json` (drama-state shape). Existing in-flight jobs from the old pipeline will fail to resume — recommend running the migration from a clean state. Each artifact gains a top-level `"schemaVersion": 2` field; the worker's resume-from-artifact path requires `schemaVersion === 2` and otherwise refuses to resume (logs the mismatch and treats the artifact as missing, so the job regenerates from the latest valid upstream stage). Old (v1, untagged) artifacts therefore fail loudly rather than silently producing garbage.
+- Job artifacts under `~/.duanju-writer/jobs/<jobId>/` now contain `outline.json` (new schema), `clips.json` (was `scenes.json`), `state.json` (drama-state shape). Existing in-flight jobs from the old pipeline will fail to resume — recommend running the migration from a clean state. Each artifact gains a top-level `"schemaVersion": 2` field; the worker's resume-from-artifact path requires `schemaVersion === 2` and otherwise refuses to resume (logs the mismatch and treats the artifact as missing, so the job regenerates from the latest valid upstream stage). Old (v1, untagged) artifacts therefore fail loudly rather than silently producing garbage.
 - `episodeChoices`, `characterQuestions`, scene-level `choices`/`nextSceneIndex`/`sceneType`, `[player]` blocks, and `|voice:xxx` markers no longer generated.
 - `STORY_END` conclusion type renamed to `DRAMA_END`.
 - AutoStory must accept the new `format: "duanju"` payload (server-side coordination).
@@ -333,7 +333,7 @@ Usage: duanju-copier run --style 战神归来
 | Drama-state (`drama-state.js`) | Renamed | Existing 60+ tests carry over with `story → drama` rename. |
 | Uploader (`uploader.js`) | Updated | `buildRequest` emits `format: "duanju"`, `clips` not `scenes`, no `episodeChoices` strip, includes `trope`/`genre`/`characters`/`tags`, variant fields injected. |
 | CLI flag validation | New | `--episodes 5` / `--episodes 50` / `--clips-per-episode 3` / `--clips-per-episode 12` rejected with explicit range. `--lang en` rejected. Old config keys (`novelType`, `targetWordsPerScene`) error with rename hint. |
-| Constants | Updated | `NAME = 'duanju-copier'`, version bumped, no test for vocabulary content. |
+| Constants | Updated | `NAME = 'duanju-writer'`, version bumped, no test for vocabulary content. |
 | Char-counting (`enrichment.js`) | Updated | `countChars(cn)` replaces `countWords` for CN target validation. |
 
 ### 7.2 What we don't test
@@ -344,8 +344,8 @@ Usage: duanju-copier run --style 战神归来
 
 ### 7.3 Manual validation gate (before merge)
 
-1. `duanju-copier run 1 --style 战神归来 --type 都市 --episodes 20 --clips-per-episode 6` against a configured provider.
-2. Inspect `~/.duanju-copier/jobs/<jobId>/`: `snowflake.json`, `outline.json`, `plan.json`, `clips.json`. Verify schema, hook density (every non-ending clip has a hook), character count caps, character roster size.
+1. `duanju-writer run 1 --style 战神归来 --type 都市 --episodes 20 --clips-per-episode 6` against a configured provider.
+2. Inspect `~/.duanju-writer/jobs/<jobId>/`: `snowflake.json`, `outline.json`, `plan.json`, `clips.json`. Verify schema, hook density (every non-ending clip has a hook), character count caps, character roster size.
 3. Verify the upload `POST` body shape matches §5.1 (intercept with a local mock or a deliberately-failing AutoStory URL and read the body from the error log).
 4. Spot-check 5 random clips for whether the dialogue + action + hook actually reads as a watchable 10–15s 短剧 beat. Subjective gate — failing this means prompts need iteration, not code.
 
@@ -363,7 +363,7 @@ Display-name-only cleanup. Internal identifiers (`autostoryUrl` config key, `/ap
 | `README.md` link label `[AutoStory](https://autostory-web.fly.dev)` | unchanged URL, label updated | `[Duanju](https://autostory-web.fly.dev)` |
 | `src/setup.js` console prompts | `"AutoStory API URL"`, `"Cannot reach AutoStory API"`, etc. | `"Duanju API URL"`, etc. |
 | `src/uploader.js` source comments | `"hung AutoStory API"` | `"hung Duanju API"` |
-| `bin/duanju-copier.js` help/error text | any "AutoStory" mentions | "Duanju" |
+| `bin/duanju-writer.js` help/error text | any "AutoStory" mentions | "Duanju" |
 | `prompts/*.md` | `"AutoStory platform — an audio novel app"` | n/a — covered by §4 full prompt rewrite |
 | `src/constants.js`, `src/config.js`, `src/uploader.js` field names: `autostoryUrl`, `aiApiKey` | unchanged | unchanged |
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Pivot the `duanju-copier` so its in-memory drama, on-disk artifacts, and wire payload all use the server-canonical "scene-with-content" shape, with the four-beat clip data preserved on a non-enumerable `_beats` ride-along that the compressor and consistency check read.
+**Goal:** Pivot the `duanju-writer` so its in-memory drama, on-disk artifacts, and wire payload all use the server-canonical "scene-with-content" shape, with the four-beat clip data preserved on a non-enumerable `_beats` ride-along that the compressor and consistency check read.
 
 **Architecture:** One translation point inside `parseClip`. After parseClip, no other code in the writer ever reads `clip.setting/action/dialogue/hook` directly — they read `clip._beats.X`. The uploader stops translating; it forwards what's already shaped correctly. Server is unchanged.
 
@@ -1196,7 +1196,7 @@ echo "API key: $KEY"
 Then run the integration test against the local server:
 
 ```bash
-cd /Users/boclaw/Project/duanju-copier
+cd /Users/boclaw/Project/duanju-writer
 DUANJU_SERVER_URL=http://localhost:3001 DUANJU_API_KEY=$KEY node --test tests/integration-server-contract.test.js
 ```
 
@@ -1238,15 +1238,15 @@ If you didn't already run it in Task 10, do it now. Confirm 201 + `story.id`.
 Configure the writer to point at the local duanju server, then trigger a small job:
 
 ```bash
-# Edit ~/.duanju-copier/config.json to set:
+# Edit ~/.duanju-writer/config.json to set:
 #   "autostoryUrl": "http://localhost:3001"
 #   "aiApiKey": "<key from Task 10 Step 3>"
 #   "episodesPerDrama": 2
 #   "clipsPerEpisode": 3
 
 # Then enqueue and run a single job (no LLM mocking — this exercises the full pipeline):
-node bin/duanju-copier.js enqueue --news-url <some-url-or-omit-for-trends>
-node bin/duanju-copier.js work-once
+node bin/duanju-writer.js enqueue --news-url <some-url-or-omit-for-trends>
+node bin/duanju-writer.js work-once
 ```
 
 Watch the worker log for `Variant vN uploaded: <storyId>` lines (one per variant). Visit `http://localhost:3001/api/ai/stories` (with `X-Api-Key: <key>`) to confirm the stories landed.

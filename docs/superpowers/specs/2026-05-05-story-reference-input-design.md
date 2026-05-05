@@ -2,15 +2,15 @@
 
 **Date:** 2026-05-05
 **Status:** Approved (pending implementation plan)
-**Related repos:** `duanju-copier` (this), `../duanju` (server, unaffected)
+**Related repos:** `duanju-writer` (this), `../duanju` (server, unaffected)
 
 ---
 
 ## Goal
 
-Add a `--story <path>` flag (and companion `--fidelity tight|medium|loose`) to `duanju-copier run`, enabling the user to feed a complete reference novel into the pipeline. The pipeline extracts a structured story bible plus a chapter index from the novel, then adapts it into the existing duanju output format (10–40 episodes × 4–10 clips, vertical-drama clips with `setting`/`action`/`dialogue`/`hook`). The fidelity flag controls how strictly the duanju tracks the source novel's plot, characters, and event order.
+Add a `--story <path>` flag (and companion `--fidelity tight|medium|loose`) to `duanju-writer run`, enabling the user to feed a complete reference novel into the pipeline. The pipeline extracts a structured story bible plus a chapter index from the novel, then adapts it into the existing duanju output format (10–40 episodes × 4–10 clips, vertical-drama clips with `setting`/`action`/`dialogue`/`hook`). The fidelity flag controls how strictly the duanju tracks the source novel's plot, characters, and event order.
 
-This feature gives concrete meaning to the recent rename `duanju-writer` → `duanju-copier`: the tool now copies novels into duanju form.
+This feature gives concrete meaning to the recent rename `duanju-writer` → `duanju-writer`: the tool now copies novels into duanju form.
 
 ## Non-goals
 
@@ -25,14 +25,14 @@ This feature gives concrete meaning to the recent rename `duanju-writer` → `du
 
 ## CLI surface
 
-### New flags on `duanju-copier run`
+### New flags on `duanju-writer run`
 
 | Flag | Type | Default | Notes |
 |---|---|---|---|
 | `--story <path>` | path to `.txt` or `.md` file | none | UTF-8; raw size ≤ 1 MB; must be a file path (URLs rejected) |
 | `--fidelity <tight\|medium\|loose>` | enum | `medium` | only valid when `--story` (or persisted `referenceStory`) is in effect |
 
-### Persisted config (`~/.duanju-copier/config.json`)
+### Persisted config (`~/.duanju-writer/config.json`)
 
 ```json
 {
@@ -41,9 +41,9 @@ This feature gives concrete meaning to the recent rename `duanju-writer` → `du
 }
 ```
 
-`config set` accepts both keys; `VALID_KEYS` in `bin/duanju-copier.js` is extended to include them.
+`config set` accepts both keys; `VALID_KEYS` in `bin/duanju-writer.js` is extended to include them.
 
-### Validation rules (rejected at job-creation time in `bin/duanju-copier.js`)
+### Validation rules (rejected at job-creation time in `bin/duanju-writer.js`)
 
 - `--story` + `--news` → mutually exclusive; reject with clear message.
 - `--story` + `--style` → mutually exclusive; reject with clear message.
@@ -63,7 +63,7 @@ This feature gives concrete meaning to the recent rename `duanju-writer` → `du
 The `run` help line is extended:
 
 ```
-duanju-copier run [count] [--lang cn] [--style 套路] [--genre 类目] [--news URL]
+duanju-writer run [count] [--lang cn] [--style 套路] [--genre 类目] [--news URL]
   [--story path.{txt,md}] [--fidelity tight|medium|loose]
   [--reference-character path.md] [--reference-event path.md]
   [--episodes N] [--clips-per-episode K]
@@ -111,7 +111,7 @@ Decision (from brainstorming Q4, choice A): only the front-end discovery stages 
 
 | File | Change |
 |---|---|
-| `bin/duanju-copier.js` | parse `--story` and `--fidelity`; validate per rules above; help text; extend `VALID_KEYS` |
+| `bin/duanju-writer.js` | parse `--story` and `--fidelity`; validate per rules above; help text; extend `VALID_KEYS` |
 | `src/config.js` | add defaults `referenceStory: ''` and `fidelity: 'medium'` |
 | `src/queue.js` | persist `referenceStory` and `fidelity` on job records |
 | `src/scheduler.js` | read `referenceStory` from config like it does for `referenceCharacter` |
@@ -201,7 +201,7 @@ Each `episode` object in the outline gains an optional/required field:
 ### Job directory layout
 
 ```
-~/.duanju-copier/jobs/<jobId>/
+~/.duanju-writer/jobs/<jobId>/
   story/
     bible.json
     chapters.json

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `--story <path>` and `--fidelity tight|medium|loose` flags to `duanju-copier run`, enabling the pipeline to ingest a reference novel, extract a structured story bible + chapter index, and adapt the source into the existing duanju output format.
+**Goal:** Add `--story <path>` and `--fidelity tight|medium|loose` flags to `duanju-writer run`, enabling the pipeline to ingest a reference novel, extract a structured story bible + chapter index, and adapt the source into the existing duanju output format.
 
 **Architecture:** New module `src/story-bible.js` owns all novel-handling primitives (chapter splitting, LLM extraction, LLM synthesis, bible compression, prose selection, artifact I/O). Pipeline gains one new front-end phase (`story-extraction`) that runs only when `referenceStory` is set; `research` and `materials` are skipped in that case. Snowflake/outline/plan/clip prompt builders accept optional `bible` + `fidelity` (and clip/plan stages also accept `chapters`) and render new conditional sections. Output format is unchanged.
 
@@ -23,7 +23,7 @@
 - `tests/story-bible-extract.test.js` — extraction + synthesis tests with mocked LLM
 
 **Modified files:**
-- `bin/duanju-copier.js` — flag parsing, validation, help, `VALID_KEYS`
+- `bin/duanju-writer.js` — flag parsing, validation, help, `VALID_KEYS`
 - `src/config.js` — add `referenceStory: ''` and `fidelity: 'medium'` defaults
 - `src/queue.js` — persist `referenceStory`, `fidelity` on job records
 - `src/scheduler.js` — read `referenceStory` from config like `referenceCharacter`
@@ -1573,15 +1573,15 @@ git commit -m "feat: scheduler reads referenceStory and fidelity from config"
 
 ---
 
-### Task 14: CLI flag parsing + validation in `bin/duanju-copier.js`
+### Task 14: CLI flag parsing + validation in `bin/duanju-writer.js`
 
 **Files:**
-- Modify: `bin/duanju-copier.js`
+- Modify: `bin/duanju-writer.js`
 - Test: `tests/cli-flags.test.js` (extend)
 
 - [ ] **Step 1: Read current flag parsing block**
 
-Run: `grep -n "newsUrl\|characterPath\|eventPath\|VALID_KEYS\|--news\|--character\|--event" bin/duanju-copier.js | head -30`
+Run: `grep -n "newsUrl\|characterPath\|eventPath\|VALID_KEYS\|--news\|--character\|--event" bin/duanju-writer.js | head -30`
 
 - [ ] **Step 2: Write the failing tests** — append to `tests/cli-flags.test.js`
 
@@ -1593,7 +1593,7 @@ import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const BIN = new URL('../bin/duanju-copier.js', import.meta.url).pathname;
+const BIN = new URL('../bin/duanju-writer.js', import.meta.url).pathname;
 
 function runCli(args) {
   return spawnSync('node', [BIN, ...args], { encoding: 'utf8' });
@@ -1669,7 +1669,7 @@ describe('--story flag validation', () => {
 Run: `npm test 2>&1 | grep -A 2 "story flag validation"`
 Expected: most rejected — flags not yet parsed; CLI may even succeed starting a run.
 
-- [ ] **Step 4: Implement parsing + validation in `bin/duanju-copier.js`**
+- [ ] **Step 4: Implement parsing + validation in `bin/duanju-writer.js`**
 
 Find the `case 'run':` block and the existing `--news`, `--character`, `--event` handling. Add:
 
@@ -1747,7 +1747,7 @@ Update `VALID_KEYS` to include `'referenceStory'` and `'fidelity'`.
 Update help text:
 
 ```javascript
-console.log('\nRun options: duanju-copier run [count] [--lang cn] [--style 战神归来] [--genre 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--episodes N] [--clips-per-episode K]');
+console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--genre 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--episodes N] [--clips-per-episode K]');
 ```
 
 - [ ] **Step 5: Run tests**
@@ -1758,7 +1758,7 @@ Expected: all CLI flag tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add bin/duanju-copier.js tests/cli-flags.test.js
+git add bin/duanju-writer.js tests/cli-flags.test.js
 git commit -m "feat: add --story and --fidelity CLI flags with validation"
 ```
 
@@ -2109,18 +2109,18 @@ mkdir -p /tmp/dj-smoke && cat > /tmp/dj-smoke/novel.md <<'EOF'
 第三章 决裂
 两人对视良久。
 EOF
-node bin/duanju-copier.js run --story /tmp/dj-smoke/novel.md --fidelity medium --no-publish
+node bin/duanju-writer.js run --story /tmp/dj-smoke/novel.md --fidelity medium --no-publish
 ```
 
-Expected: job created, story-extraction phase runs, bible.json + chapters.json written under `~/.duanju-copier/jobs/<id>/story/`. (If your provider isn't configured, this will fail at the LLM call — that's fine, the CLI surface and worker phase are still validated.)
+Expected: job created, story-extraction phase runs, bible.json + chapters.json written under `~/.duanju-writer/jobs/<id>/story/`. (If your provider isn't configured, this will fail at the LLM call — that's fine, the CLI surface and worker phase are still validated.)
 
 - [ ] **Step 3: Smoke-test invalid combinations**
 
 ```bash
-node bin/duanju-copier.js run --story /tmp/dj-smoke/novel.md --news http://example.com  # expect: rejection
-node bin/duanju-copier.js run --story /tmp/dj-smoke/novel.md --style 战神归来            # expect: rejection
-node bin/duanju-copier.js run --fidelity tight                                            # expect: rejection
-node bin/duanju-copier.js run --story /tmp/dj-smoke/missing.md                            # expect: rejection
+node bin/duanju-writer.js run --story /tmp/dj-smoke/novel.md --news http://example.com  # expect: rejection
+node bin/duanju-writer.js run --story /tmp/dj-smoke/novel.md --style 战神归来            # expect: rejection
+node bin/duanju-writer.js run --fidelity tight                                            # expect: rejection
+node bin/duanju-writer.js run --story /tmp/dj-smoke/missing.md                            # expect: rejection
 ```
 
 Expected: all four exit non-zero with appropriate error messages.

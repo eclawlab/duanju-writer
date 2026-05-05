@@ -278,14 +278,14 @@ switch (command) {
       if (!config.providers || !config.providers[model]) {
         console.log(`Provider "${model}" not found.`);
         console.log(`Available providers: ${Object.keys(config.providers || {}).join(', ')}`);
-        console.log('Add one with: duanju-copier provider add <name> --type openai ...');
+        console.log('Add one with: duanju-writer provider add <name> --type openai ...');
         process.exit(1);
       }
       // Check OpenAI providers have an API key configured
       const providerCfg = config.providers[model];
       if (providerCfg.type === 'openai' && !providerCfg.apiKey) {
         console.log(`Provider "${model}" has no API key configured.`);
-        console.log(`Set it with: duanju-copier provider add ${model} --type openai --base-url ${providerCfg.baseUrl} --model ${providerCfg.model} --api-key <your-key>`);
+        console.log(`Set it with: duanju-writer provider add ${model} --type openai --base-url ${providerCfg.baseUrl} --model ${providerCfg.model} --api-key <your-key>`);
         process.exit(1);
       }
       const { setModelOverride } = await import('../src/llm.js');
@@ -324,9 +324,9 @@ switch (command) {
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
         if (args[1] === 'novelType') {
-          console.log(`'novelType' has been renamed to 'genre'. Use: duanju-copier config set genre <value>`);
+          console.log(`'novelType' has been renamed to 'genre'. Use: duanju-writer config set genre <value>`);
         } else if (args[1] === 'targetWordsPerScene') {
-          console.log(`'targetWordsPerScene' has been renamed to 'targetCharsPerClip'. Use: duanju-copier config set targetCharsPerClip <value>`);
+          console.log(`'targetWordsPerScene' has been renamed to 'targetCharsPerClip'. Use: duanju-writer config set targetCharsPerClip <value>`);
         } else {
           console.log(`Unknown config key: ${args[1]}`);
           console.log(`Valid keys: ${VALID_KEYS.join(', ')}`);
@@ -381,8 +381,8 @@ switch (command) {
       }
       console.log();
     }
-    console.log('Usage: duanju-copier run --style 战神归来');
-    console.log('   or: duanju-copier config set style 战神归来');
+    console.log('Usage: duanju-writer run --style 战神归来');
+    console.log('   or: duanju-writer config set style 战神归来');
     break;
   }
   case 'setup': {
@@ -448,7 +448,7 @@ switch (command) {
       const usedBy = Object.entries(roles).filter(([, v]) => v === name).map(([k]) => k);
       if (usedBy.length > 0) {
         console.log(`Cannot remove "${name}" — used by roles: ${usedBy.join(', ')}`);
-        console.log('Reassign those roles first with: duanju-copier role set <role> <other-provider>');
+        console.log('Reassign those roles first with: duanju-writer role set <role> <other-provider>');
         process.exit(1);
       }
       delete config.providers[name];
@@ -475,12 +475,12 @@ switch (command) {
       }
 
     } else {
-      console.log('Usage: duanju-copier provider [add|list|remove|test] [name] [--flags]');
+      console.log('Usage: duanju-writer provider [add|list|remove|test] [name] [--flags]');
       console.log('\nExamples:');
-      console.log('  duanju-copier provider add deepseek --type openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...');
-      console.log('  duanju-copier provider list');
-      console.log('  duanju-copier provider test deepseek');
-      console.log('  duanju-copier provider remove deepseek');
+      console.log('  duanju-writer provider add deepseek --type openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...');
+      console.log('  duanju-writer provider list');
+      console.log('  duanju-writer provider test deepseek');
+      console.log('  duanju-writer provider remove deepseek');
     }
     break;
   }
@@ -500,7 +500,7 @@ switch (command) {
       const config = loadConfig();
       const providers = config.providers || {};
       if (!providers[provider]) {
-        console.log(`Provider "${provider}" not found. Add it first with: duanju-copier provider add ${provider} ...`);
+        console.log(`Provider "${provider}" not found. Add it first with: duanju-writer provider add ${provider} ...`);
         process.exit(1);
       }
       if (!config.roles) config.roles = {};
@@ -517,10 +517,10 @@ switch (command) {
       }
 
     } else {
-      console.log('Usage: duanju-copier role [set|list]');
+      console.log('Usage: duanju-writer role [set|list]');
       console.log('\nExamples:');
-      console.log('  duanju-copier role list');
-      console.log('  duanju-copier role set scene deepseek');
+      console.log('  duanju-writer role list');
+      console.log('  duanju-writer role set scene deepseek');
     }
     break;
   }
@@ -600,18 +600,18 @@ switch (command) {
     console.log(`Store path: ${storePath}`);
 
   } else {
-    console.log('Usage: duanju-copier knowledge [import|clear|info] [path] [--job jobId]');
+    console.log('Usage: duanju-writer knowledge [import|clear|info] [path] [--job jobId]');
     console.log('\nExamples:');
-    console.log('  duanju-copier knowledge import ./my-worldbuilding.txt');
-    console.log('  duanju-copier knowledge import ./reference-docs/');
-    console.log('  duanju-copier knowledge info');
-    console.log('  duanju-copier knowledge clear');
+    console.log('  duanju-writer knowledge import ./my-worldbuilding.txt');
+    console.log('  duanju-writer knowledge import ./reference-docs/');
+    console.log('  duanju-writer knowledge info');
+    console.log('  duanju-writer knowledge clear');
   }
   break;
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: duanju-copier [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
-    console.log('\nRun options: duanju-copier run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
+    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
+    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
     process.exit(1);
 }

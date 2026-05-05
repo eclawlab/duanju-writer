@@ -14,14 +14,14 @@ export async function setup(args) {
   // from argv (currently only the URL can — keys are generated/prompted).
   if (!process.stdin.isTTY && !args[0]) {
     console.log(chalk.red('setup requires a TTY. To run non-interactively, pass the API URL as an argument:'));
-    console.log(chalk.dim('  duanju-copier setup https://your-duanju-instance.example.com'));
+    console.log(chalk.dim('  duanju-writer setup https://your-duanju-instance.example.com'));
     process.exit(1);
   }
 
   const config = loadConfig();
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  console.log(chalk.bold('\nduanju-copier setup\n'));
+  console.log(chalk.bold('\nduanju-writer setup\n'));
 
   try {
     // Step 1: Get autostory URL (or use CLI arg)
@@ -64,7 +64,7 @@ export async function setup(args) {
       keyRes = await fetch(`${autostoryUrl}/api/ai/keys/bootstrap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: 'duanju-copier' }),
+        body: JSON.stringify({ label: 'duanju-writer' }),
         signal: bootstrapController.signal,
       });
     } catch (err) {
@@ -91,7 +91,7 @@ export async function setup(args) {
             'Content-Type': 'application/json',
             'X-Api-Key': existingKey.trim(),
           },
-          body: JSON.stringify({ label: 'duanju-copier' }),
+          body: JSON.stringify({ label: 'duanju-writer' }),
           signal: keyController.signal,
         });
       } catch (err) {
@@ -119,9 +119,9 @@ export async function setup(args) {
 
     console.log(chalk.green('\nSetup complete! Config saved.\n'));
     console.log(chalk.dim('Run a test:'));
-    console.log(chalk.dim('  node bin/duanju-copier.js run\n'));
+    console.log(chalk.dim('  node bin/duanju-writer.js run\n'));
     console.log(chalk.dim('Start the daemon:'));
-    console.log(chalk.dim('  node bin/duanju-copier.js start\n'));
+    console.log(chalk.dim('  node bin/duanju-writer.js start\n'));
   } finally {
     rl.close();
   }

@@ -90,7 +90,7 @@ function defaultCommandFor(pid) {
 // role is 'parent' (daemon) or 'child' (claude CLI)
 function defaultMatchesSignature(cmd, role) {
   if (!cmd) return false;
-  if (role === 'parent') return cmd.includes('duanju-copier');
+  if (role === 'parent') return cmd.includes('duanju-writer');
   if (role === 'child') {
     // The writer always invokes the Claude CLI with `--no-session-persistence`
     // (see llm.js createClaudeCliAdapter). A bare `cmd.includes('claude')` was
@@ -116,7 +116,7 @@ export function readPidfileFrom(filePath) {
 /**
  * Check whether a worker daemon (parent process) is alive based on the
  * pidfile. Verifies both that the recorded PID is responsive AND that its
- * command line still matches the duanju-copier signature, to defend against
+ * command line still matches the duanju-writer signature, to defend against
  * PID reuse. Returns false when no parent is recorded, or when the recorded
  * PID is dead/reused.
  *
@@ -172,7 +172,7 @@ export function unregisterChildIn(filePath, pid) {
 
 /**
  * Read the pidfile, kill any lingering PIDs whose process signature still
- * matches what we expect (parent=duanju-copier, child=claude), then clear
+ * matches what we expect (parent=duanju-writer, child=claude), then clear
  * the pidfile. Safe against PID reuse because we verify the command string
  * before sending any signal.
  *

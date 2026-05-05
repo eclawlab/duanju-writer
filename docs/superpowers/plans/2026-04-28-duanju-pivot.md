@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Convert duanju-copier from a Chinese/English audio-novel generator into a Chinese-only short-form vertical-drama (短剧) script writer per `docs/superpowers/specs/2026-04-28-duanju-pivot-design.md`.
+**Goal:** Convert duanju-writer from a Chinese/English audio-novel generator into a Chinese-only short-form vertical-drama (短剧) script writer per `docs/superpowers/specs/2026-04-28-duanju-pivot-design.md`.
 
 **Architecture:** In-place rewrite plus vocabulary rename (`scene → clip`, `story → drama`). The 7-stage pipeline (research → snowflake → outline → plan → clip writing → variant split → upload) is preserved; the schemas, prompts, and trope library are replaced. AutoStory `/api/ai/stories` endpoint and config key `autostoryUrl` are deliberately retained for stability.
 
@@ -44,7 +44,7 @@
 - `src/collector.js` — add 短剧 trend sources; identifier rename
 - `src/setup.js` — display strings: AutoStory → Duanju
 - `src/styles.js` — registry already supports categories; only docstring/comment updates
-- `bin/duanju-copier.js` — add `--episodes`, `--clips-per-episode`, freeze `--lang`, update `VALID_KEYS`, update `styles` command output, update help text
+- `bin/duanju-writer.js` — add `--episodes`, `--clips-per-episode`, freeze `--lang`, update `VALID_KEYS`, update `styles` command output, update help text
 - `prompts/tail-outline.md` — rewrite for 短剧 endings
 - `tests/*` — many updates (per-task)
 - `README.md` — full rewrite for 短剧 product
@@ -271,7 +271,7 @@ For each match, manually verify it refers to the array property (e.g. `scenes: [
 
 - [ ] **Step 4: Update worker.js worklog summary text**
 
-In `src/worker.js`, line containing `=== Duanju Copier Work Log Summary ===` is fine (already renamed in prior task), but log lines like `wlog('clipsGenerated', ...)` (was `'scenesGenerated'`) need to match the rename. Find and update:
+In `src/worker.js`, line containing `=== Duanju Writer Work Log Summary ===` is fine (already renamed in prior task), but log lines like `wlog('clipsGenerated', ...)` (was `'scenesGenerated'`) need to match the rename. Find and update:
 
 ```bash
 grep -n "scene\|Scene" src/worker.js
@@ -287,7 +287,7 @@ Renames (carefully):
 | `processStory` (if any) | `processDrama` |
 | `generateStory` | `generateDrama` |
 | `storyState` (variable) | `dramaState` |
-| `Story Writer Work Log Summary` | already `Duanju Copier Work Log Summary` from prior task |
+| `Story Writer Work Log Summary` | already `Duanju Writer Work Log Summary` from prior task |
 
 Do NOT rename:
 - `storyId` (response field from `/api/ai/stories` — preserves API contract)
@@ -329,7 +329,7 @@ git commit -m "refactor: sweep scene→clip, story→drama identifiers and JSON 
 
 **Files:**
 - Modify: `src/config.js` (DEFAULTS lines 6–34)
-- Modify: `bin/duanju-copier.js` (`run` parser, `VALID_KEYS`, `styles` output, help text, lang validation)
+- Modify: `bin/duanju-writer.js` (`run` parser, `VALID_KEYS`, `styles` output, help text, lang validation)
 - Modify: `tests/config.test.js`
 - Create: `tests/cli-flags.test.js`
 
@@ -407,7 +407,7 @@ const DEFAULTS = {
 Run: `node --test tests/config.test.js`
 Expected: pass.
 
-- [ ] **Step 5: Update `bin/duanju-copier.js` — `VALID_KEYS`**
+- [ ] **Step 5: Update `bin/duanju-writer.js` — `VALID_KEYS`**
 
 Find the `VALID_KEYS` array (currently around line 220) and replace with:
 
@@ -425,9 +425,9 @@ Also add an explicit deprecation hint in the `Unknown config key` branch:
 ```js
 if (!VALID_KEYS.includes(args[1])) {
   if (args[1] === 'novelType') {
-    console.log(`'novelType' has been renamed to 'genre'. Use: duanju-copier config set genre <value>`);
+    console.log(`'novelType' has been renamed to 'genre'. Use: duanju-writer config set genre <value>`);
   } else if (args[1] === 'targetWordsPerScene') {
-    console.log(`'targetWordsPerScene' has been renamed to 'targetCharsPerClip'. Use: duanju-copier config set targetCharsPerClip <value>`);
+    console.log(`'targetWordsPerScene' has been renamed to 'targetCharsPerClip'. Use: duanju-writer config set targetCharsPerClip <value>`);
   } else {
     console.log(`Unknown config key: ${args[1]}`);
     console.log(`Valid keys: ${VALID_KEYS.join(', ')}`);
@@ -436,7 +436,7 @@ if (!VALID_KEYS.includes(args[1])) {
 }
 ```
 
-- [ ] **Step 6: Update `bin/duanju-copier.js` — `run` flag parser**
+- [ ] **Step 6: Update `bin/duanju-writer.js` — `run` flag parser**
 
 Locate the `case 'run':` block (~line 100). After existing flag parsing, add `--episodes` and `--clips-per-episode` handling and validate ranges:
 
@@ -505,7 +505,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
-const BIN = new URL('../bin/duanju-copier.js', import.meta.url).pathname;
+const BIN = new URL('../bin/duanju-writer.js', import.meta.url).pathname;
 
 function runCli(args) {
   try {
@@ -1647,7 +1647,7 @@ Find the `summaryLines` array (around line 392). Update its entries:
 
 ```js
 const summaryLines = [
-  `=== Duanju Copier Work Log Summary ===`,
+  `=== Duanju Writer Work Log Summary ===`,
   `Job ID:          ${jobId}`,
   `Title:           ${sampleStory?.title || '(unknown)'}`,
   `Language:        ${lang}`,
@@ -2239,7 +2239,7 @@ git commit -m "feat: replace literary-style library with 30 短剧 tropes across
 ### Task 27: Update `styles` command output in CLI
 
 **Files:**
-- Modify: `bin/duanju-copier.js` (the `case 'styles':` block)
+- Modify: `bin/duanju-writer.js` (the `case 'styles':` block)
 
 - [ ] **Step 1: Update header text**
 
@@ -2247,12 +2247,12 @@ Find the `case 'styles':` block (~line 261). Replace `Available writing styles:`
 
 - [ ] **Step 2: Update usage hint**
 
-Replace `Usage: duanju-copier run --style sanderson` with `Usage: duanju-copier run --style 战神归来`.
+Replace `Usage: duanju-writer run --style sanderson` with `Usage: duanju-writer run --style 战神归来`.
 
 - [ ] **Step 3: Verify**
 
 ```bash
-node bin/duanju-copier.js styles | head -25
+node bin/duanju-writer.js styles | head -25
 ```
 
 Expected: header says "短剧 tropes", lists 6 categories with their tropes.
@@ -2260,7 +2260,7 @@ Expected: header says "短剧 tropes", lists 6 categories with their tropes.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add bin/duanju-copier.js
+git add bin/duanju-writer.js
 git commit -m "feat: styles command lists 短剧 tropes"
 ```
 
@@ -2271,7 +2271,7 @@ git commit -m "feat: styles command lists 短剧 tropes"
 ### Task 28: Brand text rename — AutoStory → Duanju (display only)
 
 **Files:**
-- Modify: `src/setup.js`, `src/uploader.js` (comments only), `bin/duanju-copier.js` (help/error text only)
+- Modify: `src/setup.js`, `src/uploader.js` (comments only), `bin/duanju-writer.js` (help/error text only)
 
 Per spec §8: rename display strings only. Config key `autostoryUrl` and endpoint `/api/ai/stories` stay.
 
@@ -2282,13 +2282,13 @@ Run: `grep -rn "AutoStory" src/ bin/ | grep -v autostoryUrl | grep -v "/api/ai/s
 - [ ] **Step 2: Replace each match with "Duanju"**
 
 Targeted edits in each file. For `src/setup.js`:
-- `console.log(chalk.bold('\nduanju-copier setup\n'));` (already done)
+- `console.log(chalk.bold('\nduanju-writer setup\n'));` (already done)
 - Replace any `"AutoStory API"`, `"Cannot reach AutoStory API"`, `"AutoStory API URL"` with `"Duanju API"`, `"Cannot reach Duanju API"`, `"Duanju API URL"` respectively.
 
 For `src/uploader.js`:
 - The comment "hung AutoStory API" → "hung Duanju API".
 
-For `bin/duanju-copier.js`:
+For `bin/duanju-writer.js`:
 - Any error or help text mentioning "AutoStory" → "Duanju".
 
 - [ ] **Step 3: Verify**
@@ -2321,7 +2321,7 @@ Replace the first ~50 lines (heading, taglines, badges) with:
 ```markdown
 <div align="center">
 
-# Duanju Copier
+# Duanju Writer
 
 ### 自动化中文短剧剧本生成器
 
@@ -2351,9 +2351,9 @@ Replace the "核心特性" / "Core Features" section with feature bullets reflec
 - [ ] **Step 3: Rewrite the command reference**
 
 In the CLI table, update example commands:
-- `duanju-copier run --style 战神归来 --type 都市`
-- `duanju-copier run --style 重生复仇 --episodes 25 --clips-per-episode 5`
-- `duanju-copier styles` lists tropes
+- `duanju-writer run --style 战神归来 --type 都市`
+- `duanju-writer run --style 重生复仇 --episodes 25 --clips-per-episode 5`
+- `duanju-writer styles` lists tropes
 
 Remove the bilingual section. Keep only the Chinese version.
 
@@ -2364,7 +2364,7 @@ Update the file tree to reflect renamed files (`drama-writer.js`, `clip-types.js
 - [ ] **Step 5: Verify no AutoStory display references remain in README**
 
 Run: `grep -n "AutoStory\|Story Writer\|story-writer\|audio novel\|audio-novel" README.md`
-Expected: no matches (all already converted to Duanju / Duanju Copier / duanju-copier / 短剧 in earlier renames).
+Expected: no matches (all already converted to Duanju / Duanju Writer / duanju-writer / 短剧 in earlier renames).
 
 - [ ] **Step 6: Commit**
 
@@ -2408,24 +2408,24 @@ grep -rn "novelType\|targetWordsPerScene" src/ tests/ bin/ | grep -v "rename"
 - [ ] **Step 3: Stub-config dry run (optional)**
 
 ```bash
-node bin/duanju-copier.js styles | head -30
-node bin/duanju-copier.js config
-node bin/duanju-copier.js config set genre 都市
-node bin/duanju-copier.js config set style 战神归来
-node bin/duanju-copier.js config set novelType 都市  # expect rename hint
-node bin/duanju-copier.js run --episodes 5            # expect range error
-node bin/duanju-copier.js run --lang en               # expect cn-only error
+node bin/duanju-writer.js styles | head -30
+node bin/duanju-writer.js config
+node bin/duanju-writer.js config set genre 都市
+node bin/duanju-writer.js config set style 战神归来
+node bin/duanju-writer.js config set novelType 都市  # expect rename hint
+node bin/duanju-writer.js run --episodes 5            # expect range error
+node bin/duanju-writer.js run --lang en               # expect cn-only error
 ```
 
 - [ ] **Step 4: Real-LLM end-to-end (one drama)**
 
-If a provider is configured (`duanju-copier config` shows aiApiKey or providers.openai.apiKey set):
+If a provider is configured (`duanju-writer config` shows aiApiKey or providers.openai.apiKey set):
 
 ```bash
-duanju-copier run 1 --style 战神归来 --type 都市 --episodes 20 --clips-per-episode 6
+duanju-writer run 1 --style 战神归来 --type 都市 --episodes 20 --clips-per-episode 6
 ```
 
-Inspect `~/.duanju-copier/jobs/<jobId>/`:
+Inspect `~/.duanju-writer/jobs/<jobId>/`:
 - `outline.json` — 20 episodes, last `isEnding: true`, ending in {爽爆, 苦尽甘来, 反转}, 3–7 characters, schemaVersion 2.
 - `clips.json` (or per-variant `clips_v1.json` etc.) — every non-conclusion clip has a non-empty `hook`, char counts respected (sample 5 random clips).
 - Upload body shape (intercept by pointing autostoryUrl at a deliberately-failing test endpoint and reading the error log).

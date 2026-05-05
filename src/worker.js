@@ -596,7 +596,7 @@ async function processJob(jobId, options = {}) {
     wlog('job_done', { storyIds, variationGroupId, durationMs: jobElapsedMs, llmStats });
 
     const summaryLines = [
-      `=== Duanju Copier Work Log Summary ===`,
+      `=== Duanju Writer Work Log Summary ===`,
       `Job ID:          ${jobId}`,
       `Title:           ${sampleStory?.title || '(unknown)'}`,
       `Language:        ${lang}`,
