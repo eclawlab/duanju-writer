@@ -18,6 +18,7 @@ import {
   setCharacterArc,
 } from './drama-state.js';
 import { checkHookDensity } from './consistency.js';
+import { buildBibleBlock, buildProseBlock, compressBibleForEpisode } from './story-bible.js';
 import { generateSnowflake } from './snowflake.js';
 import { countWords } from './enrichment.js';
 
@@ -96,7 +97,7 @@ async function parseJsonWithRepair(raw, label) {
 
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
-export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '', referenceCharacter = '', referenceEvent = '') {
+export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
   const templateFile = OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
@@ -128,7 +129,44 @@ export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '',
       : `\n\n## News Inspiration\n\nThis story is inspired by a real breaking news event.\n- Source: ${ns.url}\n- Theme: ${ns.theme}\n- Emotional core: ${ns.emotionalCore}\n\nIMPORTANT: Do NOT retell the news literally. Use it as creative inspiration — fictionalize characters and plot, but let the core conflict and emotions echo the real event.\n`;
     template += section;
   }
+  if (options.bible && options.fidelity) {
+    template += '\n\n' + buildBibleBlock(options.bible, options.fidelity) + '\n';
+    const totalChapters = options.totalChapters || 0;
+    const rangeRule = options.fidelity === 'tight'
+      ? `必填，且所有 episode.sourceChapterRange 合并后必须覆盖 [1..${totalChapters}] 全部章节，按顺序无遗漏。`
+      : options.fidelity === 'medium'
+      ? `在合理对应章节时填写 [start, end]（章节区间），否则可省略。`
+      : `不填写。`;
+    template += `\n\n请在每集 episode 对象中加入 \`sourceChapterRange: [start, end]\` 字段：\n- ${options.fidelity}: ${rangeRule}\n`;
+  }
   return template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
+}
+
+/**
+ * Validates that a tight-fidelity outline's sourceChapterRange fields cover [1..N].
+ * No-op for medium/loose. Throws with descriptive message on failure.
+ */
+export function validateOutlineChapterCoverage(outline, fidelity, totalChapters) {
+  if (fidelity !== 'tight') return;
+  if (!outline.episodes || !outline.episodes.length) {
+    throw new Error('validateOutlineChapterCoverage: outline has no episodes');
+  }
+  const ranges = [];
+  for (const ep of outline.episodes) {
+    if (!Array.isArray(ep.sourceChapterRange) || ep.sourceChapterRange.length !== 2) {
+      throw new Error(`validateOutlineChapterCoverage: episode ${ep.episodeIndex ?? '?'} missing sourceChapterRange`);
+    }
+    ranges.push(ep.sourceChapterRange);
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  let cursor = 1;
+  for (const [s, e] of ranges) {
+    if (s > cursor) throw new Error(`validateOutlineChapterCoverage: gap before chapter ${s} (cursor=${cursor})`);
+    if (e + 1 > cursor) cursor = e + 1;
+  }
+  if (cursor - 1 < totalChapters) {
+    throw new Error(`validateOutlineChapterCoverage: coverage ends at ${cursor - 1}, expected ${totalChapters}`);
+  }
 }
 
 export const VALID_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
@@ -223,7 +261,10 @@ export async function generateOutline(materials, options = {}) {
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
-  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent);
+  const bible = options.bible || null;
+  const fidelity = options.fidelity || null;
+  const totalChapters = options.totalChapters || 0;
+  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent, { bible, fidelity, totalChapters });
   const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }

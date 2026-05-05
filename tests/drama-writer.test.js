@@ -681,3 +681,69 @@ describe('writer', () => {
     });
   });
 });
+
+describe('outline bible injection', () => {
+  test('buildOutlinePrompt with bible+fidelity appends bible block and chapter-range instruction', async () => {
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
+    const bible = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [{ name: '陆衡', role: 'protagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 1, lastChapter: 1 }],
+      events: [{ eventIndex: 0, summary: 's', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      hooks: [], themes: [], world: 'w', ending: 'e',
+    };
+    const out = buildOutlinePrompt({}, 'cn', '', '', '', '', { bible, fidelity: 'tight', totalChapters: 3 });
+    assert.ok(out.includes('## 参考小说'));
+    assert.ok(out.includes('sourceChapterRange'));
+    assert.ok(out.includes('tight'));
+    assert.ok(out.includes('[1..3]'));
+  });
+
+  test('buildOutlinePrompt without bible omits bible block', async () => {
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
+    const out = buildOutlinePrompt({}, 'cn', '');
+    assert.ok(!out.includes('## 参考小说'));
+    assert.ok(!out.includes('sourceChapterRange'));
+  });
+});
+
+describe('validateOutlineChapterCoverage', () => {
+  test('rejects tight outline missing sourceChapterRange on any episode', async () => {
+    const { validateOutlineChapterCoverage } = await import('../src/drama-writer.js');
+    const outline = { episodes: [
+      { episodeIndex: 0, sourceChapterRange: [1, 2] },
+      { episodeIndex: 1 },
+    ]};
+    assert.throws(
+      () => validateOutlineChapterCoverage(outline, 'tight', 4),
+      /sourceChapterRange/
+    );
+  });
+
+  test('rejects tight outline whose ranges do not cover [1..N]', async () => {
+    const { validateOutlineChapterCoverage } = await import('../src/drama-writer.js');
+    const outline = { episodes: [
+      { episodeIndex: 0, sourceChapterRange: [1, 2] },
+      { episodeIndex: 1, sourceChapterRange: [4, 5] },
+    ]};
+    assert.throws(
+      () => validateOutlineChapterCoverage(outline, 'tight', 5),
+      /coverage|gap/i
+    );
+  });
+
+  test('passes for tight outline covering [1..N]', async () => {
+    const { validateOutlineChapterCoverage } = await import('../src/drama-writer.js');
+    const outline = { episodes: [
+      { episodeIndex: 0, sourceChapterRange: [1, 2] },
+      { episodeIndex: 1, sourceChapterRange: [3, 5] },
+    ]};
+    assert.doesNotThrow(() => validateOutlineChapterCoverage(outline, 'tight', 5));
+  });
+
+  test('is a no-op for medium and loose fidelity', async () => {
+    const { validateOutlineChapterCoverage } = await import('../src/drama-writer.js');
+    const outline = { episodes: [{ episodeIndex: 0 }] };
+    assert.doesNotThrow(() => validateOutlineChapterCoverage(outline, 'medium', 5));
+    assert.doesNotThrow(() => validateOutlineChapterCoverage(outline, 'loose', 5));
+  });
+});
