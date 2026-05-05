@@ -1,8 +1,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { callLLM as defaultCallLLM } from './llm.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROMPT_PATH = join(__dirname, '..', 'prompts', 'story-bible.md');
 
 const CHUNK_SIZE = 3000;
 
@@ -124,4 +126,53 @@ export function loadStoryArtifacts(jobDir) {
   if (bible.schemaVersion !== SCHEMA_VERSION) return null;
   if (chapters.schemaVersion !== SCHEMA_VERSION) return null;
   return { bible, chapters };
+}
+
+// ─── LLM extraction ───────────────────────────────────────────────────────────
+
+function loadPromptSection(name) {
+  const tpl = readFileSync(PROMPT_PATH, 'utf8');
+  const re = new RegExp(`## ${name}\\n([\\s\\S]*?)(?=\\n## |$)`, 'm');
+  const m = tpl.match(re);
+  if (!m) throw new Error(`story-bible.md: section "${name}" not found`);
+  return m[1].trim();
+}
+
+function cleanJson(raw) {
+  let s = raw.trim();
+  if (s.startsWith('```')) s = s.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
+  return s;
+}
+
+export async function extractChapterFacts(chapter, opts = {}) {
+  const llmFn = opts.llmFn || defaultCallLLM;
+  const role = opts.role || 'research';
+  const section = loadPromptSection('Per-Chapter Extraction');
+  const prompt = `${section}\n\n## 输入\n\n章节编号：${chapter.chapterIndex}\n章节标题：${chapter.title || '(无)'}\n\n${chapter.prose}`;
+  const raw = await llmFn(prompt, role);
+  const cleaned = cleanJson(raw);
+  let parsed;
+  try { parsed = JSON.parse(cleaned); }
+  catch (err) { throw new Error(`extractChapterFacts: failed to parse JSON: ${err.message}`); }
+  return { ...parsed, chapterIndex: chapter.chapterIndex };
+}
+
+export async function synthesizeBible(chapterFacts, opts = {}) {
+  const llmFn = opts.llmFn || defaultCallLLM;
+  const role = opts.role || 'outline';
+  const sourceTitle = opts.sourceTitle || '';
+  const section = loadPromptSection('Synthesis');
+  const prompt = `${section}\n\n## 输入\n\n源标题：${sourceTitle}\n\nChapterFacts JSON：\n${JSON.stringify(chapterFacts, null, 2)}`;
+  const raw = await llmFn(prompt, role);
+  const cleaned = cleanJson(raw);
+  let bible;
+  try { bible = JSON.parse(cleaned); }
+  catch (err) { throw new Error(`synthesizeBible: failed to parse JSON: ${err.message}`); }
+  if (!Array.isArray(bible.characters) || bible.characters.length === 0) {
+    throw new Error('synthesizeBible: bible has 0 characters — input may not be narrative');
+  }
+  if (!Array.isArray(bible.events) || bible.events.length === 0) {
+    throw new Error('synthesizeBible: bible has 0 events — input may not be narrative');
+  }
+  return { schemaVersion: SCHEMA_VERSION, ...bible };
 }
