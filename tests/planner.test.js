@@ -1,6 +1,46 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
+describe('planner bible injection', () => {
+  test('buildPlanPrompt injects bible block when bible provided', async () => {
+    const { buildPlanPrompt } = await import('../src/planner.js');
+    const bible = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [
+        { name: '陆衡', role: 'protagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 1, lastChapter: 5 },
+        { name: '林董', role: 'antagonist', identity: 'i2', motivation: 'm2', arc: 'a2', firstChapter: 9, lastChapter: 9 },
+      ],
+      events: [{ eventIndex: 0, summary: 's', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      hooks: [], themes: [], world: 'w', ending: 'e',
+    };
+    const chapters = [{ chapterIndex: 1, title: '一', charCount: 5, prose: 'hello' }];
+    const out = buildPlanPrompt({ episodes: [] }, 'cn', '', '', '', {
+      bible, chapters, fidelity: 'medium', aggregateChapterRange: [1, 1],
+    });
+    assert.ok(out.includes('## 参考小说'));
+    assert.ok(out.includes('陆衡'));
+    assert.ok(out.includes('林董'), 'plan stage gets full bible (no compression)');
+    assert.ok(out.includes('## 原文片段'));
+    assert.ok(out.includes('hello'));
+  });
+
+  test('buildPlanPrompt omits prose block on loose fidelity', async () => {
+    const { buildPlanPrompt } = await import('../src/planner.js');
+    const bible = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [{ name: 'a', role: 'protagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 1, lastChapter: 1 }],
+      events: [{ eventIndex: 0, summary: 's', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      hooks: [], themes: [], world: 'w', ending: 'e',
+    };
+    const chapters = [{ chapterIndex: 1, title: '一', charCount: 5, prose: 'hello' }];
+    const out = buildPlanPrompt({ episodes: [] }, 'cn', '', '', '', {
+      bible, chapters, fidelity: 'loose', aggregateChapterRange: [1, 1],
+    });
+    assert.ok(out.includes('## 参考小说'));
+    assert.ok(!out.includes('## 原文片段'));
+  });
+});
+
 describe('planner', () => {
   test('buildPlanPrompt inserts outline into template', async () => {
     const { buildPlanPrompt } = await import('../src/planner.js');

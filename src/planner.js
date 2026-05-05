@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
+import { buildBibleBlock, buildProseBlock } from './story-bible.js';
 import {
   createState,
   addCharacter,
@@ -39,7 +40,7 @@ function extractJsonObject(text) {
  * @param {string} lang - 'en' or 'cn'
  * @returns {string}
  */
-export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '') {
+export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
   const templatePath = join(__dirname, '..', 'prompts', 'plan.md');
   let template = readFileSync(templatePath, 'utf8');
   if (genre) {
@@ -59,6 +60,13 @@ export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceChara
       ? `\n\n## 参考事件（必须使用）\n\n以下事件已预先定义并必须在本故事中发生。请将其编入 clips.events 中具体的场景节点，确保相关角色的情绪、revelations（揭示）与后续情节弧线都与该事件及其后果保持一致。不要淡化或改写事件的核心事实。\n\n---\n${referenceEvent}\n---\n`
       : `\n\n## Reference Event (REQUIRED)\n\nThe following event is predefined and MUST occur in this story. Schedule it into specific clips.events entries, and ensure the emotional states, revelations, and subsequent plot arcs of affected characters remain consistent with this event and its aftermath. Do NOT sanitize or rewrite its core facts.\n\n---\n${referenceEvent}\n---\n`;
     template += section;
+  }
+  if (options.bible && options.fidelity) {
+    template += '\n\n' + buildBibleBlock(options.bible, options.fidelity) + '\n';
+    if (options.chapters && options.aggregateChapterRange) {
+      const proseBlock = buildProseBlock(options.chapters, options.aggregateChapterRange, options.fidelity, 4000);
+      if (proseBlock) template += '\n\n' + proseBlock + '\n';
+    }
   }
   return template.replace('{{outline}}', () => JSON.stringify(outline, null, 2));
 }
@@ -154,7 +162,13 @@ export async function generatePlan(outline, options = {}) {
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
-  const prompt = buildPlanPrompt(outline, lang, genre, referenceCharacter, referenceEvent);
+  const bible = options.bible || null;
+  const chapters = options.chapters || null;
+  const fidelity = options.fidelity || null;
+  const aggregateChapterRange = options.aggregateChapterRange || null;
+  const prompt = buildPlanPrompt(outline, lang, genre, referenceCharacter, referenceEvent, {
+    bible, chapters, fidelity, aggregateChapterRange,
+  });
   const raw = await callLLM(prompt, 'plan');
   return parsePlan(raw);
 }
