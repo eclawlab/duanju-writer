@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
@@ -32,7 +32,10 @@ const VARIANTS = [
 
 export function getStatusTransitions() {
   return [
+    { from: 'pending', to: 'extracting' },
     { from: 'pending', to: 'collecting' },
+    { from: 'extracting', to: 'collecting' },
+    { from: 'extracting', to: 'writing' },
     { from: 'collecting', to: 'writing' },
     { from: 'writing', to: 'uploading' },
     { from: 'uploading', to: 'done' },
@@ -78,15 +81,19 @@ function loadArtifact(jobId, filename) {
  * and persists both artifacts. Skips work and returns existing artifacts when
  * a valid bible.json + chapters.json already exist for the jobDir.
  * @param {object} opts - { jobDir, storyText, llmFn?, log? }
- * @returns {Promise<{bible, chapters}>}
+ * @returns {Promise<{bible, chapters, isFresh}>}
+ *   isFresh=false when artifacts were reloaded from disk (resume); the caller
+ *   must NOT mutate the returned bible — it's already canonical. isFresh=true
+ *   when this call performed extraction; the caller may still attach
+ *   reference-pinned entries before re-saving.
  */
 export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = () => {} }) {
   const existing = loadStoryArtifacts(jobDir);
   if (existing) {
     log('Story artifacts present — reusing');
-    return existing;
+    return { ...existing, isFresh: false };
   }
-  const chapterChunks = splitChapters(storyText);
+  const chapterChunks = splitChapters(storyText, { log });
   log(`Split novel into ${chapterChunks.length} chapter chunks`);
   const facts = [];
   for (const chunk of chapterChunks) {
@@ -102,7 +109,55 @@ export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = ()
   };
   saveStoryArtifacts(jobDir, { bible, chapters });
   log(`Story bible: ${bible.characters.length} characters, ${bible.events.length} events`);
-  return { bible, chapters };
+  return { bible, chapters, isFresh: true };
+}
+
+// Downstream artifacts that depend on the story bible. When a fresh bible is
+// synthesized on a job that previously ran without --story (or with a stale
+// bible), these must be invalidated so the bible-aware prompts re-generate them.
+const BIBLE_DEPENDENT_ARTIFACTS = [
+  'snowflake.json',
+  'outline.json',
+  'plan.json',
+  'front.json',
+  'front.progress.json',
+  'front.state.json',
+];
+
+function invalidateBibleDependentArtifacts(jobId, log) {
+  const jobDir = join(JOBS_DIR, jobId);
+  const removed = [];
+  for (const name of BIBLE_DEPENDENT_ARTIFACTS) {
+    const p = join(jobDir, name);
+    if (existsSync(p)) {
+      try { unlinkSync(p); removed.push(name); } catch (err) {
+        log(`[bible-invalidate] failed to remove ${name}: ${err.message}`);
+      }
+    }
+  }
+  // Variant artifacts: outline.v*.json, plan.v*.json, tail-outline.v*.json,
+  // story.v*.json, story.v*.progress.json, state.v*.json
+  for (const v of VARIANTS) {
+    for (const name of [
+      `outline.${v.key}.json`,
+      `plan.${v.key}.json`,
+      `tail-outline.${v.key}.json`,
+      `story.${v.key}.json`,
+      `story.${v.key}.progress.json`,
+      `state.${v.key}.json`,
+    ]) {
+      const p = join(jobDir, name);
+      if (existsSync(p)) {
+        try { unlinkSync(p); removed.push(name); } catch (err) {
+          log(`[bible-invalidate] failed to remove ${name}: ${err.message}`);
+        }
+      }
+    }
+  }
+  if (removed.length) {
+    log(`Fresh bible synthesized — invalidated ${removed.length} stale artifact(s): ${removed.join(', ')}`);
+  }
+  return removed.length;
 }
 
 async function processJob(jobId, options = {}) {
@@ -133,7 +188,19 @@ async function processJob(jobId, options = {}) {
       referenceEvent = '';
     }
   }
+  // referenceStory may arrive as: (a) full text content (legacy / direct CLI
+  // bypass of createJob), (b) the literal sentinel 'sidecar' meaning the
+  // content is stored at <jobDir>/reference-story.txt, or (c) empty.
   let referenceStory = options.referenceStory || '';
+  if (referenceStory === 'sidecar') {
+    const sidecar = join(JOBS_DIR, jobId, 'reference-story.txt');
+    try {
+      referenceStory = readFileSync(sidecar, 'utf8');
+    } catch (err) {
+      console.log(chalk.yellow(`  [${jobId}] Reference story sidecar "${sidecar}" unreadable: ${err.message} — continuing without`));
+      referenceStory = '';
+    }
+  }
   if (!referenceStory && config.referenceStory) {
     try {
       referenceStory = readFileSync(config.referenceStory, 'utf8');
@@ -165,31 +232,41 @@ async function processJob(jobId, options = {}) {
       updateJob(jobId, { status: 'extracting', startedAt: new Date().toISOString() });
       log('Extracting story bible from reference novel...');
       wlog('story_extract_start', { storyChars: referenceStory.length });
-      ({ bible, chapters } = await extractStoryArtifacts({ jobDir, storyText: referenceStory, log }));
-      // Merge --reference-character / --reference-event as reference-pinned entries
-      if (referenceCharacter && referenceCharacter.trim()) {
-        bible.characters.push({
-          name: '指定角色',
-          role: 'reference-pinned',
-          identity: referenceCharacter.slice(0, 80),
-          motivation: '指定参考',
-          arc: '指定参考',
-          firstChapter: 1,
-          lastChapter: chapters.chapters.length,
-        });
+      let isFresh;
+      ({ bible, chapters, isFresh } = await extractStoryArtifacts({ jobDir, storyText: referenceStory, log }));
+      // Reference-pinned merge: only when the bible was just synthesized.
+      // On resume, the saved bible already contains any pinned entries from
+      // the prior run — re-pushing duplicates them.
+      if (isFresh) {
+        if (referenceCharacter && referenceCharacter.trim()) {
+          bible.characters.push({
+            name: '指定角色',
+            role: 'reference-pinned',
+            identity: referenceCharacter.slice(0, 80),
+            motivation: '指定参考',
+            arc: '指定参考',
+            firstChapter: 1,
+            lastChapter: chapters.chapters.length,
+          });
+        }
+        if (referenceEvent && referenceEvent.trim()) {
+          bible.events.push({
+            eventIndex: bible.events.length,
+            summary: referenceEvent.slice(0, 120),
+            chapterRange: [1, chapters.chapters.length],
+            actors: [],
+            isTurningPoint: true,
+            isReveal: false,
+          });
+        }
+        saveStoryArtifacts(jobDir, { bible, chapters });
+        // A fresh bible invalidates any prior bible-unaware downstream
+        // artifacts (e.g. when --story was added to a job that already ran
+        // once without it, or when the schema-version-bumped reload threw
+        // out the bible but kept downstream artifacts).
+        invalidateBibleDependentArtifacts(jobId, log);
       }
-      if (referenceEvent && referenceEvent.trim()) {
-        bible.events.push({
-          eventIndex: bible.events.length,
-          summary: referenceEvent.slice(0, 120),
-          chapterRange: [1, chapters.chapters.length],
-          actors: [],
-          isTurningPoint: true,
-          isReveal: false,
-        });
-      }
-      saveStoryArtifacts(jobDir, { bible, chapters });
-      wlog('story_extract_done', { chapters: chapters.chapters.length, charactersInBible: bible.characters.length, events: bible.events.length });
+      wlog('story_extract_done', { chapters: chapters.chapters.length, charactersInBible: bible.characters.length, events: bible.events.length, isFresh });
     }
 
     // ─── Step 1: Collect materials (skipped when bible is present) ─────────
@@ -208,9 +285,11 @@ async function processJob(jobId, options = {}) {
     } else if (!materials && bible) {
       // Synthesize a minimal materials shape from the bible so downstream
       // stages (which expect materials.topics/plotHooks/...) keep working.
+      // synthesizeBible only validates characters+events non-empty; hooks
+      // and themes may be missing if the LLM omits them.
       materials = {
-        topics: bible.themes.map(t => ({ topic: t, source: 'bible' })),
-        plotHooks: bible.hooks.map(h => ({ hook: h.summary, source: 'bible' })),
+        topics: (bible.themes ?? []).map(t => ({ topic: t, source: 'bible' })),
+        plotHooks: (bible.hooks ?? []).map(h => ({ hook: h.summary, source: 'bible' })),
         characterArchetypes: bible.characters.map(c => ({ archetype: c.role, identity: c.identity })),
         trendingTropes: [],
       };
@@ -374,6 +453,7 @@ async function processJob(jobId, options = {}) {
       if (!tailOutline) {
         log(`Variant ${v.key}: generating ${v.ending} tail outline...`);
         wlog('tail_outline_start', { variant: v.key, ending: v.ending });
+        const totalChaptersForTail = chapters ? chapters.chapters.length : 0;
         tailOutline = await generateTailOutline(baseOutline, splitIdx, v.ending, {
           snowflake,
           lang,
@@ -381,6 +461,9 @@ async function processJob(jobId, options = {}) {
           referenceCharacter,
           referenceEvent,
           newsSource: materials?.newsSource || null,
+          bible,
+          fidelity,
+          totalChapters: totalChaptersForTail,
           log,
         });
         saveArtifact(jobId, `tail-outline.${v.key}.json`, tailOutline);
@@ -392,6 +475,13 @@ async function processJob(jobId, options = {}) {
         ...baseOutline,
         episodes: [...frontEpisodes, ...tailOutline.episodes],
       };
+      // Re-validate full-coverage chapter range for the assembled variant
+      // outline under tight fidelity. The base outline passed validation
+      // pre-split, but the tail LLM may have skipped chapters.
+      if (bible && fidelity === 'tight') {
+        const totalChaptersForVariant = chapters ? chapters.chapters.length : 0;
+        validateOutlineChapterCoverage(variantOutline, fidelity, totalChaptersForVariant);
+      }
       saveArtifact(jobId, `outline.${v.key}.json`, variantOutline);
 
       // Variant plan — regenerate so it covers the new tail episodes
@@ -404,13 +494,12 @@ async function processJob(jobId, options = {}) {
           variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange });
           variantPlanSucceeded = true;
         } catch (err) {
-          log(`[variant ${v.key} planning failed] ${err.message} — using base plan as in-memory fallback for this attempt; will retry on next run`);
-          // basePlan was generated for the original outline (different ending). Using it
-          // here gives partial guidance for shared front-half clips but is wrong for
-          // the variant's tail. We keep it in memory so the current run can still produce
-          // output, but DO NOT persist it as plan.vN.json — that would (a) poison retries
-          // and (b) commit the wrong-ending plan into the variant artifact.
-          variantPlan = basePlan;
+          log(`[variant ${v.key} planning failed] ${err.message} — falling back to empty skeleton; will retry on next run`);
+          // basePlan was generated for the original outline (different ending).
+          // Reusing it here would feed wrong-ending sceneMap entries into the
+          // variant's tail clips. Empty skeleton means clips run without plan
+          // augmentation — degraded but not actively wrong.
+          variantPlan = { clips: [], characters: [], items: [], locations: [], revelations: [] };
         }
         if (variantPlanSucceeded) saveArtifact(jobId, `plan.${v.key}.json`, variantPlan);
       }
@@ -739,6 +828,8 @@ export function startWorker() {
           referenceEvent: opts.referenceEvent || undefined,
           referenceStory: opts.referenceStory || undefined,
           fidelity: opts.fidelity || undefined,
+          episodesPerDrama: opts.episodesPerDrama || undefined,
+          clipsPerEpisode: opts.clipsPerEpisode || undefined,
         });
       }
     } catch (err) {

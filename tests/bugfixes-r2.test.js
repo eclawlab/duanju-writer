@@ -27,14 +27,19 @@ describe('R2 Fix #2/#3 — variantPlan persistence guard', () => {
     );
   });
 
-  test('worker.js still uses basePlan as in-memory fallback (current run only)', async () => {
+  test('worker.js falls back to empty skeleton on variant-plan failure (NOT basePlan)', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
-    // The fallback assignment should still exist (so the current run can produce output)
-    // even though the save is gated.
+    // Audit Bug #7: basePlan was generated for the original outline (different
+    // ending). Reusing it for a variant feeds wrong-ending sceneMap entries
+    // into the variant's tail clips. Variant must fall back to empty skeleton.
     assert.ok(
-      /variant.*planning failed[^]*variantPlan = basePlan/.test(src),
-      'in-memory fallback to basePlan should remain so the current run can still proceed',
+      !/variant.*planning failed[^]*variantPlan = basePlan/.test(src),
+      'variant plan failure must NOT fall back to basePlan (would feed wrong-ending sceneMap)',
+    );
+    assert.ok(
+      /variant.*planning failed[^]*variantPlan = \{ clips: \[\]/.test(src),
+      'variant plan failure should fall back to an empty skeleton',
     );
   });
 });

@@ -2,41 +2,52 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 describe('worker', () => {
-  test('getStatusTransitions returns correct pipeline stages', async () => {
+  test('getStatusTransitions covers both story and non-story pipelines', async () => {
     const { getStatusTransitions } = await import('../src/worker.js');
     const transitions = getStatusTransitions();
-    assert.deepEqual(transitions, [
-      { from: 'pending', to: 'collecting' },
-      { from: 'collecting', to: 'writing' },
-      { from: 'writing', to: 'uploading' },
-      { from: 'uploading', to: 'done' },
-    ]);
-  });
-
-  test('getStatusTransitions has 4 stages', async () => {
-    const { getStatusTransitions } = await import('../src/worker.js');
-    const transitions = getStatusTransitions();
-    assert.equal(transitions.length, 4);
-  });
-
-  test('getStatusTransitions starts from pending', async () => {
-    const { getStatusTransitions } = await import('../src/worker.js');
-    const transitions = getStatusTransitions();
-    assert.equal(transitions[0].from, 'pending');
-  });
-
-  test('getStatusTransitions ends at done', async () => {
-    const { getStatusTransitions } = await import('../src/worker.js');
-    const transitions = getStatusTransitions();
-    assert.equal(transitions[transitions.length - 1].to, 'done');
-  });
-
-  test('getStatusTransitions forms a connected chain', async () => {
-    const { getStatusTransitions } = await import('../src/worker.js');
-    const transitions = getStatusTransitions();
-    for (let i = 1; i < transitions.length; i++) {
-      assert.equal(transitions[i].from, transitions[i - 1].to,
-        `Transition ${i} should start where ${i - 1} ended`);
+    // Sanity: every transition references a known status
+    const knownStatuses = new Set(['pending', 'extracting', 'collecting', 'writing', 'uploading', 'done']);
+    for (const t of transitions) {
+      assert.ok(knownStatuses.has(t.from), `unknown from-status ${t.from}`);
+      assert.ok(knownStatuses.has(t.to), `unknown to-status ${t.to}`);
     }
+  });
+
+  test('getStatusTransitions starts at pending', async () => {
+    const { getStatusTransitions } = await import('../src/worker.js');
+    const transitions = getStatusTransitions();
+    assert.ok(transitions.some(t => t.from === 'pending'));
+  });
+
+  test('getStatusTransitions terminates at done', async () => {
+    const { getStatusTransitions } = await import('../src/worker.js');
+    const transitions = getStatusTransitions();
+    assert.ok(transitions.some(t => t.to === 'done'));
+  });
+
+  test('getStatusTransitions reaches done from pending via at least one path', async () => {
+    const { getStatusTransitions } = await import('../src/worker.js');
+    const transitions = getStatusTransitions();
+    // BFS from "pending" — every reachable node must be in knownStatuses; "done" must be reachable
+    const adj = new Map();
+    for (const t of transitions) {
+      if (!adj.has(t.from)) adj.set(t.from, []);
+      adj.get(t.from).push(t.to);
+    }
+    const seen = new Set(['pending']);
+    const queue = ['pending'];
+    while (queue.length) {
+      const cur = queue.shift();
+      for (const next of (adj.get(cur) || [])) {
+        if (!seen.has(next)) { seen.add(next); queue.push(next); }
+      }
+    }
+    assert.ok(seen.has('done'), 'no path from pending to done');
+  });
+
+  test('getStatusTransitions includes story-pipeline extracting branch', async () => {
+    const { getStatusTransitions } = await import('../src/worker.js');
+    const transitions = getStatusTransitions();
+    assert.ok(transitions.some(t => t.from === 'pending' && t.to === 'extracting'));
   });
 });

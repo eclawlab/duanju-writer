@@ -66,7 +66,7 @@ async function startupCleanup({ fresh = false } = {}) {
   } else {
     const { listJobs } = await import('../src/queue.js');
     const jobs = listJobs();
-    const inFlight = jobs.filter(j => ['collecting', 'writing', 'uploading'].includes(j.status));
+    const inFlight = jobs.filter(j => ['extracting', 'collecting', 'writing', 'uploading'].includes(j.status));
     const pending = jobs.filter(j => j.status === 'pending');
     if (inFlight.length > 0 || pending.length > 0) {
       console.log(`Resuming with ${inFlight.length} in-flight + ${pending.length} pending job(s). Pass --fresh to discard them.`);

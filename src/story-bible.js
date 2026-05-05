@@ -14,7 +14,8 @@ const HEADING_PATTERNS = [
   { kind: 'numeric', re: /^[ \t]*#{0,6}[ \t]*(?:\d+\.|[一二三四五六七八九十百]+、)[ \t]*([^\n]*)$/gm },
 ];
 
-export function splitChapters(rawText) {
+export function splitChapters(rawText, opts = {}) {
+  const log = opts.log || (() => {});
   if (!rawText || !rawText.trim()) {
     throw new Error('splitChapters: input is empty');
   }
@@ -24,6 +25,7 @@ export function splitChapters(rawText) {
       return matchesToChapters(rawText, matches);
     }
   }
+  log(`[splitChapters] no chapter headings detected — falling back to ${CHUNK_SIZE}-char windows. tight-fidelity coverage semantics will be over arbitrary windows, not real chapters.`);
   return windowedChunks(rawText);
 }
 
@@ -196,6 +198,10 @@ export function buildBibleBlock(bible, fidelity) {
     `${(e.eventIndex ?? '?')}. [章 ${e.chapterRange?.[0]}-${e.chapterRange?.[1]}] ${e.summary}${e.isTurningPoint ? ' ⚡转折' : ''}${e.isReveal ? ' 💡揭示' : ''}`
   ).join('\n');
   const themes = (bible.themes || []).join('、');
+  // Defensive coerce: synthesizeBible's prompt asks for world as a string,
+  // but a structured object (e.g. snowflake-style { physical, social, ... })
+  // would otherwise interpolate as "[object Object]" into every prompt.
+  const world = typeof bible.world === 'string' ? bible.world : JSON.stringify(bible.world ?? '');
   return [
     '## 参考小说（必须遵循）',
     '本剧改编自下列小说。Logline、人物、事件、主题已抽取如下。',
@@ -206,7 +212,7 @@ export function buildBibleBlock(bible, fidelity) {
     '【事件（按时序）】',
     eventLines,
     `【主题】${themes}`,
-    `【世界观】${bible.world}`,
+    `【世界观】${world}`,
     `【原结局】${bible.ending}`,
     '',
     `Fidelity = ${fidelity}.`,

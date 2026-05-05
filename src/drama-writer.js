@@ -281,15 +281,15 @@ function summarizeEpisodeForTail(ep) {
 function summarizeSnowflakeForTail(snowflake) {
   if (!snowflake) return '(not available)';
   const lines = [];
-  if (snowflake.seed) lines.push(`Seed: ${snowflake.seed}`);
+  if (snowflake.coreSeed) lines.push(`Seed: ${snowflake.coreSeed}`);
   if (snowflake.characters?.length) {
     lines.push('Characters:');
     for (const c of snowflake.characters) {
-      const arc = c.arc ? ` — arc: ${c.arc}` : '';
+      const arc = c.arc?.final ? ` — arc-final: ${c.arc.final}` : (typeof c.arc === 'string' && c.arc ? ` — arc: ${c.arc}` : '');
       lines.push(`  - ${c.name}${c.role ? ` (${c.role})` : ''}${arc}`);
     }
   }
-  if (snowflake.setting) lines.push(`Setting: ${snowflake.setting}`);
+  if (snowflake.world?.physical?.geography) lines.push(`Setting: ${snowflake.world.physical.geography}`);
   return lines.join('\n') || '(none)';
 }
 
@@ -322,6 +322,9 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
   const newsSource = options.newsSource || null;
+  const bible = options.bible || null;
+  const fidelity = options.fidelity || null;
+  const totalChapters = options.totalChapters || 0;
 
   if (genre) {
     filled += lang === 'cn'
@@ -342,6 +345,25 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
     filled += lang === 'cn'
       ? `\n\n## 新闻灵感（延续）\n\n本故事源自真实新闻事件。主题：${newsSource.theme}。情感内核：${newsSource.emotionalCore}。后半段应延续这一情感内核至结局。\n`
       : `\n\n## News Inspiration (CONTINUE)\n\nThis story was inspired by a real news event. Theme: ${newsSource.theme}. Emotional core: ${newsSource.emotionalCore}. The back half should carry this emotional core through to the chosen ending.\n`;
+  }
+  if (bible && fidelity) {
+    filled += '\n\n' + buildBibleBlock(bible, fidelity) + '\n';
+    // Compute the chapter range the tail must cover by inspecting the front
+    // episodes' sourceChapterRange. Under tight fidelity the front already
+    // satisfied [1..frontMaxChapter]; the tail must cover [frontMaxChapter+1, totalChapters].
+    let frontMaxChapter = 0;
+    for (const ep of prior) {
+      if (Array.isArray(ep.sourceChapterRange) && ep.sourceChapterRange.length === 2) {
+        if (ep.sourceChapterRange[1] > frontMaxChapter) frontMaxChapter = ep.sourceChapterRange[1];
+      }
+    }
+    const tailStartChapter = frontMaxChapter + 1;
+    const rangeRule = fidelity === 'tight'
+      ? `必填，且所有 tail 集合并后必须覆盖 [${tailStartChapter}..${totalChapters}] 全部章节，按顺序无遗漏。`
+      : fidelity === 'medium'
+      ? `在合理对应章节时填写 [start, end]，否则可省略；若填写须落在 [${tailStartChapter}..${totalChapters}] 区间内。`
+      : `不填写。`;
+    filled += `\n\n请在每集 episode 对象中加入 \`sourceChapterRange: [start, end]\` 字段：\n- ${fidelity}: ${rangeRule}\n`;
   }
 
   return filled;
@@ -434,6 +456,9 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
     referenceCharacter: options.referenceCharacter,
     referenceEvent: options.referenceEvent,
     newsSource: options.newsSource,
+    bible: options.bible,
+    fidelity: options.fidelity,
+    totalChapters: options.totalChapters,
   });
   const raw = await callLLM(prompt, 'tail-outline');
   try {

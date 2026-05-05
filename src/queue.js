@@ -87,8 +87,28 @@ function makeJobId() {
 export function createJobIn(filePath, jobsDir, options = {}) {
   return withLock(filePath, () => {
     const jobs = readJobs(filePath);
+    const id = makeJobId();
+    // Create the artifact directory BEFORE writing the job record. The first
+    // artifact write (saveArtifact in worker.js) does not mkdir; if jobs.json
+    // claimed a job whose dir was missing, it would throw ENOENT and the
+    // worker would burn its retry budget on an unfixable error. A kill
+    // between mkdirSync and writeJobs leaves an orphan directory with no
+    // record — a slow FS leak, but harmless for correctness.
+    mkdirSync(join(jobsDir, id), { recursive: true });
+
+    // Reference story content can be up to 1MB. Storing it inline in
+    // jobs.json bloats every withLock round-trip (every status update reads
+    // /parses /rewrites the entire jobs array). Sidecar it to the job dir
+    // and store only a flag in the snapshot. Worker reads the sidecar.
+    let referenceStoryFlag = null;
+    if (options.referenceStory) {
+      const storyPath = join(jobsDir, id, 'reference-story.txt');
+      writeFileSync(storyPath, options.referenceStory, 'utf8');
+      referenceStoryFlag = 'sidecar';
+    }
+
     const job = {
-      id: makeJobId(),
+      id,
       status: 'pending',
       createdAt: new Date().toISOString(),
       startedAt: null,
@@ -103,17 +123,12 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         newsUrl: options.newsUrl ?? null,
         referenceCharacter: options.referenceCharacter ?? null,
         referenceEvent: options.referenceEvent ?? null,
-        referenceStory: options.referenceStory ?? null,
+        referenceStory: referenceStoryFlag,
         fidelity: options.fidelity ?? null,
+        episodesPerDrama: options.episodesPerDrama ?? null,
+        clipsPerEpisode: options.clipsPerEpisode ?? null,
       },
     };
-    // Create the artifact directory BEFORE writing the job record. The first
-    // artifact write (saveArtifact in worker.js) does not mkdir; if jobs.json
-    // claimed a job whose dir was missing, it would throw ENOENT and the
-    // worker would burn its retry budget on an unfixable error. A kill
-    // between mkdirSync and writeJobs leaves an orphan directory with no
-    // record — a slow FS leak, but harmless for correctness.
-    mkdirSync(join(jobsDir, job.id), { recursive: true });
     jobs.push(job);
     writeJobs(filePath, jobs);
     return job;
@@ -142,7 +157,7 @@ export function listJobsFrom(filePath) {
 
 export function hasBusyJobIn(filePath) {
   const jobs = readJobs(filePath);
-  return jobs.some(j => ['pending', 'collecting', 'writing', 'uploading'].includes(j.status));
+  return jobs.some(j => ['pending', 'extracting', 'collecting', 'writing', 'uploading'].includes(j.status));
 }
 
 /**
