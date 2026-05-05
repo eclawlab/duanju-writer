@@ -62,3 +62,108 @@ describe('cli flag validation', () => {
     assert.match(r.out, /Only 'cn' is supported/);
   });
 });
+
+describe('--story flag validation', () => {
+  // Lazy fs imports — keep the existing tests' test-runtime cost
+  function withTempFile(contents, fn) {
+    const { mkdtempSync, rmSync, writeFileSync } = require('node:fs');
+    const { tmpdir } = require('node:os');
+    const { join } = require('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dj-story-'));
+    const f = join(dir, 'novel.md');
+    writeFileSync(f, contents);
+    try { return fn(f); } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+
+  test('--story + --news rejected as mutually exclusive', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dj-'));
+    const f = join(dir, 's.md');
+    writeFileSync(f, 'x');
+    try {
+      const r = runCli(['run', '--story', f, '--news', 'http://example.com']);
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, /mutually exclusive/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('--story + --style rejected as mutually exclusive', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dj-'));
+    const f = join(dir, 's.md');
+    writeFileSync(f, 'x');
+    try {
+      const r = runCli(['run', '--story', f, '--style', '战神归来']);
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, /mutually exclusive/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('--fidelity without --story is rejected', () => {
+    const r = runCli(['run', '--fidelity', 'tight']);
+    assert.notEqual(r.code, 0);
+    assert.match(r.out, /fidelity.*requires.*story/i);
+  });
+
+  test('invalid --fidelity value rejected', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dj-'));
+    const f = join(dir, 's.md');
+    writeFileSync(f, 'x');
+    try {
+      const r = runCli(['run', '--story', f, '--fidelity', 'extreme']);
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, /tight, medium, loose/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('missing --story file rejected', () => {
+    const r = runCli(['run', '--story', '/tmp/this-file-does-not-exist-xxxx-yyyy']);
+    assert.notEqual(r.code, 0);
+    assert.match(r.out, /unreadable|missing/i);
+  });
+
+  test('empty --story file rejected', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dj-'));
+    const f = join(dir, 's.md');
+    writeFileSync(f, '   \n  \t');
+    try {
+      const r = runCli(['run', '--story', f]);
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, /empty/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('oversized --story file rejected (>1MB)', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dj-'));
+    const f = join(dir, 's.md');
+    writeFileSync(f, 'a'.repeat(1_100_000));
+    try {
+      const r = runCli(['run', '--story', f]);
+      assert.notEqual(r.code, 0);
+      assert.match(r.out, /too large|1MB/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

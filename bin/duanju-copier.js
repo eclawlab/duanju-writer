@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { DATA_DIR, JOBS_DIR } from '../src/constants.js';
 import { cleanupStale, registerParent, unregisterParent } from '../src/pidfile.js';
 
@@ -118,6 +118,8 @@ switch (command) {
     let newsUrl;
     let characterPath;
     let eventPath;
+    let storyPath;
+    let fidelity;
     let model;
     let episodesPerDrama;
     let clipsPerEpisode;
@@ -143,6 +145,12 @@ switch (command) {
         a++;
       } else if (args[a] === '--event' && args[a + 1]) {
         eventPath = args[a + 1];
+        a++;
+      } else if (args[a] === '--story' && args[a + 1]) {
+        storyPath = args[a + 1];
+        a++;
+      } else if (args[a] === '--fidelity' && args[a + 1]) {
+        fidelity = args[a + 1];
         a++;
       } else if (args[a] === '--model' && args[a + 1]) {
         model = args[a + 1];
@@ -202,6 +210,57 @@ switch (command) {
         }
       }
     }
+    // Resolve --story / --fidelity
+    let referenceStory;
+    {
+      const { loadConfig } = await import('../src/config.js');
+      const config = loadConfig();
+      const MAX_STORY_BYTES = 1_000_000;
+      const VALID_FIDELITY = ['tight', 'medium', 'loose'];
+      const effectiveStoryPath = storyPath || config.referenceStory;
+      if (effectiveStoryPath) {
+        if (newsUrl) {
+          console.error('Error: --story and --news are mutually exclusive (cannot be used together).');
+          process.exit(1);
+        }
+        if (style && style !== 'default') {
+          console.error('Error: --story and --style are mutually exclusive (cannot be used together).');
+          process.exit(1);
+        }
+        let st;
+        try { st = statSync(effectiveStoryPath); }
+        catch (err) {
+          console.error(`Error: --story file unreadable or missing: ${effectiveStoryPath} (${err.message})`);
+          process.exit(1);
+        }
+        if (st.size > MAX_STORY_BYTES) {
+          console.error(`Error: --story file too large: ${st.size} bytes > 1MB limit`);
+          process.exit(1);
+        }
+        try { referenceStory = readFileSync(effectiveStoryPath, 'utf8'); }
+        catch (err) {
+          console.error(`Error: --story file unreadable: ${err.message}`);
+          process.exit(1);
+        }
+        if (!referenceStory.trim()) {
+          console.error('Error: --story file is empty.');
+          process.exit(1);
+        }
+        console.log(`Using reference story from: ${effectiveStoryPath} (${referenceStory.length} chars)`);
+      }
+      if (fidelity) {
+        if (!effectiveStoryPath) {
+          console.error('Error: --fidelity requires --story (or referenceStory in config).');
+          process.exit(1);
+        }
+        if (!VALID_FIDELITY.includes(fidelity)) {
+          console.error(`Error: --fidelity must be one of tight, medium, loose (got "${fidelity}").`);
+          process.exit(1);
+        }
+      } else {
+        fidelity = config.fidelity || 'medium';
+      }
+    }
     // Validate style before creating any jobs
     if (style && style !== 'default') {
       const { getStyle } = await import('../src/styles.js');
@@ -234,9 +293,9 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, episodesPerDrama, clipsPerEpisode });
+      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, episodesPerDrama, clipsPerEpisode });
+      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -259,7 +318,7 @@ switch (command) {
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
       'maxRetries', 'publishOnUpload', 'lang', 'genre',
-      'referenceCharacter', 'referenceEvent', 'style',
+      'referenceCharacter', 'referenceEvent', 'referenceStory', 'fidelity', 'style',
       'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
     ];
     if (args[0] === 'set' && args[1]) {
@@ -553,6 +612,6 @@ switch (command) {
   default:
     console.log(`Unknown command: ${command}`);
     console.log('Usage: duanju-copier [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
-    console.log('\nRun options: duanju-copier run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
+    console.log('\nRun options: duanju-copier run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
     process.exit(1);
 }
