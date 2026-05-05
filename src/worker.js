@@ -6,9 +6,16 @@ import { loadConfig } from './config.js';
 import { updateJob, getJob, claimNextPending, claimJob, unstickJob } from './queue.js';
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
-import { generateDrama, generateOutline, generateTailOutline } from './drama-writer.js';
+import { generateDrama, generateOutline, generateTailOutline, validateOutlineChapterCoverage } from './drama-writer.js';
 import { generateSnowflake } from './snowflake.js';
 import { generatePlan } from './planner.js';
+import {
+  splitChapters,
+  extractChapterFacts,
+  synthesizeBible,
+  loadStoryArtifacts,
+  saveStoryArtifacts,
+} from './story-bible.js';
 import { createStore, getStoreDir } from './vectorstore.js';
 import { upload } from './uploader.js';
 import { logEntry, writeSummary } from './worklog.js';
@@ -66,6 +73,38 @@ function loadArtifact(jobId, filename) {
   }
 }
 
+/**
+ * Splits a novel, extracts per-chapter facts via LLM, synthesizes the bible,
+ * and persists both artifacts. Skips work and returns existing artifacts when
+ * a valid bible.json + chapters.json already exist for the jobDir.
+ * @param {object} opts - { jobDir, storyText, llmFn?, log? }
+ * @returns {Promise<{bible, chapters}>}
+ */
+export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = () => {} }) {
+  const existing = loadStoryArtifacts(jobDir);
+  if (existing) {
+    log('Story artifacts present — reusing');
+    return existing;
+  }
+  const chapterChunks = splitChapters(storyText);
+  log(`Split novel into ${chapterChunks.length} chapter chunks`);
+  const facts = [];
+  for (const chunk of chapterChunks) {
+    const f = await extractChapterFacts(chunk, { llmFn });
+    facts.push(f);
+  }
+  const bible = await synthesizeBible(facts, { llmFn, sourceTitle: '' });
+  const totalChars = chapterChunks.reduce((sum, c) => sum + c.prose.length, 0);
+  const chapters = {
+    schemaVersion: 1,
+    totalChars,
+    chapters: chapterChunks.map(c => ({ chapterIndex: c.chapterIndex, title: c.title, charCount: c.prose.length, prose: c.prose })),
+  };
+  saveStoryArtifacts(jobDir, { bible, chapters });
+  log(`Story bible: ${bible.characters.length} characters, ${bible.events.length} events`);
+  return { bible, chapters };
+}
+
 async function processJob(jobId, options = {}) {
   const config = loadConfig();
   const maxRetries = config.maxRetries || MAX_RETRIES;
@@ -94,6 +133,16 @@ async function processJob(jobId, options = {}) {
       referenceEvent = '';
     }
   }
+  let referenceStory = options.referenceStory || '';
+  if (!referenceStory && config.referenceStory) {
+    try {
+      referenceStory = readFileSync(config.referenceStory, 'utf8');
+    } catch (err) {
+      console.log(chalk.yellow(`  [${jobId}] Reference story file "${config.referenceStory}" unreadable: ${err.message} — continuing without`));
+      referenceStory = '';
+    }
+  }
+  const fidelity = options.fidelity || config.fidelity || 'medium';
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
@@ -103,12 +152,49 @@ async function processJob(jobId, options = {}) {
     lang, style, genre, newsUrl,
     referenceCharacter: referenceCharacter ? `${referenceCharacter.length} chars` : '(none)',
     referenceEvent: referenceEvent ? `${referenceEvent.length} chars` : '(none)',
+    referenceStory: referenceStory ? `${referenceStory.length} chars` : '(none)',
+    fidelity,
   });
 
   try {
-    // ─── Step 1: Collect materials ─────────────────────────────────────────
+    // ─── Step 0: Story extraction (only when --story is set) ───────────────
+    let bible = null;
+    let chapters = null;
+    const jobDir = join(JOBS_DIR, jobId);
+    if (referenceStory) {
+      updateJob(jobId, { status: 'extracting', startedAt: new Date().toISOString() });
+      log('Extracting story bible from reference novel...');
+      wlog('story_extract_start', { storyChars: referenceStory.length });
+      ({ bible, chapters } = await extractStoryArtifacts({ jobDir, storyText: referenceStory, log }));
+      // Merge --reference-character / --reference-event as reference-pinned entries
+      if (referenceCharacter && referenceCharacter.trim()) {
+        bible.characters.push({
+          name: '指定角色',
+          role: 'reference-pinned',
+          identity: referenceCharacter.slice(0, 80),
+          motivation: '指定参考',
+          arc: '指定参考',
+          firstChapter: 1,
+          lastChapter: chapters.chapters.length,
+        });
+      }
+      if (referenceEvent && referenceEvent.trim()) {
+        bible.events.push({
+          eventIndex: bible.events.length,
+          summary: referenceEvent.slice(0, 120),
+          chapterRange: [1, chapters.chapters.length],
+          actors: [],
+          isTurningPoint: true,
+          isReveal: false,
+        });
+      }
+      saveStoryArtifacts(jobDir, { bible, chapters });
+      wlog('story_extract_done', { chapters: chapters.chapters.length, charactersInBible: bible.characters.length, events: bible.events.length });
+    }
+
+    // ─── Step 1: Collect materials (skipped when bible is present) ─────────
     let materials = loadArtifact(jobId, 'materials.json');
-    if (!materials) {
+    if (!materials && !bible) {
       updateJob(jobId, { status: 'collecting', startedAt: new Date().toISOString() });
       log(newsUrl ? `Collecting news-based research from ${newsUrl}...` : 'Collecting research materials...');
       wlog('collecting_start', newsUrl ? { newsUrl } : {});
@@ -119,6 +205,18 @@ async function processJob(jobId, options = {}) {
       const hookCount = materials.plotHooks?.length ?? 0;
       log(`Collected ${topicCount} topics, ${hookCount} hooks`);
       wlog('collecting_done', { topics: topicCount, plotHooks: hookCount });
+    } else if (!materials && bible) {
+      // Synthesize a minimal materials shape from the bible so downstream
+      // stages (which expect materials.topics/plotHooks/...) keep working.
+      materials = {
+        topics: bible.themes.map(t => ({ topic: t, source: 'bible' })),
+        plotHooks: bible.hooks.map(h => ({ hook: h.summary, source: 'bible' })),
+        characterArchetypes: bible.characters.map(c => ({ archetype: c.role, identity: c.identity })),
+        trendingTropes: [],
+      };
+      saveArtifact(jobId, 'materials.json', materials);
+      log('Materials synthesized from bible (skipped trend research)');
+      wlog('collecting_skipped_bible', { topics: materials.topics.length });
     } else {
       log('Resuming — materials already collected');
       wlog('collecting_resumed');
@@ -131,7 +229,7 @@ async function processJob(jobId, options = {}) {
     if (!snowflake) {
       try {
         log('Building story architecture (Snowflake method)...');
-        snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, log });
+        snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, bible, fidelity, log });
         saveArtifact(jobId, 'snowflake.json', snowflake);
       } catch (err) {
         log(`[snowflake failed] ${err.message} — continuing without`);
@@ -144,7 +242,11 @@ async function processJob(jobId, options = {}) {
     if (!baseOutline) {
       log('Generating base story outline...');
       const enrichedMaterials = snowflake ? { ...materials, snowflake } : materials;
-      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent });
+      const totalChapters = chapters ? chapters.chapters.length : 0;
+      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters });
+      if (bible && fidelity === 'tight') {
+        validateOutlineChapterCoverage(baseOutline, fidelity, totalChapters);
+      }
       saveArtifact(jobId, 'outline.json', baseOutline);
     } else {
       log('Resuming — outline already generated');
@@ -155,7 +257,8 @@ async function processJob(jobId, options = {}) {
       let planSucceeded = false;
       try {
         log('Generating base scene plan...');
-        basePlan = await generatePlan(baseOutline, { lang, genre, referenceCharacter, referenceEvent });
+        const aggregateChapterRange = chapters && chapters.chapters.length ? [1, chapters.chapters.length] : null;
+        basePlan = await generatePlan(baseOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange });
         planSucceeded = true;
       } catch (err) {
         log(`[planning failed] ${err.message} — continuing without plan for this attempt; will retry on next run`);
@@ -205,7 +308,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = partialFront || null;
       const frontStory = await generateDrama(materials, {
-        lang, genre, referenceCharacter, referenceEvent, style, log, wlog,
+        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -297,7 +400,8 @@ async function processJob(jobId, options = {}) {
         let variantPlanSucceeded = false;
         try {
           log(`Variant ${v.key}: planning tail clips...`);
-          variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent });
+          const aggregateChapterRange = chapters && chapters.chapters.length ? [1, chapters.chapters.length] : null;
+          variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange });
           variantPlanSucceeded = true;
         } catch (err) {
           log(`[variant ${v.key} planning failed] ${err.message} — using base plan as in-memory fallback for this attempt; will retry on next run`);
@@ -356,7 +460,7 @@ async function processJob(jobId, options = {}) {
           globalClipIndex: 0,
         };
         variantStory = await generateDrama(materials, {
-          lang, genre, referenceCharacter, referenceEvent, style, log, wlog,
+          lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, log, wlog,
           vectorStore: variantStore,
           savedSnowflake: snowflake,
           savedOutline: variantOutline,
@@ -633,6 +737,8 @@ export function startWorker() {
           newsUrl: opts.newsUrl || undefined,
           referenceCharacter: opts.referenceCharacter || undefined,
           referenceEvent: opts.referenceEvent || undefined,
+          referenceStory: opts.referenceStory || undefined,
+          fidelity: opts.fidelity || undefined,
         });
       }
     } catch (err) {
