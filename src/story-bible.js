@@ -53,3 +53,48 @@ function windowedChunks(rawText) {
   }
   return out;
 }
+
+// ─── Bible compression ────────────────────────────────────────────────────────
+
+export function compressBibleForEpisode(bible, range) {
+  const [start, end] = range;
+  const characters = bible.characters.filter((c) => {
+    if (c.role === 'reference-pinned') return true;
+    const cs = c.firstChapter ?? 1;
+    const ce = c.lastChapter ?? cs;
+    return ce >= start && cs <= end;
+  });
+  const events = bible.events.filter((e) => {
+    const [es, ee] = e.chapterRange ?? [0, 0];
+    return ee >= start && es <= end;
+  });
+  const hooks = (bible.hooks ?? []).filter((h) => {
+    const [hs, he] = h.chapterRange ?? [0, 0];
+    return he >= start && hs <= end;
+  });
+  return {
+    schemaVersion: bible.schemaVersion,
+    title: bible.title,
+    logline: bible.logline,
+    characters,
+    events,
+    hooks,
+    themes: bible.themes,
+    world: bible.world,
+    ending: bible.ending,
+  };
+}
+
+// ─── Chapter prose selection ──────────────────────────────────────────────────
+
+export function selectChapterProse(chapters, range, budgetChars) {
+  const [start, end] = range;
+  const slice = chapters.filter((c) => c.chapterIndex >= start && c.chapterIndex <= end);
+  if (slice.length === 0) return '';
+  const blocks = slice.map((c) => `【章节 ${c.chapterIndex}：${c.title}】\n${c.prose}`);
+  const full = blocks.join('\n\n');
+  if (full.length <= budgetChars) return full;
+  const halfBudget = Math.floor((budgetChars - 30) / 2);
+  const omitted = full.length - 2 * halfBudget;
+  return `${full.slice(0, halfBudget)}\n…[省略 ${omitted} 字]…\n${full.slice(-halfBudget)}`;
+}
