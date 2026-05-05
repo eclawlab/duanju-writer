@@ -51,3 +51,25 @@ describe('snowflake', () => {
     assert.deepEqual(titles, ['Core Seed', 'Character Dynamics', 'World Building', 'Plot Architecture']);
   });
 });
+
+describe('snowflake bible injection', () => {
+  test('buildSnowflakePrompt with bible+fidelity appends bible block', async () => {
+    const { buildSnowflakePrompt } = await import('../src/snowflake.js');
+    const bible = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [{ name: '陆衡', role: 'protagonist', identity: '战神', motivation: '复仇', arc: 'a', firstChapter: 1, lastChapter: 1 }],
+      events: [{ eventIndex: 0, summary: '归来', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      hooks: [], themes: ['复仇'], world: 'w', ending: 'e',
+    };
+    const out = buildSnowflakePrompt({}, 0, [], 'cn', '', '', '', { bible, fidelity: 'medium' });
+    assert.ok(out.includes('## 参考小说'));
+    assert.ok(out.includes('陆衡'));
+    assert.ok(out.includes('Fidelity = medium'));
+  });
+
+  test('buildSnowflakePrompt without bible omits bible block', async () => {
+    const { buildSnowflakePrompt } = await import('../src/snowflake.js');
+    const out = buildSnowflakePrompt({}, 0, [], 'cn');
+    assert.ok(!out.includes('## 参考小说'));
+  });
+});

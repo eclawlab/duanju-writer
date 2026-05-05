@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
+import { buildBibleBlock } from './story-bible.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = join(__dirname, '..', 'prompts', 'snowflake.md');
@@ -44,7 +45,7 @@ const PARTS_CN = [
   },
 ];
 
-export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '') {
+export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
   let template = readFileSync(TEMPLATE_PATH, 'utf8');
   const parts = lang === 'cn' ? PARTS_CN : PARTS;
   const part = parts[partIndex];
@@ -86,6 +87,9 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'c
       : `\n\nNews Inspiration: This story is inspired by a real news event. Theme: ${ns.theme}. Emotional core: ${ns.emotionalCore}. Do NOT retell the news — use it as creative inspiration.`;
     instructions += newsNote;
   }
+  if (options.bible && options.fidelity) {
+    instructions += '\n\n' + buildBibleBlock(options.bible, options.fidelity);
+  }
   template = template.replace('{{partInstructions}}', () => instructions);
 
   return template;
@@ -96,13 +100,15 @@ export async function generateSnowflake(materials, options = {}) {
   const genre = options.genre || '';
   const referenceCharacter = options.referenceCharacter || '';
   const referenceEvent = options.referenceEvent || '';
+  const bible = options.bible || null;
+  const fidelity = options.fidelity || null;
   const log = options.log || (() => {});
   const parts = [];
   const localized = lang === 'cn' ? PARTS_CN : PARTS;
 
   for (let i = 0; i < localized.length; i++) {
     log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
-    const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent);
+    const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent, { bible, fidelity });
     const raw = await callLLM(prompt, 'outline');
     // Try to parse JSON, fall back to raw text
     try {
