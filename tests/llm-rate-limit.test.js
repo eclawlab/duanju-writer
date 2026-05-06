@@ -44,3 +44,38 @@ describe('parseRetryAfter', () => {
     assert.equal(parseRetryAfter(null, 'not a date or number'), 60_000);
   });
 });
+
+describe('RateLimitError', () => {
+  test('extends Error and carries retryAfterMs', async () => {
+    const { RateLimitError } = await import('../src/llm.js');
+    const err = new RateLimitError(45_000);
+    assert.ok(err instanceof Error);
+    assert.ok(err instanceof RateLimitError);
+    assert.equal(err.retryAfterMs, 45_000);
+    assert.equal(err.name, 'RateLimitError');
+    assert.match(err.message, /45000/);
+  });
+
+  test('appends provider info when given', async () => {
+    const { RateLimitError } = await import('../src/llm.js');
+    const err = new RateLimitError(1000, 'https://api.deepseek.com/v1');
+    assert.match(err.message, /deepseek/);
+  });
+});
+
+describe('ClaudeCliRateLimitError', () => {
+  test('extends Error with default message', async () => {
+    const { ClaudeCliRateLimitError } = await import('../src/llm.js');
+    const err = new ClaudeCliRateLimitError();
+    assert.ok(err instanceof Error);
+    assert.ok(err instanceof ClaudeCliRateLimitError);
+    assert.equal(err.name, 'ClaudeCliRateLimitError');
+    assert.match(err.message, /rate limit/i);
+  });
+
+  test('accepts a custom message', async () => {
+    const { ClaudeCliRateLimitError } = await import('../src/llm.js');
+    const err = new ClaudeCliRateLimitError('hit the wall');
+    assert.equal(err.message, 'hit the wall');
+  });
+});

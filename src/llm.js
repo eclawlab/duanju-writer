@@ -22,6 +22,22 @@ export function resetLLMStats() {
  * @param {string|null|undefined} secondsHeader - value of `Retry-After` header
  * @returns {number} milliseconds to wait
  */
+export class RateLimitError extends Error {
+  constructor(retryAfterMs, providerInfo = '') {
+    const suffix = providerInfo ? ` (${providerInfo})` : '';
+    super(`LLM rate-limited; retry after ${retryAfterMs}ms${suffix}`);
+    this.name = 'RateLimitError';
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export class ClaudeCliRateLimitError extends Error {
+  constructor(message = 'Claude CLI rate limit reached') {
+    super(message);
+    this.name = 'ClaudeCliRateLimitError';
+  }
+}
+
 export function parseRetryAfter(msHeader, secondsHeader) {
   if (msHeader != null) {
     const ms = Number(msHeader);
