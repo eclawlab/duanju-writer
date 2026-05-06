@@ -157,3 +157,61 @@ describe('OpenAI adapter rate-limit handling', () => {
     } finally { global.fetch = originalFetch; }
   });
 });
+
+describe('Claude CLI adapter rate-limit handling', () => {
+  test('throws ClaudeCliRateLimitError on stderr with "usage limit reached"', async () => {
+    const { createClaudeCliAdapter, ClaudeCliRateLimitError } = await import('../src/llm.js');
+    const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'claude-stub-'));
+    const stubPath = join(dir, 'fake-claude.sh');
+    writeFileSync(stubPath, '#!/bin/sh\necho "Claude AI usage limit reached" 1>&2\nexit 1\n');
+    chmodSync(stubPath, 0o755);
+    try {
+      const a = createClaudeCliAdapter({ claudePath: stubPath, timeout: 5000, registerChild: () => {}, unregisterChild: () => {} });
+      await assert.rejects(() => a.call('hi'), (err) => {
+        assert.ok(err instanceof ClaudeCliRateLimitError, `expected ClaudeCliRateLimitError, got ${err.constructor.name}: ${err.message}`);
+        assert.match(err.message, /usage limit reached/i);
+        return true;
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('throws ClaudeCliRateLimitError on stderr with "overloaded"', async () => {
+    const { createClaudeCliAdapter, ClaudeCliRateLimitError } = await import('../src/llm.js');
+    const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'claude-stub-'));
+    const stubPath = join(dir, 'fake-claude.sh');
+    writeFileSync(stubPath, '#!/bin/sh\necho "API request overloaded; please retry later" 1>&2\nexit 1\n');
+    chmodSync(stubPath, 0o755);
+    try {
+      const a = createClaudeCliAdapter({ claudePath: stubPath, timeout: 5000, registerChild: () => {}, unregisterChild: () => {} });
+      await assert.rejects(() => a.call('hi'), (err) => {
+        assert.ok(err instanceof ClaudeCliRateLimitError);
+        return true;
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('throws plain Error (NOT ClaudeCliRateLimitError) on unrelated stderr', async () => {
+    const { createClaudeCliAdapter, ClaudeCliRateLimitError } = await import('../src/llm.js');
+    const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'claude-stub-'));
+    const stubPath = join(dir, 'fake-claude.sh');
+    writeFileSync(stubPath, '#!/bin/sh\necho "some other error" 1>&2\nexit 1\n');
+    chmodSync(stubPath, 0o755);
+    try {
+      const a = createClaudeCliAdapter({ claudePath: stubPath, timeout: 5000, registerChild: () => {}, unregisterChild: () => {} });
+      await assert.rejects(() => a.call('hi'), (err) => {
+        assert.ok(!(err instanceof ClaudeCliRateLimitError));
+        assert.match(err.message, /Claude CLI failed/);
+        return true;
+      });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});

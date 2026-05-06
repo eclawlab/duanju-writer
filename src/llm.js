@@ -185,7 +185,12 @@ export function createClaudeCliAdapter(config) {
               if (err.killed) {
                 done(reject, new Error(`Claude CLI timed out after ${timeout}ms`));
               } else {
-                done(reject, new Error(`Claude CLI failed: ${err.message}\n${stderr}`));
+                const text = `${stderr || ''} ${err.message || ''}`;
+                if (/usage limit reached|rate.?limit|overloaded/i.test(text)) {
+                  done(reject, new ClaudeCliRateLimitError(`Claude CLI rate limit reached: ${text.slice(0, 200).trim()}`));
+                } else {
+                  done(reject, new Error(`Claude CLI failed: ${err.message}\n${stderr}`));
+                }
               }
               return;
             }
