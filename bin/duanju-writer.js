@@ -301,6 +301,15 @@ switch (command) {
     if (count === 0) console.log('Nothing to do (count=0).');
     break;
   }
+  case 'resume': {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const flag = join(DATA_DIR, 'resume.flag');
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(flag, new Date().toISOString());
+    console.log(`Resume signal written to ${flag}`);
+    break;
+  }
   case 'jobs': {
     const { listJobs } = await import('../src/queue.js');
     const jobs = listJobs();
@@ -611,7 +620,7 @@ switch (command) {
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge]');
+    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|resume]');
     console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
     process.exit(1);
 }

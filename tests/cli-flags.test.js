@@ -61,6 +61,24 @@ describe('cli flag validation', () => {
     assert.equal(r.code, 1);
     assert.match(r.out, /Only 'cn' is supported/);
   });
+
+  test('resume subcommand writes the sentinel flag and exits 0', async () => {
+    const { mkdtempSync, existsSync, rmSync, readFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { spawnSync } = await import('node:child_process');
+
+    const dir = mkdtempSync(join(tmpdir(), 'dj-resume-'));
+    try {
+      const env = { ...process.env, HOME: dir };
+      const r = spawnSync('node', [BIN, 'resume'], { encoding: 'utf8', env });
+      assert.equal(r.status, 0, `expected exit 0, got ${r.status}; stderr: ${r.stderr}`);
+      const flagPath = join(dir, '.duanju-writer', 'resume.flag');
+      assert.ok(existsSync(flagPath), `expected ${flagPath} to exist`);
+      assert.match(readFileSync(flagPath, 'utf8'), /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      assert.match(r.stdout, /Resume signal written/);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });
 
 describe('--story flag validation', () => {
