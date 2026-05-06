@@ -307,16 +307,20 @@ export async function retryTransient(fn, opts = {}) {
   const sleep = opts.sleep || defaultSleep;
   const isTransient = opts.isTransient || isTransientLLMError;
   let lastErr;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  let attempt = 0;
+  while (true) {
     try {
       return await fn(attempt);
     } catch (err) {
       lastErr = err;
-      if (attempt === maxRetries || !isTransient(err)) throw err;
+      if (attempt >= maxRetries || !isTransient(err)) throw err;
       const delay = baseMs * 2 ** attempt + Math.floor(Math.random() * 1000);
       await sleep(delay);
+      attempt += 1;
     }
   }
+  // unreachable — every path above either returns or throws
+  // eslint-disable-next-line no-unreachable
   throw lastErr;
 }
 
