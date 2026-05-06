@@ -1,6 +1,10 @@
 import { execFile } from 'node:child_process';
+import { existsSync as _defaultExistsSync, mkdirSync as _defaultMkdirSync, unlinkSync as _defaultUnlinkSync } from 'node:fs';
+import { createInterface as _defaultCreateInterface } from 'node:readline';
+import { join as _joinPath } from 'node:path';
 import { loadConfig } from './config.js';
 import { registerChild as defaultRegisterChild, unregisterChild as defaultUnregisterChild } from './pidfile.js';
+import { DATA_DIR } from './constants.js';
 
 // Module-level cache for provider instances
 const providerCache = new Map();
@@ -292,6 +296,45 @@ const LLM_MAX_RETRIES = 3;
 const LLM_RETRY_BASE_MS = 2_000;
 
 function defaultSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+const RESUME_FLAG_PATH = _joinPath(DATA_DIR, 'resume.flag');
+const RESUME_POLL_MS = 30_000;
+
+/**
+ * Block until the user signals to resume after a Claude CLI rate-limit pause.
+ * - TTY: prompt and await Enter on stdin.
+ * - Non-TTY: poll the sentinel file at <DATA_DIR>/resume.flag every 30s; consume
+ *   (delete) it when found.
+ *
+ * Accepts injection points for tests:
+ *   isTTY (boolean), createInterfaceFn, sleep, existsSyncFn, mkdirSyncFn,
+ *   unlinkSyncFn, flagPath, pollMs, log.
+ */
+export async function waitForUserResume(opts = {}) {
+  const isTTY = opts.isTTY ?? !!process.stdin.isTTY;
+  const log = opts.log || console.log;
+  if (isTTY) {
+    log('[claude-cli] rate limit reached. Press Enter to retry (Ctrl+C to abort).');
+    const createInterfaceFn = opts.createInterfaceFn || _defaultCreateInterface;
+    await new Promise((resolve) => {
+      const rl = createInterfaceFn({ input: process.stdin, output: process.stdout });
+      rl.question('', () => { rl.close(); resolve(); });
+    });
+    return;
+  }
+  const flagPath = opts.flagPath || RESUME_FLAG_PATH;
+  const pollMs = opts.pollMs ?? RESUME_POLL_MS;
+  const sleepFn = opts.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const existsSyncFn = opts.existsSyncFn || _defaultExistsSync;
+  const mkdirSyncFn = opts.mkdirSyncFn || _defaultMkdirSync;
+  const unlinkSyncFn = opts.unlinkSyncFn || _defaultUnlinkSync;
+  log(`[claude-cli] rate limit reached. Run 'duanju-writer resume' (or touch ${flagPath}) to retry.`);
+  try { mkdirSyncFn(_joinPath(flagPath, '..'), { recursive: true }); } catch {}
+  while (!existsSyncFn(flagPath)) {
+    await sleepFn(pollMs);
+  }
+  try { unlinkSyncFn(flagPath); } catch {}
+}
 
 /**
  * Retry a thunk against transient LLM errors with exponential backoff + jitter.

@@ -260,3 +260,71 @@ describe('retryTransient handles RateLimitError', () => {
     assert.equal(calls, 3, 'one initial + two retries = 3 calls');
   });
 });
+
+describe('waitForUserResume — TTY mode', () => {
+  test('resolves when readline question completes', async () => {
+    const { waitForUserResume } = await import('../src/llm.js');
+    let questioned = false;
+    const fakeReadlineFactory = () => ({
+      question: (prompt, cb) => { questioned = true; setImmediate(() => cb('')); },
+      close: () => {},
+    });
+    const messages = [];
+    const log = (m) => messages.push(m);
+    await waitForUserResume({
+      isTTY: true,
+      createInterfaceFn: fakeReadlineFactory,
+      log,
+    });
+    assert.ok(questioned, 'readline.question must have been called');
+    assert.ok(messages.some(m => /Press Enter to retry/i.test(m)), 'TTY prompt must be logged');
+  });
+});
+
+describe('waitForUserResume — non-TTY mode', () => {
+  test('resolves when sentinel file appears, then removes it', async () => {
+    const { waitForUserResume } = await import('../src/llm.js');
+    const { mkdtempSync, writeFileSync, existsSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const dir = mkdtempSync(join(tmpdir(), 'resume-'));
+    const flagPath = join(dir, 'resume.flag');
+    let pollCount = 0;
+    const fakeSleep = async () => {
+      pollCount++;
+      if (pollCount === 2) writeFileSync(flagPath, 'go');
+    };
+    const messages = [];
+    try {
+      await waitForUserResume({
+        isTTY: false,
+        flagPath,
+        pollMs: 1,
+        sleep: fakeSleep,
+        log: (m) => messages.push(m),
+      });
+      assert.ok(!existsSync(flagPath), 'flag must be consumed (deleted)');
+      assert.ok(messages.some(m => /Run 'duanju-writer resume'/i.test(m)), 'must log resume instructions');
+      assert.ok(pollCount >= 2, `expected at least 2 polls, got ${pollCount}`);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('returns immediately if flag already exists', async () => {
+    const { waitForUserResume } = await import('../src/llm.js');
+    const { mkdtempSync, writeFileSync, existsSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const dir = mkdtempSync(join(tmpdir(), 'resume-'));
+    const flagPath = join(dir, 'resume.flag');
+    writeFileSync(flagPath, 'already');
+    let pollCount = 0;
+    const fakeSleep = async () => { pollCount++; };
+    try {
+      await waitForUserResume({ isTTY: false, flagPath, pollMs: 1, sleep: fakeSleep, log: () => {} });
+      assert.equal(pollCount, 0, 'must not sleep when flag already present');
+      assert.ok(!existsSync(flagPath));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
