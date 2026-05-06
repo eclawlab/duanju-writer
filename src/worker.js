@@ -30,13 +30,16 @@ const VARIANTS = [
   { key: 'v3', ending: '反转',     label: '反转结局' },
 ];
 
+// Static description of valid status edges in the pipeline. Informational
+// only — the actual transitions are driven by claimNextPending (pending →
+// collecting, unconditionally) and processJob (which then flips to
+// 'extracting' when referenceStory is set, otherwise straight to 'writing').
 export function getStatusTransitions() {
   return [
-    { from: 'pending', to: 'extracting' },
     { from: 'pending', to: 'collecting' },
-    { from: 'extracting', to: 'collecting' },
-    { from: 'extracting', to: 'writing' },
+    { from: 'collecting', to: 'extracting' },
     { from: 'collecting', to: 'writing' },
+    { from: 'extracting', to: 'writing' },
     { from: 'writing', to: 'uploading' },
     { from: 'uploading', to: 'done' },
   ];
@@ -77,6 +80,24 @@ function loadArtifact(jobId, filename) {
 }
 
 /**
+ * Build a minimal `materials` shape from a bible so downstream stages
+ * (which expect materials.topics/plotHooks/...) keep working when trend
+ * research is skipped. synthesizeBible only validates characters+events
+ * non-empty; hooks and themes may be missing if the LLM omits them — the
+ * `?? []` guards keep .map from throwing.
+ * @param {object} bible
+ * @returns {{topics: Array, plotHooks: Array, characterArchetypes: Array, trendingTropes: Array}}
+ */
+export function synthMaterialsFromBible(bible) {
+  return {
+    topics: (bible.themes ?? []).map((t) => ({ topic: t, source: 'bible' })),
+    plotHooks: (bible.hooks ?? []).map((h) => ({ hook: h.summary, source: 'bible' })),
+    characterArchetypes: (bible.characters ?? []).map((c) => ({ archetype: c.role, identity: c.identity })),
+    trendingTropes: [],
+  };
+}
+
+/**
  * Splits a novel, extracts per-chapter facts via LLM, synthesizes the bible,
  * and persists both artifacts. Skips work and returns existing artifacts when
  * a valid bible.json + chapters.json already exist for the jobDir.
@@ -96,9 +117,30 @@ export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = ()
   const chapterChunks = splitChapters(storyText, { log });
   log(`Split novel into ${chapterChunks.length} chapter chunks`);
   const facts = [];
+  let degradedChapters = 0;
   for (const chunk of chapterChunks) {
-    const f = await extractChapterFacts(chunk, { llmFn });
+    let f;
+    try {
+      f = await extractChapterFacts(chunk, { llmFn });
+    } catch (err) {
+      // One LLM-side malformation shouldn't abort the whole bible. Retry
+      // once with a corrective hint, then fall back to a stub. The
+      // synthesizer enforces non-empty characters/events globally, so a
+      // single empty chapter is recoverable as long as other chapters
+      // produce content.
+      log(`[bible] chapter ${chunk.chapterIndex} extraction failed: ${err.message} — retrying once`);
+      try {
+        f = await extractChapterFacts(chunk, { llmFn });
+      } catch (err2) {
+        log(`[bible] chapter ${chunk.chapterIndex} retry failed: ${err2.message} — skipping with empty stub`);
+        degradedChapters += 1;
+        f = { chapterIndex: chunk.chapterIndex, characters: [], events: [], hooks: [], themes: [], worldDetail: '' };
+      }
+    }
     facts.push(f);
+  }
+  if (degradedChapters > 0) {
+    log(`[bible] ${degradedChapters} of ${chapterChunks.length} chapters extracted as empty stubs`);
   }
   const bible = await synthesizeBible(facts, { llmFn, sourceTitle: '' });
   const totalChars = chapterChunks.reduce((sum, c) => sum + c.prose.length, 0);
@@ -124,8 +166,8 @@ const BIBLE_DEPENDENT_ARTIFACTS = [
   'front.state.json',
 ];
 
-function invalidateBibleDependentArtifacts(jobId, log) {
-  const jobDir = join(JOBS_DIR, jobId);
+export function invalidateBibleDependentArtifacts(jobId, log = () => {}, opts = {}) {
+  const jobDir = opts.jobDir || join(JOBS_DIR, jobId);
   const removed = [];
   for (const name of BIBLE_DEPENDENT_ARTIFACTS) {
     const p = join(jobDir, name);
@@ -283,16 +325,7 @@ async function processJob(jobId, options = {}) {
       log(`Collected ${topicCount} topics, ${hookCount} hooks`);
       wlog('collecting_done', { topics: topicCount, plotHooks: hookCount });
     } else if (!materials && bible) {
-      // Synthesize a minimal materials shape from the bible so downstream
-      // stages (which expect materials.topics/plotHooks/...) keep working.
-      // synthesizeBible only validates characters+events non-empty; hooks
-      // and themes may be missing if the LLM omits them.
-      materials = {
-        topics: (bible.themes ?? []).map(t => ({ topic: t, source: 'bible' })),
-        plotHooks: (bible.hooks ?? []).map(h => ({ hook: h.summary, source: 'bible' })),
-        characterArchetypes: bible.characters.map(c => ({ archetype: c.role, identity: c.identity })),
-        trendingTropes: [],
-      };
+      materials = synthMaterialsFromBible(bible);
       saveArtifact(jobId, 'materials.json', materials);
       log('Materials synthesized from bible (skipped trend research)');
       wlog('collecting_skipped_bible', { topics: materials.topics.length });

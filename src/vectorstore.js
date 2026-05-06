@@ -87,8 +87,11 @@ export function buildTfidf(documents) {
     }
   }
 
-  // Compute IDF: log(N / (1 + df))
-  const idf = df.map(d => Math.log(N / (1 + d)));
+  // Smoothed IDF: log((N + 1) / (df + 1)) + 1.
+  // The naive log(N / (1 + df)) goes negative when N=1 / df=1 (single-doc
+  // store, term in every doc) — flips ranking signs after cosine. The
+  // +1 baseline keeps IDF non-negative.
+  const idf = df.map(d => Math.log((N + 1) / (d + 1)) + 1);
 
   // Compute TF-IDF vector for each document
   const docVectors = tokenizedDocs.map(({ id, tokens }) => {

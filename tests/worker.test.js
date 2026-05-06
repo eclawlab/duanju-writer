@@ -45,9 +45,14 @@ describe('worker', () => {
     assert.ok(seen.has('done'), 'no path from pending to done');
   });
 
-  test('getStatusTransitions includes story-pipeline extracting branch', async () => {
+  test('getStatusTransitions includes story-pipeline extracting branch (collecting → extracting)', async () => {
     const { getStatusTransitions } = await import('../src/worker.js');
     const transitions = getStatusTransitions();
-    assert.ok(transitions.some(t => t.from === 'pending' && t.to === 'extracting'));
+    // Real flow: claimNextPending always flips pending→collecting; processJob
+    // then promotes collecting→extracting when referenceStory is set, else
+    // collecting→writing.
+    assert.ok(transitions.some(t => t.from === 'collecting' && t.to === 'extracting'));
+    assert.ok(transitions.some(t => t.from === 'collecting' && t.to === 'writing'));
+    assert.ok(transitions.some(t => t.from === 'extracting' && t.to === 'writing'));
   });
 });

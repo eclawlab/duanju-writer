@@ -178,19 +178,22 @@ describe('Claude CLI adapter rate-limit handling', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('throws ClaudeCliRateLimitError on stderr with "overloaded"', async () => {
+  test('"overloaded" is NOT a ClaudeCliRateLimitError (transient retry path)', async () => {
     const { createClaudeCliAdapter, ClaudeCliRateLimitError } = await import('../src/llm.js');
     const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
     const dir = mkdtempSync(join(tmpdir(), 'claude-stub-'));
     const stubPath = join(dir, 'fake-claude.sh');
-    writeFileSync(stubPath, '#!/bin/sh\necho "API request overloaded; please retry later" 1>&2\nexit 1\n');
+    writeFileSync(stubPath, '#!/bin/sh\necho "Claude CLI failed: API request overloaded; please retry later" 1>&2\nexit 1\n');
     chmodSync(stubPath, 0o755);
     try {
       const a = createClaudeCliAdapter({ claudePath: stubPath, timeout: 5000, registerChild: () => {}, unregisterChild: () => {} });
       await assert.rejects(() => a.call('hi'), (err) => {
-        assert.ok(err instanceof ClaudeCliRateLimitError);
+        // overloaded must NOT pause-for-user (would freeze daemon on transient blip);
+        // it's a regular transient error handled by the bounded retry path.
+        assert.ok(!(err instanceof ClaudeCliRateLimitError), 'overloaded should not trigger user-pause');
+        assert.match(err.message, /overloaded/i);
         return true;
       });
     } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -310,7 +313,7 @@ describe('waitForUserResume — non-TTY mode', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('returns immediately if flag already exists', async () => {
+  test('consumes stale flag at entry and waits for a fresh signal', async () => {
     const { waitForUserResume } = await import('../src/llm.js');
     const { mkdtempSync, writeFileSync, existsSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
@@ -318,13 +321,18 @@ describe('waitForUserResume — non-TTY mode', () => {
 
     const dir = mkdtempSync(join(tmpdir(), 'resume-'));
     const flagPath = join(dir, 'resume.flag');
-    writeFileSync(flagPath, 'already');
+    // Stale flag from a prior abort / pre-emptive resume call.
+    writeFileSync(flagPath, 'stale');
     let pollCount = 0;
-    const fakeSleep = async () => { pollCount++; };
+    const fakeSleep = async () => {
+      pollCount++;
+      // Simulate user signalling resume on the second poll.
+      if (pollCount === 2) writeFileSync(flagPath, 'fresh');
+    };
     try {
       await waitForUserResume({ isTTY: false, flagPath, pollMs: 1, sleep: fakeSleep, log: () => {} });
-      assert.equal(pollCount, 0, 'must not sleep when flag already present');
-      assert.ok(!existsSync(flagPath));
+      assert.ok(pollCount >= 2, `expected at least 2 polls (stale flag must NOT short-circuit), got ${pollCount}`);
+      assert.ok(!existsSync(flagPath), 'fresh flag must be consumed on success');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

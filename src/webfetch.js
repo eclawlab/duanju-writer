@@ -50,7 +50,12 @@ export async function fetchPage(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
 }
 
 async function readBodyCapped(resp, maxBytes) {
-  if (!resp.body) return await resp.text();
+  if (!resp.body) {
+    // Origins/runtimes that don't expose a streamable body fall through here.
+    // Truncate at the same byte cap so a giant page can't bypass the limit.
+    const text = await resp.text();
+    return text.length > maxBytes ? text.slice(0, maxBytes) : text;
+  }
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let total = 0;

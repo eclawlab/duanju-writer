@@ -190,7 +190,12 @@ export function createClaudeCliAdapter(config) {
                 done(reject, new Error(`Claude CLI timed out after ${timeout}ms`));
               } else {
                 const text = `${stderr || ''} ${err.message || ''}`;
-                if (/usage limit reached|rate.?limit|overloaded/i.test(text)) {
+                // "usage limit reached" is the Pro/Max plan rate-limit; needs
+                // user signal to resume. "overloaded" is a transient backend
+                // blip that should be auto-retried by the bounded transient
+                // path (isTransientLLMError covers it) — NOT a rate-limit
+                // pause that hangs the daemon waiting for a human.
+                if (/usage limit reached|rate.?limit/i.test(text)) {
                   done(reject, new ClaudeCliRateLimitError(`Claude CLI rate limit reached: ${text.slice(0, 200).trim()}`));
                 } else {
                   done(reject, new Error(`Claude CLI failed: ${err.message}\n${stderr}`));
@@ -330,6 +335,13 @@ export async function waitForUserResume(opts = {}) {
   const unlinkSyncFn = opts.unlinkSyncFn || _defaultUnlinkSync;
   log(`[claude-cli] rate limit reached. Run 'duanju-writer resume' (or touch ${flagPath}) to retry.`);
   try { mkdirSyncFn(_joinPath(flagPath, '..'), { recursive: true }); } catch {}
+  // Consume any stale flag left over from a prior abort or pre-emptive
+  // 'duanju-writer resume' before this wait began. Without this, the loop
+  // returns immediately and the worker hammers the still-rate-limited
+  // backend until it gets a non-rate-limit response.
+  if (existsSyncFn(flagPath)) {
+    try { unlinkSyncFn(flagPath); } catch {}
+  }
   while (!existsSyncFn(flagPath)) {
     await sleepFn(pollMs);
   }

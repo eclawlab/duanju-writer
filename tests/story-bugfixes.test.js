@@ -76,11 +76,25 @@ describe('Bug #2 — tail outline accepts bible/fidelity', () => {
 // (coreSeed, world.physical.geography), not the long-dead seed/setting.
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Bug #3 — tail summarizer uses real snowflake fields', () => {
-  test('drama-writer source no longer reads snowflake.seed or snowflake.setting', async () => {
-    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
-    assert.ok(!/snowflake\.seed\b/.test(src), 'snowflake.seed reads should be gone');
-    assert.ok(!/snowflake\.setting\b/.test(src), 'snowflake.setting reads should be gone');
-    assert.ok(/snowflake\.coreSeed\b/.test(src), 'snowflake.coreSeed should be used');
+  test('buildTailOutlinePrompt surfaces snowflake.coreSeed and world.physical.geography', async () => {
+    const { buildTailOutlinePrompt } = await import('../src/drama-writer.js');
+    const baseOutline = {
+      title: 't', synopsis: 's', genres: [], episodes: [
+        { episodeIndex: 0, title: 'e1', clipPlan: [{ summary: 'x' }] },
+        { episodeIndex: 1, title: 'e2', clipPlan: [{ summary: 'x' }] },
+      ],
+    };
+    const snowflake = {
+      coreSeed: 'protagonist returns to settle a debt',
+      characters: [{ name: '陆衡', role: 'protagonist', arc: { final: 'redeemed' } }],
+      world: { physical: { geography: 'modern Shanghai' } },
+      plot: {},
+    };
+    const out = buildTailOutlinePrompt(baseOutline, 1, '爽爆', snowflake, {});
+    assert.ok(out.includes('protagonist returns to settle a debt'), 'must surface coreSeed');
+    assert.ok(out.includes('modern Shanghai'), 'must surface world.physical.geography');
+    // Negative: must not interpolate "[object Object]" from a structured world
+    assert.ok(!out.includes('[object Object]'));
   });
 });
 
@@ -88,10 +102,34 @@ describe('Bug #3 — tail summarizer uses real snowflake fields', () => {
 // Bug #4: synth-from-bible materials must tolerate missing hooks/themes
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Bug #4 — synth-from-bible tolerates missing hooks/themes', () => {
-  test('worker source uses ?? [] guards on bible.hooks and bible.themes', async () => {
-    const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
-    assert.ok(/\(bible\.themes \?\? \[\]\)/.test(src), 'bible.themes should be ?? []-guarded');
-    assert.ok(/\(bible\.hooks \?\? \[\]\)/.test(src), 'bible.hooks should be ?? []-guarded');
+  test('synthMaterialsFromBible returns empty arrays when bible omits hooks/themes', async () => {
+    const { synthMaterialsFromBible } = await import('../src/worker.js');
+    const bibleNoHooksOrThemes = {
+      schemaVersion: 1, title: 't', logline: 'L',
+      characters: [{ name: 'a', role: 'protagonist', identity: 'i', motivation: 'm', arc: 'a', firstChapter: 1, lastChapter: 1 }],
+      events: [{ eventIndex: 0, summary: 's', chapterRange: [1, 1], actors: [], isTurningPoint: false, isReveal: false }],
+      // hooks and themes intentionally omitted
+      world: 'w', ending: 'e',
+    };
+    let result;
+    assert.doesNotThrow(() => { result = synthMaterialsFromBible(bibleNoHooksOrThemes); });
+    assert.deepEqual(result.topics, []);
+    assert.deepEqual(result.plotHooks, []);
+    assert.equal(result.characterArchetypes.length, 1);
+    assert.deepEqual(result.trendingTropes, []);
+  });
+
+  test('synthMaterialsFromBible builds topics/plotHooks when bible has them', async () => {
+    const { synthMaterialsFromBible } = await import('../src/worker.js');
+    const bible = {
+      characters: [{ role: 'protagonist', identity: 'a' }],
+      events: [{ eventIndex: 0 }],
+      hooks: [{ summary: 'reveal moment' }],
+      themes: ['复仇'],
+    };
+    const result = synthMaterialsFromBible(bible);
+    assert.deepEqual(result.topics, [{ topic: '复仇', source: 'bible' }]);
+    assert.deepEqual(result.plotHooks, [{ hook: 'reveal moment', source: 'bible' }]);
   });
 });
 
@@ -99,20 +137,28 @@ describe('Bug #4 — synth-from-bible tolerates missing hooks/themes', () => {
 // Bug #5: 'extracting' is a recognized status across queue + worker + bin
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Bug #5 — extracting status is registered', () => {
-  test('queue.hasBusyJob includes extracting', async () => {
-    const src = readFileSync(new URL('../src/queue.js', import.meta.url), 'utf8');
-    assert.ok(/'extracting'/.test(src), 'extracting should appear in queue status predicates');
+  test('hasBusyJobIn treats extracting as busy', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { hasBusyJobIn } = await import('../src/queue.js');
+    const dir = mkdtempSync(join(tmpdir(), 'busy-'));
+    const f = join(dir, 'jobs.json');
+    try {
+      writeFileSync(f, JSON.stringify([{ id: 'j1', status: 'extracting' }]));
+      assert.equal(hasBusyJobIn(f), true, 'extracting must count as busy');
+      writeFileSync(f, JSON.stringify([{ id: 'j1', status: 'done' }]));
+      assert.equal(hasBusyJobIn(f), false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('worker.getStatusTransitions has a pending→extracting edge', async () => {
+  test('getStatusTransitions includes the actual code-driven extracting edges', async () => {
     const { getStatusTransitions } = await import('../src/worker.js');
     const ts = getStatusTransitions();
-    assert.ok(ts.some(t => t.from === 'pending' && t.to === 'extracting'));
-  });
-
-  test('bin in-flight filter includes extracting', async () => {
-    const src = readFileSync(new URL('../bin/duanju-writer.js', import.meta.url), 'utf8');
-    assert.ok(/'extracting'/.test(src), 'extracting should be in bin in-flight filter');
+    // The real code does: pending → collecting (via claimNextPending);
+    // then collecting → extracting OR collecting → writing inside processJob.
+    assert.ok(ts.some(t => t.from === 'collecting' && t.to === 'extracting'));
+    assert.ok(ts.some(t => t.from === 'extracting' && t.to === 'writing'));
   });
 });
 
@@ -120,12 +166,34 @@ describe('Bug #5 — extracting status is registered', () => {
 // Bug #6: fresh bible invalidates downstream artifacts
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Bug #6 — fresh bible invalidates downstream artifacts', () => {
-  test('worker source declares BIBLE_DEPENDENT_ARTIFACTS and invalidates them', async () => {
-    const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
-    assert.ok(/BIBLE_DEPENDENT_ARTIFACTS/.test(src), 'should declare the dependent-artifact list');
-    assert.ok(/invalidateBibleDependentArtifacts/.test(src), 'should call the invalidator on fresh extract');
-    assert.ok(/'outline\.json'/.test(src), 'outline.json should be in the dependent set');
-    assert.ok(/'plan\.json'/.test(src), 'plan.json should be in the dependent set');
+  test('invalidateBibleDependentArtifacts removes the bible-dependent artifacts and leaves story/ alone', async () => {
+    const { invalidateBibleDependentArtifacts } = await import('../src/worker.js');
+    const { mkdtempSync, writeFileSync, mkdirSync, existsSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const jobDir = mkdtempSync(join(tmpdir(), 'invalidate-'));
+    try {
+      // Pre-populate downstream artifacts (some bible-dependent, some not)
+      writeFileSync(join(jobDir, 'outline.json'), '{}');
+      writeFileSync(join(jobDir, 'plan.json'), '{}');
+      writeFileSync(join(jobDir, 'snowflake.json'), '{}');
+      writeFileSync(join(jobDir, 'outline.v1.json'), '{}');
+      writeFileSync(join(jobDir, 'plan.v2.json'), '{}');
+      writeFileSync(join(jobDir, 'materials.json'), '{}'); // NOT in the set; must survive
+      mkdirSync(join(jobDir, 'story'), { recursive: true });
+      writeFileSync(join(jobDir, 'story', 'bible.json'), '{}'); // Story artifacts must survive
+
+      const removed = invalidateBibleDependentArtifacts('ignored-id', () => {}, { jobDir });
+      assert.ok(removed >= 5, `expected ≥5 removed, got ${removed}`);
+      assert.ok(!existsSync(join(jobDir, 'outline.json')), 'outline.json must be removed');
+      assert.ok(!existsSync(join(jobDir, 'plan.json')), 'plan.json must be removed');
+      assert.ok(!existsSync(join(jobDir, 'snowflake.json')), 'snowflake.json must be removed');
+      assert.ok(!existsSync(join(jobDir, 'outline.v1.json')), 'variant outline must be removed');
+      assert.ok(!existsSync(join(jobDir, 'plan.v2.json')), 'variant plan must be removed');
+      assert.ok(existsSync(join(jobDir, 'materials.json')), 'materials.json must survive');
+      assert.ok(existsSync(join(jobDir, 'story', 'bible.json')), 'story/ artifacts must survive');
+    } finally { rmSync(jobDir, { recursive: true, force: true }); }
   });
 });
 
