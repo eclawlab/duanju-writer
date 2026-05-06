@@ -15,6 +15,33 @@ export function resetLLMStats() {
 }
 
 /**
+ * Parse a Retry-After response header into milliseconds.
+ * Honors `Retry-After-Ms` (Anthropic-style) over `Retry-After` (RFC 7231).
+ * Falls back to 60_000 ms when both are missing/unparseable.
+ * @param {string|null|undefined} msHeader - value of `Retry-After-Ms` header
+ * @param {string|null|undefined} secondsHeader - value of `Retry-After` header
+ * @returns {number} milliseconds to wait
+ */
+export function parseRetryAfter(msHeader, secondsHeader) {
+  if (msHeader != null) {
+    const ms = Number(msHeader);
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  }
+  if (secondsHeader != null) {
+    const trimmed = String(secondsHeader).trim();
+    if (/^\d+$/.test(trimmed)) {
+      return Number(trimmed) * 1000;
+    }
+    const t = Date.parse(trimmed);
+    if (Number.isFinite(t)) {
+      const ms = t - Date.now();
+      if (ms > 0) return ms;
+    }
+  }
+  return 60_000;
+}
+
+/**
  * Creates an OpenAI-compatible HTTP adapter.
  * @param {object} config
  * @param {string} config.apiKey
