@@ -79,3 +79,81 @@ describe('ClaudeCliRateLimitError', () => {
     assert.equal(err.message, 'hit the wall');
   });
 });
+
+describe('OpenAI adapter rate-limit handling', () => {
+  test('throws RateLimitError on HTTP 429 with Retry-After-Ms', async () => {
+    const { createOpenAIAdapter, RateLimitError } = await import('../src/llm.js');
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: (name) => ({ 'retry-after-ms': '7500', 'retry-after': '999' })[name.toLowerCase()] || null },
+      text: async () => '{"error":"too many requests"}',
+    });
+    try {
+      const adapter = createOpenAIAdapter({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: 'k' });
+      await assert.rejects(() => adapter.call('hi'), (err) => {
+        assert.ok(err instanceof RateLimitError);
+        assert.equal(err.retryAfterMs, 7500);
+        return true;
+      });
+    } finally { global.fetch = originalFetch; }
+  });
+
+  test('throws RateLimitError on HTTP 429 with Retry-After (seconds)', async () => {
+    const { createOpenAIAdapter, RateLimitError } = await import('../src/llm.js');
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: (name) => name.toLowerCase() === 'retry-after' ? '45' : null },
+      text: async () => '',
+    });
+    try {
+      const adapter = createOpenAIAdapter({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: 'k' });
+      await assert.rejects(() => adapter.call('hi'), (err) => {
+        assert.ok(err instanceof RateLimitError);
+        assert.equal(err.retryAfterMs, 45_000);
+        return true;
+      });
+    } finally { global.fetch = originalFetch; }
+  });
+
+  test('throws RateLimitError on HTTP 429 with no headers (60s fallback)', async () => {
+    const { createOpenAIAdapter, RateLimitError } = await import('../src/llm.js');
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      text: async () => '',
+    });
+    try {
+      const adapter = createOpenAIAdapter({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: 'k' });
+      await assert.rejects(() => adapter.call('hi'), (err) => {
+        assert.ok(err instanceof RateLimitError);
+        assert.equal(err.retryAfterMs, 60_000);
+        return true;
+      });
+    } finally { global.fetch = originalFetch; }
+  });
+
+  test('still throws plain Error on non-429 (e.g. HTTP 500)', async () => {
+    const { createOpenAIAdapter, RateLimitError } = await import('../src/llm.js');
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({
+      ok: false,
+      status: 500,
+      headers: { get: () => null },
+      text: async () => 'internal error',
+    });
+    try {
+      const adapter = createOpenAIAdapter({ baseUrl: 'https://example.test/v1', model: 'm', apiKey: 'k' });
+      await assert.rejects(() => adapter.call('hi'), (err) => {
+        assert.ok(!(err instanceof RateLimitError), 'must not be RateLimitError');
+        assert.match(err.message, /HTTP 500/);
+        return true;
+      });
+    } finally { global.fetch = originalFetch; }
+  });
+});

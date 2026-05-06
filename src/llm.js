@@ -112,6 +112,13 @@ export function createOpenAIAdapter(config) {
       if (!response.ok) {
         // Drain the body so the underlying socket isn't held until GC
         const errBody = await response.text().catch(() => '');
+        if (response.status === 429) {
+          const retryAfterMs = parseRetryAfter(
+            response.headers.get('retry-after-ms'),
+            response.headers.get('retry-after')
+          );
+          throw new RateLimitError(retryAfterMs, baseUrl);
+        }
         const snippet = errBody ? ` - ${errBody.slice(0, 200)}` : '';
         throw new Error(`LLM request failed: HTTP ${response.status}${snippet}`);
       }
