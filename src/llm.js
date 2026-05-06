@@ -349,6 +349,7 @@ export async function retryTransient(fn, opts = {}) {
   const baseMs = opts.baseMs ?? LLM_RETRY_BASE_MS;
   const sleep = opts.sleep || defaultSleep;
   const isTransient = opts.isTransient || isTransientLLMError;
+  const waitFn = opts.waitForUserResume || waitForUserResume;
   let lastErr;
   let attempt = 0;
   while (true) {
@@ -361,6 +362,11 @@ export async function retryTransient(fn, opts = {}) {
         console.log(`[llm] rate-limited; sleeping ${Math.round(ms / 1000)}s before retry`);
         await sleep(ms);
         console.log(`[llm] resuming after ${Math.round(ms / 1000)}s wait`);
+        continue;  // attempt unchanged
+      }
+      if (err instanceof ClaudeCliRateLimitError) {
+        await waitFn();
+        console.log('[llm] resuming after user signal');
         continue;  // attempt unchanged
       }
       if (attempt >= maxRetries || !isTransient(err)) throw err;

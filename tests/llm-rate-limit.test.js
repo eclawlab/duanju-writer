@@ -328,3 +328,39 @@ describe('waitForUserResume — non-TTY mode', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
+
+describe('retryTransient handles ClaudeCliRateLimitError', () => {
+  test('calls waitForUserResume then retries', async () => {
+    const { retryTransient, ClaudeCliRateLimitError } = await import('../src/llm.js');
+    let waitedTimes = 0;
+    let calls = 0;
+    const fakeWait = async () => { waitedTimes++; };
+    const fn = async () => {
+      calls++;
+      if (calls === 1) throw new ClaudeCliRateLimitError();
+      return 'ok';
+    };
+    const result = await retryTransient(fn, {
+      sleep: async () => {},
+      maxRetries: 0,
+      waitForUserResume: fakeWait,
+    });
+    assert.equal(result, 'ok');
+    assert.equal(waitedTimes, 1);
+    assert.equal(calls, 2);
+  });
+
+  test('multiple ClaudeCliRateLimitErrors do not consume retry budget', async () => {
+    const { retryTransient, ClaudeCliRateLimitError } = await import('../src/llm.js');
+    let calls = 0;
+    const fakeWait = async () => {};
+    const fn = async () => {
+      calls++;
+      if (calls < 4) throw new ClaudeCliRateLimitError();
+      return 'ok';
+    };
+    const result = await retryTransient(fn, { sleep: async () => {}, maxRetries: 0, waitForUserResume: fakeWait });
+    assert.equal(result, 'ok');
+    assert.equal(calls, 4);
+  });
+});
