@@ -63,6 +63,10 @@ export function updateCharacter(state, name, updates) {
  * @param {{ name: string, status: string, holder: string|null, location: string|null }} item
  */
 export function addItem(state, { name, status, holder, location }) {
+  if (!name) {
+    console.warn(`[drama-state] addItem: skipping entry with missing name`);
+    return;
+  }
   if (state.items[name]) {
     console.warn(`[drama-state] addItem: overwriting existing item "${name}"`);
   }
@@ -90,6 +94,10 @@ export function updateItem(state, name, updates) {
  * @param {{ name: string, status: string }} location
  */
 export function addLocation(state, { name, status }) {
+  if (!name) {
+    console.warn(`[drama-state] addLocation: skipping entry with missing name`);
+    return;
+  }
   if (state.locations[name]) {
     console.warn(`[drama-state] addLocation: overwriting existing location "${name}"`);
   }

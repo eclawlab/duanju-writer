@@ -126,6 +126,40 @@ describe('R3 Fix #2 — drama-state silent overwrite warnings', () => {
     assert.ok(warnings.some(w => w.includes('addLocation') && w.includes('Forest')));
   });
 
+  test('addItem skips entries with missing name (no undefined-keyed collision)', async () => {
+    const { createState, addItem } = await import('../src/drama-state.js');
+    const state = createState();
+    const warnings = captureWarn(() => {
+      addItem(state, { status: 'sharp', holder: null, location: 'armory' });
+      addItem(state, { name: '', status: 'broken', holder: null, location: 'armory' });
+      addItem(state, { name: null, status: 'broken', holder: null, location: 'armory' });
+    });
+    assert.equal(state.items.undefined, undefined, 'should not store under undefined key');
+    assert.equal(Object.keys(state.items).length, 0, 'should not store malformed entries');
+    assert.ok(
+      warnings.every(w => !w.includes('overwriting')),
+      `should not produce overwriting warning; got: ${JSON.stringify(warnings)}`,
+    );
+    assert.ok(warnings.some(w => w.includes('addItem') && w.includes('missing name')));
+  });
+
+  test('addLocation skips entries with missing name (no undefined-keyed collision)', async () => {
+    const { createState, addLocation } = await import('../src/drama-state.js');
+    const state = createState();
+    const warnings = captureWarn(() => {
+      addLocation(state, { status: 'open' });
+      addLocation(state, { name: '', status: 'destroyed' });
+      addLocation(state, { name: null, status: 'destroyed' });
+    });
+    assert.equal(state.locations.undefined, undefined, 'should not store under undefined key');
+    assert.equal(Object.keys(state.locations).length, 0, 'should not store malformed entries');
+    assert.ok(
+      warnings.every(w => !w.includes('overwriting')),
+      `should not produce overwriting warning; got: ${JSON.stringify(warnings)}`,
+    );
+    assert.ok(warnings.some(w => w.includes('addLocation') && w.includes('missing name')));
+  });
+
   test('addRevelation warns on duplicate id (markRevealed is non-deterministic with dups)', async () => {
     const { createState, addRevelation } = await import('../src/drama-state.js');
     const state = createState();
