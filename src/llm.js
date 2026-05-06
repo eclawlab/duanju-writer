@@ -313,6 +313,13 @@ export async function retryTransient(fn, opts = {}) {
       return await fn(attempt);
     } catch (err) {
       lastErr = err;
+      if (err instanceof RateLimitError) {
+        const ms = err.retryAfterMs;
+        console.log(`[llm] rate-limited; sleeping ${Math.round(ms / 1000)}s before retry`);
+        await sleep(ms);
+        console.log(`[llm] resuming after ${Math.round(ms / 1000)}s wait`);
+        continue;  // attempt unchanged
+      }
       if (attempt >= maxRetries || !isTransient(err)) throw err;
       const delay = baseMs * 2 ** attempt + Math.floor(Math.random() * 1000);
       await sleep(delay);

@@ -215,3 +215,48 @@ describe('Claude CLI adapter rate-limit handling', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
+
+describe('retryTransient handles RateLimitError', () => {
+  test('sleeps retryAfterMs and retries without consuming budget', async () => {
+    const { retryTransient, RateLimitError } = await import('../src/llm.js');
+    let calls = 0;
+    let totalSlept = 0;
+    const fakeSleep = async (ms) => { totalSlept += ms; };
+    const fn = async () => {
+      calls++;
+      if (calls < 5) throw new RateLimitError(7000);
+      return 'ok';
+    };
+    const result = await retryTransient(fn, { sleep: fakeSleep, maxRetries: 1 });
+    assert.equal(result, 'ok');
+    assert.equal(calls, 5, 'must call fn 5 times despite maxRetries=1');
+    assert.equal(totalSlept, 4 * 7000, 'must sleep retryAfterMs each rate-limit');
+  });
+
+  test('rate-limit waits do not exhaust the transient retry budget', async () => {
+    const { retryTransient, RateLimitError } = await import('../src/llm.js');
+    let calls = 0;
+    const fakeSleep = async () => {};
+    const fn = async () => {
+      calls++;
+      if (calls <= 3) throw new RateLimitError(50);
+      if (calls === 4) throw new Error('LLM request failed: HTTP 503');
+      return 'ok';
+    };
+    const result = await retryTransient(fn, { sleep: fakeSleep, maxRetries: 1 });
+    assert.equal(result, 'ok');
+    assert.equal(calls, 5, 'rate-limits free; one transient retry consumed; one final success');
+  });
+
+  test('non-RateLimitError still consumes retry budget', async () => {
+    const { retryTransient } = await import('../src/llm.js');
+    let calls = 0;
+    const fakeSleep = async () => {};
+    const fn = async () => {
+      calls++;
+      throw new Error('LLM request failed: HTTP 503');
+    };
+    await assert.rejects(() => retryTransient(fn, { sleep: fakeSleep, maxRetries: 2 }), /HTTP 503/);
+    assert.equal(calls, 3, 'one initial + two retries = 3 calls');
+  });
+});
