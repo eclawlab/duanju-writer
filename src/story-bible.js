@@ -146,16 +146,97 @@ function cleanJson(raw) {
   return s;
 }
 
+// Extract a balanced JSON object from surrounding prose. LLMs sometimes prefix
+// the response with explanatory text ("This input...", "I'll output...") even
+// when the prompt forbids it; falling back to slicing between the first { and
+// last } handles that case without losing strict-parse correctness on clean
+// responses.
+function extractJsonObject(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  try { return JSON.parse(text.slice(start, end + 1)); }
+  catch { return null; }
+}
+
+function parseJsonLoose(cleaned) {
+  try { return JSON.parse(cleaned); } catch {}
+  const extracted = extractJsonObject(cleaned);
+  if (extracted) return extracted;
+  return null;
+}
+
+// Always-on guard prepended to bible-extraction prompts. The Claude CLI
+// frequently treats short/structured prompts conversationally — opening with
+// "I'll write...", "Could you...", or commenting on input quality — which
+// breaks downstream JSON parsing. Placing this guard FIRST (before the
+// instruction body) and emphasizing the byte-level shape of the response
+// makes it much harder for the model to slip into chat mode. We deliberately
+// do NOT say "do not summarize input" — extraction *is* a structured summary,
+// and that wording confused the model into either refusing or making up its
+// own schema (returning beats / key_events / chapterNumber etc. instead of
+// the documented characters / events / hooks fields).
+const JSON_GUARD = [
+  '【系统指令 / SYSTEM】这是机器解析任务。你的输出会被 JSON.parse 直接读取。',
+  '- 输出的第一个字符必须是 {，最后一个字符必须是 }。',
+  '- 不要打招呼、不要解释、不要提问。',
+  '- 不要使用 markdown 代码框（不要 ```）。',
+  '- 不要在 JSON 之前或之后输出任何文字。',
+  '- 即使输入信息不完整，也必须基于可见内容尽力提取，绝不要请求澄清。',
+  '- 必须严格使用下文【输出结构】中给出的字段名，不得改名（例如：用 events 而不是 beats / key_events / plotPoints；用 characters 而不是 characters_list / actor_list）。',
+  '- 必须严格使用下文给出的每项内嵌字段名（例如 events 数组的每项必须有 summary, actors, isTurningPoint, isReveal — 不得替换为 description / type / id）。',
+  '',
+].join('\n');
+
+// Escalation prepended on retry paths. Names the required fields explicitly
+// so the model has a concrete correction target instead of just "try again".
+const STRICT_RETRY_HINT = [
+  '【严格重试 / STRICT RETRY】上一次输出无法被采用（解析失败、字段名不匹配、或必需字段为空）。',
+  '- 这次只能输出一个 JSON 对象，从 { 到 }。',
+  '- 不要解释失败原因。不要复述本提示。直接输出 JSON。',
+  '- 必须基于输入内容提取真实数据；不要返回空数组占位。',
+  '- 字段名必须与下文【输出结构】中的 schema 完全一致（含大小写）。',
+  '',
+].join('\n');
+
+// Defense-in-depth: if the model still ignores the schema instructions and
+// invents its own field names (beats, key_events, chapterNumber, ...), the
+// downstream synthesizer silently degrades. Catch the schema mismatch here so
+// the strict-mode retry sees a concrete error, not garbage data.
+function ensureChapterFactsShape(parsed) {
+  const missing = [];
+  if (!Array.isArray(parsed.characters)) missing.push('characters[]');
+  if (!Array.isArray(parsed.events)) missing.push('events[]');
+  if (missing.length === 0) return null;
+  const seenKeys = Object.keys(parsed).slice(0, 8).join(', ');
+  return `missing required fields: ${missing.join(', ')} (got: ${seenKeys})`;
+}
+
+function ensureBibleShape(parsed) {
+  const missing = [];
+  if (!Array.isArray(parsed.characters)) missing.push('characters[]');
+  if (!Array.isArray(parsed.events)) missing.push('events[]');
+  if (missing.length === 0) return null;
+  const seenKeys = Object.keys(parsed).slice(0, 8).join(', ');
+  return `missing required fields: ${missing.join(', ')} (got: ${seenKeys})`;
+}
+
 export async function extractChapterFacts(chapter, opts = {}) {
   const llmFn = opts.llmFn || defaultCallLLM;
   const role = opts.role || 'research';
   const section = loadPromptSection('Per-Chapter Extraction');
-  const prompt = `${section}\n\n## 输入\n\n章节编号：${chapter.chapterIndex}\n章节标题：${chapter.title || '(无)'}\n\n${chapter.prose}`;
+  const retryHint = opts.strict ? STRICT_RETRY_HINT : '';
+  const prompt = `${JSON_GUARD}${retryHint}${section}\n\n## 输入\n\n章节编号：${chapter.chapterIndex}\n章节标题：${chapter.title || '(无)'}\n\n${chapter.prose}`;
   const raw = await llmFn(prompt, role);
   const cleaned = cleanJson(raw);
-  let parsed;
-  try { parsed = JSON.parse(cleaned); }
-  catch (err) { throw new Error(`extractChapterFacts: failed to parse JSON: ${err.message}`); }
+  const parsed = parseJsonLoose(cleaned);
+  if (!parsed) {
+    throw new Error(`extractChapterFacts: failed to parse JSON: Unexpected token ${JSON.stringify(cleaned.slice(0, 10))}... is not valid JSON`);
+  }
+  const shapeErr = ensureChapterFactsShape(parsed);
+  if (shapeErr) {
+    throw new Error(`extractChapterFacts: schema mismatch — ${shapeErr}`);
+  }
   return { ...parsed, chapterIndex: chapter.chapterIndex };
 }
 
@@ -164,16 +245,22 @@ export async function synthesizeBible(chapterFacts, opts = {}) {
   const role = opts.role || 'outline';
   const sourceTitle = opts.sourceTitle || '';
   const section = loadPromptSection('Synthesis');
-  const prompt = `${section}\n\n## 输入\n\n源标题：${sourceTitle}\n\nChapterFacts JSON：\n${JSON.stringify(chapterFacts, null, 2)}`;
+  const retryHint = opts.strict ? STRICT_RETRY_HINT : '';
+  const prompt = `${JSON_GUARD}${retryHint}${section}\n\n## 输入\n\n源标题：${sourceTitle}\n\nChapterFacts JSON：\n${JSON.stringify(chapterFacts, null, 2)}`;
   const raw = await llmFn(prompt, role);
   const cleaned = cleanJson(raw);
-  let bible;
-  try { bible = JSON.parse(cleaned); }
-  catch (err) { throw new Error(`synthesizeBible: failed to parse JSON: ${err.message}`); }
-  if (!Array.isArray(bible.characters) || bible.characters.length === 0) {
+  const bible = parseJsonLoose(cleaned);
+  if (!bible) {
+    throw new Error(`synthesizeBible: failed to parse JSON: Unexpected token ${JSON.stringify(cleaned.slice(0, 10))}... is not valid JSON`);
+  }
+  const shapeErr = ensureBibleShape(bible);
+  if (shapeErr) {
+    throw new Error(`synthesizeBible: schema mismatch — ${shapeErr}`);
+  }
+  if (bible.characters.length === 0) {
     throw new Error('synthesizeBible: bible has 0 characters — input may not be narrative');
   }
-  if (!Array.isArray(bible.events) || bible.events.length === 0) {
+  if (bible.events.length === 0) {
     throw new Error('synthesizeBible: bible has 0 events — input may not be narrative');
   }
   return { schemaVersion: SCHEMA_VERSION, ...bible };

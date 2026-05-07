@@ -130,7 +130,7 @@ export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = ()
       // produce content.
       log(`[bible] chapter ${chunk.chapterIndex} extraction failed: ${err.message} — retrying once`);
       try {
-        f = await extractChapterFacts(chunk, { llmFn });
+        f = await extractChapterFacts(chunk, { llmFn, strict: true });
       } catch (err2) {
         log(`[bible] chapter ${chunk.chapterIndex} retry failed: ${err2.message} — skipping with empty stub`);
         degradedChapters += 1;
@@ -142,7 +142,17 @@ export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = ()
   if (degradedChapters > 0) {
     log(`[bible] ${degradedChapters} of ${chapterChunks.length} chapters extracted as empty stubs`);
   }
-  const bible = await synthesizeBible(facts, { llmFn, sourceTitle: '' });
+  let bible;
+  try {
+    bible = await synthesizeBible(facts, { llmFn, sourceTitle: '' });
+  } catch (err) {
+    // Same recovery shape as the per-chapter loop: one strict-mode retry
+    // before letting the job-level retryTransient kick in. The synthesis
+    // step is the most expensive call in bible-extraction (full ChapterFacts
+    // round-trip), so a cheap in-place retry is worth the extra LLM hit.
+    log(`[bible] synthesis failed: ${err.message} — retrying once with strict mode`);
+    bible = await synthesizeBible(facts, { llmFn, sourceTitle: '', strict: true });
+  }
   const totalChars = chapterChunks.reduce((sum, c) => sum + c.prose.length, 0);
   const chapters = {
     schemaVersion: 1,
