@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { buildBibleBlock, buildProseBlock } from './story-bible.js';
+import { buildSelftellDirective } from './selftell.js';
 import {
   createState,
   addCharacter,
@@ -67,6 +68,9 @@ export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceChara
       const proseBlock = buildProseBlock(options.chapters, options.aggregateChapterRange, options.fidelity, 4000);
       if (proseBlock) template += '\n\n' + proseBlock + '\n';
     }
+  }
+  if (options.mode === 'selftell') {
+    template += '\n' + buildSelftellDirective(lang, 'plan');
   }
   return template.replace('{{outline}}', () => JSON.stringify(outline, null, 2));
 }
@@ -166,8 +170,9 @@ export async function generatePlan(outline, options = {}) {
   const chapters = options.chapters || null;
   const fidelity = options.fidelity || null;
   const aggregateChapterRange = options.aggregateChapterRange || null;
+  const mode = options.mode || 'default';
   const prompt = buildPlanPrompt(outline, lang, genre, referenceCharacter, referenceEvent, {
-    bible, chapters, fidelity, aggregateChapterRange,
+    bible, chapters, fidelity, aggregateChapterRange, mode,
   });
   const raw = await callLLM(prompt, 'plan');
   return parsePlan(raw);

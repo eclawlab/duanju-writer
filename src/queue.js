@@ -127,6 +127,7 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         fidelity: options.fidelity ?? null,
         episodesPerDrama: options.episodesPerDrama ?? null,
         clipsPerEpisode: options.clipsPerEpisode ?? null,
+        mode: options.mode ?? null,
       },
     };
     jobs.push(job);

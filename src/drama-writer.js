@@ -21,6 +21,7 @@ import { checkHookDensity } from './consistency.js';
 import { buildBibleBlock, buildProseBlock, compressBibleForEpisode } from './story-bible.js';
 import { generateSnowflake } from './snowflake.js';
 import { countWords } from './enrichment.js';
+import { buildSelftellDirective } from './selftell.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,10 @@ const OUTLINE_PATH = join(__dirname, '..', 'prompts', 'outline.md');
 const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
 
 export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
+
+// Selftell narration mode lives in selftell.js to keep this module from
+// growing further and to avoid circular imports from planner/snowflake.
+export { buildSelftellDirective };
 
 // ─── JSON extraction and repair ───────────────────────────────────────────────
 
@@ -98,6 +103,7 @@ async function parseJsonWithRepair(raw, label) {
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 
 export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
+  // options.mode: 'selftell' switches the prompt into first-person POV directives.
   const templateFile = OUTLINE_PATH;
   let template = readFileSync(templateFile, 'utf8');
   const style = getStyleSafe(styleKey);
@@ -138,6 +144,9 @@ export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '',
       ? `在合理对应章节时填写 [start, end]（章节区间），否则可省略。`
       : `不填写。`;
     template += `\n\n请在每集 episode 对象中加入 \`sourceChapterRange: [start, end]\` 字段：\n- ${options.fidelity}: ${rangeRule}\n`;
+  }
+  if (options.mode === 'selftell') {
+    template += '\n' + buildSelftellDirective(lang, 'outline');
   }
   return template.replace('{{materials}}', () => JSON.stringify(materials, null, 2));
 }
@@ -264,7 +273,8 @@ export async function generateOutline(materials, options = {}) {
   const bible = options.bible || null;
   const fidelity = options.fidelity || null;
   const totalChapters = options.totalChapters || 0;
-  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent, { bible, fidelity, totalChapters });
+  const mode = options.mode || 'default';
+  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent, { bible, fidelity, totalChapters, mode });
   const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }
@@ -366,6 +376,10 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
     filled += `\n\n请在每集 episode 对象中加入 \`sourceChapterRange: [start, end]\` 字段：\n- ${fidelity}: ${rangeRule}\n`;
   }
 
+  if (options.mode === 'selftell') {
+    filled += '\n' + buildSelftellDirective(lang, 'tail-outline');
+  }
+
   return filled;
 }
 
@@ -459,6 +473,7 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
     bible: options.bible,
     fidelity: options.fidelity,
     totalChapters: options.totalChapters,
+    mode: options.mode,
   });
   const raw = await callLLM(prompt, 'tail-outline');
   try {
@@ -520,6 +535,8 @@ export function buildClipPrompt(ctx) {
     chapters = null,
     fidelity = null,
     episodeChapterRange = null,
+    mode = 'default',
+    lang = 'cn',
   } = ctx || {};
 
   let template = readFileSync(CLIPS_PROMPT_PATH, 'utf8');
@@ -545,6 +562,10 @@ export function buildClipPrompt(ctx) {
       const proseBlock = buildProseBlock(chapters, episodeChapterRange, fidelity, 4000);
       if (proseBlock) rendered += '\n\n' + proseBlock + '\n';
     }
+  }
+
+  if (mode === 'selftell') {
+    rendered += '\n' + buildSelftellDirective(lang, 'clip');
   }
 
   return rendered;
@@ -644,7 +665,123 @@ export async function parseClip(raw) {
 export async function generateClip(ctx) {
   const prompt = buildClipPrompt(ctx);
   const raw = await callLLM(prompt, 'clip');
-  return await parseClip(raw);
+  const parsed = await parseClip(raw);
+  if (ctx && ctx.mode === 'selftell') {
+    return enforceSelftellPOV(parsed, ctx);
+  }
+  return parsed;
+}
+
+// ─── Selftell POV enforcement ────────────────────────────────────────────────
+//
+// Heuristic guard: if the LLM slips into third-person about the protagonist in
+// selftell mode (e.g. emits "陆衡 推开大门" instead of "我推开大门"), substitute
+// the protagonist's name with "我" in narrator-context fields. We only touch
+// the protagonist's name, not other characters'. Keeps the CN-char limits
+// intact (substitution never grows the field).
+//
+// Substring-overlap safety: a co-star named "李婷" must NOT be mangled when the
+// protagonist is "李". We protect every OTHER character's name with a
+// unicode-sentinel placeholder before the protagonist substitution and restore
+// them afterwards, so partial-name matches are impossible regardless of the
+// regex.
+export function enforceSelftellPOV(clip, ctx = {}) {
+  const protagonist = pickSelftellProtagonist(ctx.outline);
+  if (!protagonist) return clip;
+  const otherNames = collectOtherCharacterNames(ctx.outline, protagonist);
+  const subFirstPerson = (s) => substituteProtagonist(s, protagonist, otherNames);
+  const out = {
+    ...clip,
+    setting: subFirstPerson(clip.setting),
+    action: subFirstPerson(clip.action),
+    hook: subFirstPerson(clip.hook),
+  };
+  // For dialogue, only rewrite content inside [narrator] blocks. [character:Name]
+  // blocks may legitimately name the protagonist as a speaker.
+  if (typeof clip.dialogue === 'string') {
+    out.dialogue = rewriteNarratorBlocks(clip.dialogue, protagonist, otherNames);
+  }
+  // Conclusion title/overview also flow downstream verbatim (uploader sends
+  // them to the platform). Rewrite them in selftell mode so the ending stays
+  // in first person.
+  if (clip.conclusion && typeof clip.conclusion === 'object') {
+    out.conclusion = {
+      ...clip.conclusion,
+      title: subFirstPerson(clip.conclusion.title),
+      overview: subFirstPerson(clip.conclusion.overview),
+    };
+  }
+  // Re-compose content from the (possibly rewritten) beats so the final clip
+  // string reflects the substitution.
+  try {
+    out.content = composeScene({
+      setting: out.setting,
+      action: out.action,
+      dialogue: out.dialogue,
+      hook: out.hook,
+    });
+  } catch {
+    // composeScene throws only if every beat is empty — keep original content.
+  }
+  return out;
+}
+
+function pickSelftellProtagonist(outline) {
+  if (!outline || !Array.isArray(outline.characters)) return null;
+  // Prefer an explicitly tagged POV character; fall back to the first character.
+  const tagged = outline.characters.find(c => {
+    if (!c) return false;
+    const hay = [c.role, c.tag, c.pov, c.note].filter(Boolean).join(' ');
+    return /selftell|自述|主角\s*\(?自述/i.test(hay);
+  });
+  const chosen = tagged || outline.characters[0];
+  return chosen?.name || null;
+}
+
+function collectOtherCharacterNames(outline, protagonist) {
+  if (!outline || !Array.isArray(outline.characters)) return [];
+  // Only sentinelize names that actually contain the protagonist's name as a
+  // substring — those are the ones at risk of partial-name mangling. We sort
+  // by descending length so longer names are protected first (a name like
+  // "李婷婷" must be sentinelized before "李婷").
+  return outline.characters
+    .map(c => c?.name)
+    .filter(n => typeof n === 'string' && n.length > 0 && n !== protagonist && n.includes(protagonist))
+    .sort((a, b) => b.length - a.length);
+}
+
+const SENTINEL = '';
+
+function substituteProtagonist(s, protagonist, otherNames) {
+  if (typeof s !== 'string' || !s.includes(protagonist)) return s;
+  let working = s;
+  // Replace each other-name occurrence with a unique sentinel before touching
+  // the protagonist's name; restore them after.
+  const replacements = [];
+  for (let i = 0; i < otherNames.length; i++) {
+    const placeholder = SENTINEL + i + SENTINEL;
+    working = working.split(otherNames[i]).join(placeholder);
+    replacements.push({ placeholder, original: otherNames[i] });
+  }
+  working = working.split(protagonist).join('我');
+  for (const { placeholder, original } of replacements) {
+    working = working.split(placeholder).join(original);
+  }
+  return working;
+}
+
+function rewriteNarratorBlocks(dialogue, protagonist, otherNames) {
+  // Dialogue is a sequence of [narrator]\n... or [character:Name]\n... blocks
+  // separated by blank lines. Walk block by block and only rewrite narrator
+  // blocks. We deliberately leave [character:ProtagonistName] alone so the
+  // protagonist may still appear as a speaker.
+  const blocks = dialogue.split(/\n(?=\[(?:narrator|character:))/);
+  return blocks.map((block) => {
+    if (/^\[narrator\]/i.test(block)) {
+      return substituteProtagonist(block, protagonist, otherNames);
+    }
+    return block;
+  }).join('\n');
 }
 
 // ─── Retry & fallback ────────────────────────────────────────────────────────
@@ -655,18 +792,22 @@ export async function generateClip(ctx) {
  * model can correct itself.
  */
 export function buildRetryClipPrompt(ctx = {}) {
-  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆' } = ctx;
+  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', mode = 'default', lang = 'cn' } = ctx;
   const tail = isConclusion
     ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${ending}" } and you may leave "hook" empty.`
     : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
-  return [
+  const parts = [
     `Previous attempt failed: ${prevError || 'invalid output'}.`,
     `Generate one short-drama clip (10–15 seconds) based on this summary:`,
     clipSummary,
     `CN-char limits: setting≤20, action≤80, dialogue≤60, hook≤30.`,
     `Output ONLY a single JSON object matching the clip schema. No markdown fences, no commentary.`,
     tail,
-  ].join('\n');
+  ];
+  if (mode === 'selftell') {
+    parts.push(buildSelftellDirective(lang, 'clip'));
+  }
+  return parts.join('\n');
 }
 
 /**
@@ -679,24 +820,55 @@ export function buildFallbackClip(ctx = {}) {
     summary = '',
     isConclusion = false,
     ending = '爽爆',
+    mode = 'default',
+    outline = null,
   } = ctx;
   const truncate = (s, n) => {
     const chars = (s || '').match(/[一-鿿㐀-䶿]/g) || [];
     return chars.slice(0, n).join('');
   };
+  const isSelftell = mode === 'selftell';
   const setting  = '场景 · 时间 · 氛围';
-  const action   = truncate(summary || '动作描述', 80) || '动作描述';
-  const dialogue = '[narrator]\n' + (truncate(summary, 50) || '叙述');
+  let action     = truncate(summary || '动作描述', 80) || '动作描述';
+  let dialogue   = '[narrator]\n' + (truncate(summary, 50) || '叙述');
   const hook     = isConclusion ? '' : '镜头特写关键道具';
   const durationSec = 12;
+  if (isSelftell) {
+    // Cheap first-person rewrite of the fallback: substitute the protagonist's
+    // name with "我", and prepend "我：" if the action still doesn't open in
+    // first person. Use the overlap-safe substitution so co-stars whose name
+    // contains the protagonist as a substring aren't mangled. The substitution
+    // never grows CN-char counts (1 char in, 1 char out); the prepend trims
+    // to keep action under the 80 CN-char cap.
+    const proto = pickSelftellProtagonist(outline);
+    if (proto) {
+      const others = collectOtherCharacterNames(outline, proto);
+      action = substituteProtagonist(action, proto, others);
+      dialogue = substituteProtagonist(dialogue, proto, others);
+    }
+    if (!action.startsWith('我')) {
+      action = '我：' + truncate(action, 78);
+    }
+  }
 
   const content = composeScene({ setting, action, dialogue, hook });
   let conclusion = null;
   if (isConclusion) {
     const safeEnding = VALID_ENDINGS.includes(ending) ? ending : '爽爆';
+    let concTitle = '结局';
+    let concOverview = summary || '故事结束';
+    if (isSelftell) {
+      // Rewrite the conclusion fields too so the ending stays in first person.
+      const proto = pickSelftellProtagonist(outline);
+      if (proto) {
+        const others = collectOtherCharacterNames(outline, proto);
+        concTitle = substituteProtagonist(concTitle, proto, others);
+        concOverview = substituteProtagonist(concOverview, proto, others);
+      }
+    }
     conclusion = {
-      title: '结局',
-      overview: summary || '故事结束',
+      title: concTitle,
+      overview: concOverview,
       type: 'STORY_END',
       ending: ENDING_LABEL_TO_ENUM[safeEnding],
     };
@@ -769,6 +941,7 @@ export async function generateDrama(materials, options = {}) {
   const bible = options.bible || null;
   const chapters = options.chapters || null;
   const fidelity = options.fidelity || null;
+  const mode = options.mode || 'default';
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -792,7 +965,7 @@ export async function generateDrama(materials, options = {}) {
   if (!snowflake) {
     try {
       log('Building story architecture (Snowflake method)...');
-      snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, log });
+      snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, mode, log });
       if (options.onSnowflake) options.onSnowflake(snowflake);
       log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
     } catch (err) {
@@ -810,7 +983,7 @@ export async function generateDrama(materials, options = {}) {
       ? { ...materials, snowflake }
       : materials;
     const totalChapters = chapters ? chapters.length : 0;
-    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters });
+    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters, mode });
     if (bible && fidelity === 'tight') {
       validateOutlineChapterCoverage(outline, fidelity, totalChapters);
     }
@@ -830,7 +1003,7 @@ export async function generateDrama(materials, options = {}) {
     try {
       log('Planning scene details, events, and revelations...');
       const aggregateChapterRange = chapters && chapters.length ? [1, chapters.length] : null;
-      plan = await generatePlan(outline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters, fidelity, aggregateChapterRange });
+      plan = await generatePlan(outline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters, fidelity, aggregateChapterRange, mode });
       if (options.onPlan) options.onPlan(plan);
       log(`Plan: ${plan.clips.length} clips planned, ${(plan.revelations || []).length} revelations scheduled`);
     } catch (planErr) {
@@ -1053,6 +1226,8 @@ export async function generateDrama(materials, options = {}) {
           chapters,
           fidelity,
           episodeChapterRange,
+          mode,
+          lang,
         });
       } catch (firstErr) {
         log(`[clip failed] ${firstErr.message} — retrying with simplified prompt...`);
@@ -1063,9 +1238,12 @@ export async function generateDrama(materials, options = {}) {
             prevError: firstErr.message,
             isConclusion: isConcl,
             ending: concEnding,
+            mode,
+            lang,
           });
           const retryRaw = await callLLM(retryPrompt, 'clip');
           scene = await parseClip(retryRaw);
+          if (mode === 'selftell') scene = enforceSelftellPOV(scene, { outline });
         } catch (retryErr) {
           log(`[clip retry failed] ${retryErr.message} — using fallback clip`);
           wlog('clip_fallback', { episodeIndex: ep.episodeIndex, clipIndex: i, error: retryErr.message });
@@ -1074,6 +1252,8 @@ export async function generateDrama(materials, options = {}) {
             summary: plan_clip.summary || '',
             isConclusion: isConcl,
             ending: concEnding,
+            mode,
+            outline,
           });
         }
       }
@@ -1156,7 +1336,7 @@ export async function generateDrama(materials, options = {}) {
 
       // Compress scene into history
       try {
-        const compressed = await compressClips([scene], lang);
+        const compressed = await compressClips([scene], lang, mode);
         episodeCompressedHistory.push(compressed);
       } catch (err) {
         log(`[compression failed] ${err.message}`);
@@ -1205,9 +1385,22 @@ export async function generateDrama(materials, options = {}) {
       const fallbackEnding = VALID_ENDINGS.includes(ep.ending) ? ep.ending : '爽爆';
       if (!lastClip.conclusion) {
         log(`  Ending episode "${ep.title}" missing conclusion — injecting fallback`);
+        let concTitle = ep.title;
+        let concOverview = ep.clipPlan[ep.clipPlan.length - 1]?.summary || ep.title;
+        // In selftell mode the injected conclusion is downstream-visible (the
+        // uploader sends title/overview to the platform). Rewrite the
+        // protagonist's name to "我" so the ending stays in first person.
+        if (mode === 'selftell') {
+          const proto = pickSelftellProtagonist(outline);
+          if (proto) {
+            const others = collectOtherCharacterNames(outline, proto);
+            concTitle = substituteProtagonist(concTitle, proto, others);
+            concOverview = substituteProtagonist(concOverview, proto, others);
+          }
+        }
         lastClip.conclusion = {
-          title: ep.title,
-          overview: ep.clipPlan[ep.clipPlan.length - 1]?.summary || ep.title,
+          title: concTitle,
+          overview: concOverview,
           type: 'STORY_END',
           ending: ENDING_LABEL_TO_ENUM[fallbackEnding],
         };

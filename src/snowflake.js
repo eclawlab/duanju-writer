@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { buildBibleBlock } from './story-bible.js';
+import { buildSelftellDirective } from './selftell.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = join(__dirname, '..', 'prompts', 'snowflake.md');
@@ -90,6 +91,9 @@ export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'c
   if (options.bible && options.fidelity) {
     instructions += '\n\n' + buildBibleBlock(options.bible, options.fidelity);
   }
+  if (options.mode === 'selftell') {
+    instructions += '\n\n' + buildSelftellDirective(lang, 'snowflake');
+  }
   template = template.replace('{{partInstructions}}', () => instructions);
 
   return template;
@@ -102,13 +106,14 @@ export async function generateSnowflake(materials, options = {}) {
   const referenceEvent = options.referenceEvent || '';
   const bible = options.bible || null;
   const fidelity = options.fidelity || null;
+  const mode = options.mode || 'default';
   const log = options.log || (() => {});
   const parts = [];
   const localized = lang === 'cn' ? PARTS_CN : PARTS;
 
   for (let i = 0; i < localized.length; i++) {
     log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
-    const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent, { bible, fidelity });
+    const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent, { bible, fidelity, mode });
     const raw = await callLLM(prompt, 'outline');
     // Try to parse JSON, fall back to raw text
     try {

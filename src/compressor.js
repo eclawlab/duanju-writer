@@ -1,4 +1,5 @@
 import { callLLM } from './llm.js';
+import { buildSelftellDirective } from './selftell.js';
 
 // ─── JSON extraction helpers (same pattern as drama-writer.js / collector.js) ────────
 
@@ -35,13 +36,18 @@ function clipBody(c) {
   return c.content || '';
 }
 
-export function buildCompressPrompt(clips, lang = 'cn') {
+export function buildCompressPrompt(clips, lang = 'cn', mode = 'default') {
   const clipBlocks = clips.map((s, i) =>
     `### Clip ${i + 1}\n${clipBody(s)}`
   ).join('\n\n');
 
+  // The compressed summary feeds priorClipDigest of subsequent clips, so in
+  // selftell mode it must also stay in first person — otherwise downstream
+  // clips receive a third-person summary as context, which leaks back into
+  // their narration.
+  let base;
   if (lang === 'cn') {
-    return [
+    base = [
       '你是一位专业的故事分析师。请阅读以下场景内容，并将其压缩成结构化的 JSON 摘要，以便注入到后续场景的上下文中。',
       '',
       '## 场景内容',
@@ -63,30 +69,37 @@ export function buildCompressPrompt(clips, lang = 'cn') {
       '示例格式：',
       '{"summary":"...","characterActions":["..."],"plotProgress":["..."],"emotionalArc":"...","stateChanges":{"characters":["..."],"items":["..."]}}',
     ].join('\n');
+  } else {
+    base = [
+      'You are a professional story analyst. Read the following scene content and compress it into a structured JSON summary for injection into future scene context.',
+      '',
+      '## Scene Content',
+      '',
+      clipBlocks,
+      '',
+      '## Output Requirements',
+      '',
+      'Return ONLY a valid JSON object with no explanation and no markdown code fences. The JSON object must contain these fields:',
+      '',
+      '- `summary` (string): a concise overall summary of all clips',
+      '- `characterActions` (array): list of key actions taken by each character',
+      '- `plotProgress` (array): list of major plot threads that have been advanced',
+      '- `emotionalArc` (string): the overall emotional tone of these clips',
+      '- `stateChanges` (object): with two array fields:',
+      '  - `characters`: list of character state changes',
+      '  - `items`: list of item/object state changes',
+      '',
+      'Example format:',
+      '{"summary":"...","characterActions":["..."],"plotProgress":["..."],"emotionalArc":"...","stateChanges":{"characters":["..."],"items":["..."]}}',
+    ].join('\n');
   }
-
-  return [
-    'You are a professional story analyst. Read the following scene content and compress it into a structured JSON summary for injection into future scene context.',
-    '',
-    '## Scene Content',
-    '',
-    clipBlocks,
-    '',
-    '## Output Requirements',
-    '',
-    'Return ONLY a valid JSON object with no explanation and no markdown code fences. The JSON object must contain these fields:',
-    '',
-    '- `summary` (string): a concise overall summary of all clips',
-    '- `characterActions` (array): list of key actions taken by each character',
-    '- `plotProgress` (array): list of major plot threads that have been advanced',
-    '- `emotionalArc` (string): the overall emotional tone of these clips',
-    '- `stateChanges` (object): with two array fields:',
-    '  - `characters`: list of character state changes',
-    '  - `items`: list of item/object state changes',
-    '',
-    'Example format:',
-    '{"summary":"...","characterActions":["..."],"plotProgress":["..."],"emotionalArc":"...","stateChanges":{"characters":["..."],"items":["..."]}}',
-  ].join('\n');
+  if (mode === 'selftell') {
+    const extra = lang === 'cn'
+      ? '\n\n注意：本剧使用主角自述（selftell）模式。`summary` 与 `emotionalArc` 必须保持主角第一人称（"我"、"我的"）视角；`characterActions` 中关于主角的条目也写作"我……"。其他角色仍按其姓名描述。'
+      : '\n\nNote: this drama uses selftell mode (first-person retelling by the protagonist). The `summary` and `emotionalArc` MUST stay in the protagonist\'s first person ("I", "my"); entries in `characterActions` referring to the protagonist also use "I…". Other characters are still named normally.';
+    base += extra + '\n' + buildSelftellDirective(lang, 'general');
+  }
+  return base;
 }
 
 // ─── Output parser ─────────────────────────────────────────────────────────────
@@ -106,8 +119,8 @@ export function parseCompressorOutput(raw) {
 
 // ─── Compress via Claude ───────────────────────────────────────────────────────
 
-export async function compressClips(clips, lang = 'cn') {
-  const prompt = buildCompressPrompt(clips, lang);
+export async function compressClips(clips, lang = 'cn', mode = 'default') {
+  const prompt = buildCompressPrompt(clips, lang, mode);
   const raw = await callLLM(prompt, 'compress');
   return parseCompressorOutput(raw);
 }

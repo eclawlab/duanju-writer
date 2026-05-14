@@ -262,6 +262,7 @@ async function processJob(jobId, options = {}) {
     }
   }
   const fidelity = options.fidelity || config.fidelity || 'medium';
+  const mode = options.mode || config.mode || 'default';
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
@@ -273,6 +274,7 @@ async function processJob(jobId, options = {}) {
     referenceEvent: referenceEvent ? `${referenceEvent.length} chars` : '(none)',
     referenceStory: referenceStory ? `${referenceStory.length} chars` : '(none)',
     fidelity,
+    mode,
   });
 
   try {
@@ -351,7 +353,7 @@ async function processJob(jobId, options = {}) {
     if (!snowflake) {
       try {
         log('Building story architecture (Snowflake method)...');
-        snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, bible, fidelity, log });
+        snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, bible, fidelity, mode, log });
         saveArtifact(jobId, 'snowflake.json', snowflake);
       } catch (err) {
         log(`[snowflake failed] ${err.message} — continuing without`);
@@ -365,7 +367,7 @@ async function processJob(jobId, options = {}) {
       log('Generating base story outline...');
       const enrichedMaterials = snowflake ? { ...materials, snowflake } : materials;
       const totalChapters = chapters ? chapters.chapters.length : 0;
-      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters });
+      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters, mode });
       if (bible && fidelity === 'tight') {
         validateOutlineChapterCoverage(baseOutline, fidelity, totalChapters);
       }
@@ -380,7 +382,7 @@ async function processJob(jobId, options = {}) {
       try {
         log('Generating base scene plan...');
         const aggregateChapterRange = chapters && chapters.chapters.length ? [1, chapters.chapters.length] : null;
-        basePlan = await generatePlan(baseOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange });
+        basePlan = await generatePlan(baseOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange, mode });
         planSucceeded = true;
       } catch (err) {
         log(`[planning failed] ${err.message} — continuing without plan for this attempt; will retry on next run`);
@@ -430,7 +432,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = partialFront || null;
       const frontStory = await generateDrama(materials, {
-        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, log, wlog,
+        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -507,6 +509,7 @@ async function processJob(jobId, options = {}) {
           bible,
           fidelity,
           totalChapters: totalChaptersForTail,
+          mode,
           log,
         });
         saveArtifact(jobId, `tail-outline.${v.key}.json`, tailOutline);
@@ -534,7 +537,7 @@ async function processJob(jobId, options = {}) {
         try {
           log(`Variant ${v.key}: planning tail clips...`);
           const aggregateChapterRange = chapters && chapters.chapters.length ? [1, chapters.chapters.length] : null;
-          variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange });
+          variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange, mode });
           variantPlanSucceeded = true;
         } catch (err) {
           log(`[variant ${v.key} planning failed] ${err.message} — falling back to empty skeleton; will retry on next run`);
@@ -592,7 +595,7 @@ async function processJob(jobId, options = {}) {
           globalClipIndex: 0,
         };
         variantStory = await generateDrama(materials, {
-          lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, log, wlog,
+          lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, log, wlog,
           vectorStore: variantStore,
           savedSnowflake: snowflake,
           savedOutline: variantOutline,
@@ -873,6 +876,7 @@ export function startWorker() {
           fidelity: opts.fidelity || undefined,
           episodesPerDrama: opts.episodesPerDrama || undefined,
           clipsPerEpisode: opts.clipsPerEpisode || undefined,
+          mode: opts.mode || undefined,
         });
       }
     } catch (err) {

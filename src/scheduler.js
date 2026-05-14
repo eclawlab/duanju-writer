@@ -74,6 +74,13 @@ function tick() {
     referenceEvent: eventContent || undefined,
     referenceStory: storyContent || undefined,
     fidelity: config.fidelity || 'medium',
+    // Carry forward the persisted run shape so heartbeat jobs honor the
+    // operator's chosen narration mode and episode/clip counts. Without
+    // these, scheduler-created jobs always fell back to default mode and
+    // the worker's built-in episodesPerDrama/clipsPerEpisode defaults.
+    mode: config.mode || undefined,
+    episodesPerDrama: config.episodesPerDrama || undefined,
+    clipsPerEpisode: config.clipsPerEpisode || undefined,
   };
 
   const job = createJob(options);

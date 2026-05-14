@@ -123,6 +123,7 @@ switch (command) {
     let model;
     let episodesPerDrama;
     let clipsPerEpisode;
+    let mode;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
@@ -170,6 +171,14 @@ switch (command) {
           process.exit(1);
         }
         clipsPerEpisode = k;
+        a++;
+      } else if (args[a] === '--mode' && args[a + 1]) {
+        const m = args[a + 1].toLowerCase();
+        if (m !== 'default' && m !== 'selftell') {
+          console.log(`Unknown mode: "${m}". Supported: default, selftell.`);
+          process.exit(1);
+        }
+        mode = m;
         a++;
       } else if (!isNaN(args[a]) && args[a].trim() !== '') {
         count = Math.max(0, parseInt(args[a], 10));
@@ -293,9 +302,9 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode });
+      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode });
+      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -329,6 +338,7 @@ switch (command) {
       'maxRetries', 'publishOnUpload', 'lang', 'genre',
       'referenceCharacter', 'referenceEvent', 'referenceStory', 'fidelity', 'style',
       'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
+      'mode',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
@@ -361,6 +371,11 @@ switch (command) {
       // Validate lang values
       if (args[1] === 'lang' && value !== 'cn') {
         console.log(`Invalid lang "${value}". Only 'cn' is supported.`);
+        process.exit(1);
+      }
+      // Validate mode values — mirror the --mode CLI flag's allowlist.
+      if (args[1] === 'mode' && value !== 'default' && value !== 'selftell') {
+        console.log(`Invalid mode "${value}". Supported: default, selftell.`);
         process.exit(1);
       }
       config[args[1]] = value;
@@ -621,6 +636,6 @@ switch (command) {
   default:
     console.log(`Unknown command: ${command}`);
     console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|resume]');
-    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K]');
+    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell]');
     process.exit(1);
 }
