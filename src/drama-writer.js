@@ -236,6 +236,15 @@ export async function parseOutline(raw) {
     validIndices.add(ep.episodeIndex);
   }
 
+  // Normalize to a dense 0-based episodeIndex by sorted order. parseOutline
+  // only guaranteed uniqueness, not 0..N-1 — but the front/tail split math
+  // (worker.js: slice(0, splitIdx)) and sceneMap/ancestor lookups are
+  // position-keyed. A 1-based LLM emission would otherwise collide the last
+  // front episode with the first renumbered tail episode. Sorting also makes
+  // the final-episode ending check below order-independent.
+  data.episodes.sort((a, b) => a.episodeIndex - b.episodeIndex);
+  data.episodes.forEach((ep, i) => { ep.episodeIndex = i; });
+
   for (const ep of data.episodes) {
     if (!ep.clipPlan || ep.clipPlan.length === 0) {
       throw new Error(`Episode "${ep.title}" must have at least 1 clip in clipPlan`);

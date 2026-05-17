@@ -36,7 +36,12 @@ describe('downloader', () => {
     assert.equal(drama.lang, 'cn');
     assert.equal(drama.genre, '都市');
     assert.equal(drama.trope, '战神归来');
-    assert.deepEqual(drama.genres, ['都市', '复仇']);
+    // Round-trip safety (audit #3): uploader prepends genre→genres[0] and
+    // trope→tags[0], and the platform echoes the merged array back. So
+    // normalizeStory strips the leading primary value to keep download→
+    // upload idempotent (no unbounded duplication across modify cycles).
+    assert.deepEqual(drama.genres, ['复仇']);
+    assert.deepEqual(drama.tags, ['打脸']);
     assert.equal(drama.characters[0].name, '陆衡');
     assert.equal(drama.episodes[0].scenes[0].content, '[narrator]\nx');
   });

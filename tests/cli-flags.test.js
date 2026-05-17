@@ -44,6 +44,24 @@ describe('cli flag validation', () => {
     assert.match(r.out, /--lang en is not supported \(CN only\)/);
   });
 
+  test('run with a non-finite count (Infinity) is rejected, not a silent no-op', () => {
+    const r = runCli(['run', 'Infinity']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /count/i);
+  });
+
+  test('run with scientific-notation count (1e3) is rejected before any job', () => {
+    const r = runCli(['run', '1e3']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /count must be a non-negative integer/);
+  });
+
+  test('run with two positional counts is rejected', () => {
+    const r = runCli(['run', '2', '3']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /single count/);
+  });
+
   test('config set novelType errors with rename hint', () => {
     const r = runCli(['config', 'set', 'novelType', '都市']);
     assert.equal(r.code, 1);

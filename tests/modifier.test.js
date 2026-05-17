@@ -58,13 +58,25 @@ describe('modifier', () => {
     assert.equal(out.title, 'X');
   });
 
-  test('applyFeedback falls back to original episodes when model drops them', async () => {
+  test('applyFeedback falls back to original episodes when model OMITS them', async () => {
+    // Audit #12: only an ABSENT episodes key falls back to the original.
     const { applyFeedback } = await import('../src/modifier.js');
-    const llmFn = async () => JSON.stringify({ title: '只改了标题', episodes: [] });
+    const llmFn = async () => JSON.stringify({ title: '只改了标题' }); // no episodes key
     const out = await applyFeedback(sampleDrama(), 'f', { llmFn });
     assert.equal(out.title, '只改了标题');
     assert.equal(out.episodes.length, 2); // original episodes preserved
     assert.equal(out.characters.length, 1);
+  });
+
+  test('applyFeedback does NOT silently restore an explicit empty episodes array', async () => {
+    // Audit #12: explicit episodes:[] is an intentional deletion, honored
+    // (not reverted). The post-merge guard then rejects a scene-less story.
+    const { applyFeedback } = await import('../src/modifier.js');
+    const llmFn = async () => JSON.stringify({ ...sampleDrama(), episodes: [] });
+    await assert.rejects(
+      applyFeedback(sampleDrama(), 'delete everything', { llmFn }),
+      /no usable scene content/,
+    );
   });
 
   test('applyFeedback throws on unparseable response', async () => {

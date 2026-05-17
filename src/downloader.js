@@ -66,11 +66,23 @@ export function normalizeStory(body) {
     return out;
   });
 
+  // uploader.buildRequest PREPENDS singular `genre`→genres[] and
+  // `trope`→tags[]. The platform echoes back the merged array AND
+  // primaryGenre/trope. If we keep the merged array and also re-derive
+  // genre/trope below, the next upload prepends again → unbounded
+  // duplication every modify cycle. Strip the leading primary value here so
+  // the round-trip is idempotent.
+  const stripLeading = (arr, val) => {
+    const a = Array.isArray(arr) ? [...arr] : [];
+    if (val && a[0] === val) a.shift();
+    return a;
+  };
+
   const drama = {
     title: s.title || '',
     synopsis: s.synopsis || '',
-    genres: Array.isArray(s.genres) ? s.genres : [],
-    tags: Array.isArray(s.tags) ? s.tags : [],
+    genres: stripLeading(s.genres, s.primaryGenre),
+    tags: stripLeading(s.tags, s.trope),
     characters: (Array.isArray(charactersSrc) ? charactersSrc : [])
       .filter((c) => c && c.name)
       .map((c) => {

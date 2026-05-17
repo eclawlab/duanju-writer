@@ -112,6 +112,7 @@ switch (command) {
     // run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--character path.md] [--event path.md]
     //     [--model claude|openai|<provider>] [--episodes N] [--clips-per-episode K]
     let count = 1;
+    let countSet = false;
     let lang;
     let style;
     let genre;
@@ -180,8 +181,23 @@ switch (command) {
         }
         mode = m;
         a++;
-      } else if (!isNaN(args[a]) && args[a].trim() !== '') {
-        count = Math.max(0, parseInt(args[a], 10));
+      } else if (args[a].trim() !== '' && !args[a].startsWith('-')) {
+        // Positional count: plain non-negative integer digits only. The old
+        // `!isNaN(x)` check accepted 'Infinity' (→ NaN count → silent
+        // no-op) and a silent second positional overwrite. A bare
+        // `Number()` check is also too loose — Number('1e3') === 1000
+        // passes Number.isInteger, so a typo would launch 1000 jobs.
+        if (!/^\d+$/.test(args[a].trim())) {
+          console.log(`run count must be a non-negative integer, got: ${args[a]}`);
+          process.exit(1);
+        }
+        const n = Number(args[a]);
+        if (countSet) {
+          console.log(`run accepts a single count; got a second one: ${args[a]}`);
+          process.exit(1);
+        }
+        count = n;
+        countSet = true;
       }
     }
     // Resolve reference character + event: CLI flag takes precedence, else config path

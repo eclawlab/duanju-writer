@@ -46,10 +46,15 @@ export function buildModifyPrompt(drama, feedback, lang = 'cn') {
 function mergeRevision(original, revised) {
   if (!revised || typeof revised !== 'object') return original;
   const out = { ...original, ...revised };
-  if (!Array.isArray(revised.episodes) || revised.episodes.length === 0) {
+  // Only fall back when the model OMITTED the field. An explicit empty array
+  // is an intentional deletion ("remove all characters") and must be honored;
+  // conflating it with "absent" silently ignored such feedback. A non-array
+  // value is malformed → fall back. The post-merge hasScene guard in
+  // applyFeedback still rejects a story left with no usable scene content.
+  if (!('episodes' in revised) || !Array.isArray(revised.episodes)) {
     out.episodes = original.episodes;
   }
-  if (!Array.isArray(revised.characters) || revised.characters.length === 0) {
+  if (!('characters' in revised) || !Array.isArray(revised.characters)) {
     out.characters = original.characters || [];
   }
   if (!out.title) out.title = original.title;

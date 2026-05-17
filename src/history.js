@@ -25,7 +25,13 @@ function withLock(filePath, fn) {
       try {
         const st = statSync(lockPath);
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          try { unlinkSync(lockPath); } catch {}
+          // Atomic stale takeover (see queue.js for rationale): rename wins
+          // for exactly one racer; never unlink a lock you didn't claim.
+          try {
+            const claim = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+            renameSync(lockPath, claim);
+            unlinkSync(claim);
+          } catch {}
           continue;
         }
       } catch {}
@@ -45,7 +51,19 @@ function readHistory(filePath) {
   if (!existsSync(filePath)) return [];
   try {
     return JSON.parse(readFileSync(filePath, 'utf8'));
-  } catch { return []; }
+  } catch {
+    // Corrupt history. Returning [] alone is data loss: the next addEntry
+    // would overwrite the file, destroying up to 50 dedupe records. Preserve
+    // the bytes aside (mirrors queue.js's corrupt-file handling), then
+    // degrade gracefully — history only feeds topic-freshness dedupe, so the
+    // daemon should keep running rather than throw.
+    try {
+      const aside = `${filePath}.corrupt-${Date.now()}`;
+      renameSync(filePath, aside);
+      console.warn(`Warning: corrupt ${filePath} preserved as ${aside}; resetting history.`);
+    } catch {}
+    return [];
+  }
 }
 
 function writeHistoryAtomic(filePath, entries) {

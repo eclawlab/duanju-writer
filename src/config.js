@@ -48,8 +48,14 @@ export function loadConfigFrom(filePath) {
     }
   }
   const merged = { ...DEFAULTS, ...userConfig };
-  // Deep merge providers and roles (user additions don't replace defaults)
-  merged.providers = { ...DEFAULTS.providers, ...(userConfig.providers || {}) };
+  // Per-provider FIELD merge: customizing one field (e.g. timeout) must not
+  // drop sibling defaults like `type` — otherwise llm.js throws "Unknown
+  // provider type: undefined". Roles are flat strings, so a key-level spread
+  // is correct for them.
+  merged.providers = { ...DEFAULTS.providers };
+  for (const [name, cfg] of Object.entries(userConfig.providers || {})) {
+    merged.providers[name] = { ...(DEFAULTS.providers[name] || {}), ...cfg };
+  }
   merged.roles = { ...DEFAULTS.roles, ...(userConfig.roles || {}) };
   // Migrate legacy claudePath into providers.claude
   if (merged.claudePath && merged.claudePath !== 'claude') {
