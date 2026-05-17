@@ -82,6 +82,11 @@
 ### 📚 整本小说改编
 提供一本完整小说作为参考（`--story path.txt`），系统先按章节切分并通过 LLM 抽取出 story bible（人物 / 事件 / 钩点 / 主题 / 世界观 / 原结局），然后将其注入到雪花、大纲、规划、片段四个阶段。`--fidelity tight|medium|loose` 控制改编紧密度：tight 完全按原作章节顺序、loose 仅取灵感、medium 在保留主线的同时压缩节奏（默认）。bible.json 与 chapters.json 持久化在 `~/.duanju-writer/jobs/<id>/story/`，断点续传时直接复用。
 
+### ✏️ 修改与改进模式
+对**已发布在 usaduanju.com 的剧**做小幅打磨：`duanju-writer modify <storyId> --feedback "..."` 会从平台下载该剧，按用户反馈做最小化、精准的修改（保留剧集结构、人物、`[narrator]/[character:名]` 格式，未涉及处逐字保留），再作为**一部全新独立的剧**重新上传（不带 variationGroupId，平台视为新作品）。原文 / 反馈 / 修改后版本 / 结果持久化在 `~/.duanju-writer/modifications/<storyId>-<时间戳>/`。`--feedback-file path` 从文件读取反馈，`--title "..."` 覆盖标题，`--dry-run` 只下载+修改不上传（离线校验/安全预览）。
+
+不知道 storyId？每次 `run` 上传后会把平台 storyId 记录在 `~/.duanju-writer/jobs/<id>/upload.v*.json`。运行 **`duanju-writer stories`** 即可列出本机发布过的全部剧（storyId + 标题 + 结局变体），`duanju-writer stories 关键词` 按标题/ID 过滤。
+
 ### 🔌 多模型供应商
 可插拔的 LLM 后端：默认 Claude CLI，亦支持任何 OpenAI 兼容 API。可为 8 个任务角色（research / outline / plan / clip / compress / repair / consistency / enrichment）分别配置不同模型。
 
@@ -176,6 +181,8 @@ node bin/duanju-writer.js jobs           # 查看任务队列状态
 ```
 duanju-writer setup          交互式初始化（API URL + 自动获取 key）
 duanju-writer run [flags]    单次生成 + 上传
+duanju-writer modify <id>    下载已发布剧 → 按反馈修改 → 作为新剧上传
+duanju-writer stories [q]    列出本机已发布的剧及其 storyId（可选关键词过滤）
 duanju-writer start          启动调度器 + worker 守护进程
 duanju-writer scheduler      单独运行调度器
 duanju-writer worker         单独运行 worker
@@ -286,6 +293,9 @@ duanju/
 │   ├── consistency.js       # 钩点密度 / 重复检查
 │   ├── enrichment.js        # 字数检查（中文）
 │   ├── uploader.js          # POST 到 /api/ai/stories
+│   ├── downloader.js        # GET /api/ai/stories/<id> + 归一化
+│   ├── modifier.js          # 下载 → 反馈修改 → 作为新剧上传
+│   ├── published.js         # 扫描本机已发布剧（stories 命令）
 │   ├── worker.js            # 流水线编排 + 断点续传
 │   ├── styles.js            # 套路 .md 文件解析
 │   ├── llm.js               # 多供应商抽象层
@@ -296,11 +306,12 @@ duanju/
 │   ├── outline.md           # 大纲生成提示词
 │   ├── plan.md              # 片段规划提示词
 │   ├── clips.md             # 片段编写提示词
-│   └── tail-outline.md      # 多结局尾段生成
+│   ├── tail-outline.md      # 多结局尾段生成
+│   └── modify.md            # 反馈修改提示词
 ├── styles/                  # 30 个 短剧 套路
 │   ├── 复仇/  都市/  甜宠/
 │   └── 古装/  家庭/  玄幻/
-└── tests/                   # 351 个单元测试
+└── tests/                   # 508 个单元测试
 ```
 
 ---
