@@ -83,7 +83,7 @@
 提供一本完整小说作为参考（`--story path.txt`），系统先按章节切分并通过 LLM 抽取出 story bible（人物 / 事件 / 钩点 / 主题 / 世界观 / 原结局），然后将其注入到雪花、大纲、规划、片段四个阶段。`--fidelity tight|medium|loose` 控制改编紧密度：tight 完全按原作章节顺序、loose 仅取灵感、medium 在保留主线的同时压缩节奏（默认）。bible.json 与 chapters.json 持久化在 `~/.duanju-writer/jobs/<id>/story/`，断点续传时直接复用。
 
 ### ✏️ 修改与改进模式
-对**已发布在 usaduanju.com 的剧**做小幅打磨：`duanju-writer modify <storyId> --feedback "..."` 会从平台下载该剧，按用户反馈做最小化、精准的修改（保留剧集结构、人物、`[narrator]/[character:名]` 格式，未涉及处逐字保留），再作为**一部全新独立的剧**重新上传（不带 variationGroupId，平台视为新作品）。原文 / 反馈 / 修改后版本 / 结果持久化在 `~/.duanju-writer/modifications/<storyId>-<时间戳>/`。`--feedback-file path` 从文件读取反馈，`--title "..."` 覆盖标题，`--dry-run` 只下载+修改不上传（离线校验/安全预览）。
+对**已发布在 usaduanju.com 的剧**做小幅打磨：`duanju-writer modify <storyId> --feedback "..."` 会从平台下载该剧，按用户反馈做最小化、精准的修改（保留剧集结构、人物、`[narrator]/[character:名]` 格式，未涉及处逐字保留）。修改分两遍进行——先改元信息（标题/梗概/题材/标签/人物），再**逐集**单独改写，确保反馈贯穿全剧每一集而不是只改开头几集（剧集数量固定，反馈不能增删整集）——再作为**一部全新独立的剧**重新上传（不带 variationGroupId，平台视为新作品）。原文 / 反馈 / 修改后版本 / 结果持久化在 `~/.duanju-writer/modifications/<storyId>-<时间戳>/`。`--feedback-file path` 从文件读取反馈，`--title "..."` 覆盖标题，`--dry-run` 只下载+修改不上传（离线校验/安全预览）。
 
 不知道 storyId？每次 `run` 上传后会把平台 storyId 记录在 `~/.duanju-writer/jobs/<id>/upload.v*.json`。运行 **`duanju-writer stories`** 即可列出本机发布过的全部剧（storyId + 标题 + 结局变体），`duanju-writer stories 关键词` 按标题/ID 过滤。
 
@@ -307,7 +307,8 @@ duanju/
 │   ├── plan.md              # 片段规划提示词
 │   ├── clips.md             # 片段编写提示词
 │   ├── tail-outline.md      # 多结局尾段生成
-│   └── modify.md            # 反馈修改提示词
+│   ├── modify-meta.md       # 反馈修改：元信息一遍
+│   └── modify-episode.md    # 反馈修改：逐集一遍
 ├── styles/                  # 30 个 短剧 套路
 │   ├── 复仇/  都市/  甜宠/
 │   └── 古装/  家庭/  玄幻/

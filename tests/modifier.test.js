@@ -21,68 +21,139 @@ function sampleDrama() {
 }
 
 describe('modifier', () => {
-  test('buildModifyPrompt embeds story JSON, feedback, and lang', async () => {
-    const { buildModifyPrompt } = await import('../src/modifier.js');
-    const p = buildModifyPrompt(sampleDrama(), '把第1集结尾加一个反转', 'cn');
-    assert.ok(p.includes('把第1集结尾加一个反转'));
+  test('buildMetaPrompt embeds metadata + feedback but NOT episode bodies', async () => {
+    const { buildMetaPrompt } = await import('../src/modifier.js');
+    const p = buildMetaPrompt(sampleDrama(), '把标题改得更抓人', 'cn');
+    assert.ok(p.includes('[METADATA_PASS]'));
+    assert.ok(p.includes('把标题改得更抓人'));
     assert.ok(p.includes('原标题'));
-    assert.ok(p.includes('[character:陆衡]'));
+    // Episode scene content must be excluded so the prompt stays small.
+    assert.ok(!p.includes('[character:陆衡]'));
     assert.ok(!p.includes('{{feedback}}'));
-    assert.ok(!p.includes('{{drama}}'));
+    assert.ok(!p.includes('{{meta}}'));
     assert.ok(!p.includes('{{lang}}'));
   });
 
-  test('buildModifyPrompt does not interpret $ in feedback as regex replacement', async () => {
-    const { buildModifyPrompt } = await import('../src/modifier.js');
-    const p = buildModifyPrompt(sampleDrama(), 'cost is $5 and $$ and $&', 'cn');
-    assert.ok(p.includes('cost is $5 and $$ and $&'));
+  test('buildEpisodePrompt embeds ONE episode + global context + feedback', async () => {
+    const { buildEpisodePrompt } = await import('../src/modifier.js');
+    const d = sampleDrama();
+    const p = buildEpisodePrompt(d, d.episodes[1], '把第2集结尾加一个反转', 2, 2, 'cn');
+    assert.ok(p.includes('[EPISODE_PASS]'));
+    assert.ok(p.includes('把第2集结尾加一个反转'));
+    assert.ok(p.includes('[character:陆衡]')); // this episode's content
+    assert.ok(p.includes('原标题')); // global context
+    assert.ok(p.includes('第 2 / 2 集'));
+    // Only the targeted episode is embedded, not episode 1's content.
+    assert.ok(!p.includes('开场'));
+    assert.ok(!p.includes('{{episode}}'));
+    assert.ok(!p.includes('{{feedback}}'));
   });
 
-  test('applyFeedback applies the model revision and preserves structure', async () => {
+  test('build*Prompt does not interpret $ in feedback as regex replacement', async () => {
+    const { buildMetaPrompt, buildEpisodePrompt } = await import('../src/modifier.js');
+    const fb = 'cost is $5 and $$ and $&';
+    const d = sampleDrama();
+    assert.ok(buildMetaPrompt(d, fb, 'cn').includes(fb));
+    assert.ok(buildEpisodePrompt(d, d.episodes[0], fb, 1, 2, 'cn').includes(fb));
+  });
+
+  // Regression: a global feedback must be applied across the WHOLE novel,
+  // not just the first few episodes. The old single-pass implementation
+  // stuffed the entire novel into one prompt and the model degraded into
+  // verbatim copying after the first episodes, leaving most untouched.
+  test('applyFeedback applies feedback to EVERY episode, not just the first', async () => {
     const { applyFeedback } = await import('../src/modifier.js');
-    const llmFn = async () => JSON.stringify({
-      ...sampleDrama(),
-      title: '新标题',
-      episodes: sampleDrama().episodes.map((e) => ({ ...e })),
+    const drama = {
+      title: 'T', synopsis: 'S', lang: 'cn', characters: [{ name: 'A' }],
+      episodes: [0, 1, 2, 3, 4].map((i) => ({
+        title: `第${i}集`, episodeIndex: i,
+        scenes: [{ content: '[narrator]\nOLD', choices: [], conclusion: null }],
+      })),
+    };
+    let episodeCalls = 0;
+    const llmFn = async (prompt) => {
+      if (prompt.includes('[EPISODE_PASS]')) {
+        episodeCalls++;
+        return JSON.stringify({ scenes: [{ content: '[narrator]\nNEW', choices: [], conclusion: null }] });
+      }
+      return JSON.stringify({ title: 'T' });
+    };
+    const out = await applyFeedback(drama, 'replace OLD with NEW everywhere', { llmFn });
+    assert.equal(episodeCalls, 5, 'expected one LLM call per episode');
+    assert.equal(out.episodes.length, 5);
+    for (const ep of out.episodes) {
+      assert.ok(ep.scenes[0].content.includes('NEW'), `episode ${ep.episodeIndex} not modified`);
+      assert.ok(!ep.scenes[0].content.includes('OLD'), `episode ${ep.episodeIndex} still has OLD`);
+    }
+  });
+
+  // Builds an llmFn that answers the metadata pass and per-episode passes
+  // differently, branching on the template marker.
+  function passAwareLLM({ meta, episode }) {
+    return async (prompt) => (prompt.includes('[EPISODE_PASS]') ? episode(prompt) : meta(prompt));
+  }
+
+  test('applyFeedback applies the metadata revision and preserves episode structure', async () => {
+    const { applyFeedback } = await import('../src/modifier.js');
+    const llmFn = passAwareLLM({
+      meta: async () => JSON.stringify({ title: '新标题' }),
+      episode: async () => JSON.stringify({
+        scenes: [{ content: '[narrator]\n改写后的正文', choices: [], conclusion: null }],
+      }),
     });
     const out = await applyFeedback(sampleDrama(), '改标题', { llmFn });
     assert.equal(out.title, '新标题');
     assert.equal(out.episodes.length, 2);
-    assert.equal(out.episodes[1].ending, '爽爆');
+    assert.equal(out.episodes[1].episodeIndex, 1); // index never renumbered
+    assert.equal(out.episodes[1].ending, '爽爆'); // optional field preserved
+    assert.ok(out.episodes[0].scenes[0].content.includes('改写后的正文'));
   });
 
-  test('applyFeedback tolerates fenced/prefixed JSON', async () => {
+  test('applyFeedback tolerates fenced/prefixed JSON in both passes', async () => {
     const { applyFeedback } = await import('../src/modifier.js');
-    const llmFn = async () => '好的：\n```json\n' + JSON.stringify({ ...sampleDrama(), title: 'X' }) + '\n```';
+    const llmFn = passAwareLLM({
+      meta: async () => '好的：\n```json\n' + JSON.stringify({ title: 'X' }) + '\n```',
+      episode: async () => '```json\n' + JSON.stringify({ scenes: [{ content: '[narrator]\nz' }] }) + '\n```',
+    });
     const out = await applyFeedback(sampleDrama(), 'f', { llmFn });
     assert.equal(out.title, 'X');
+    assert.equal(out.episodes.length, 2);
   });
 
-  test('applyFeedback falls back to original episodes when model OMITS them', async () => {
-    // Audit #12: only an ABSENT episodes key falls back to the original.
+  test('applyFeedback falls back to the original episode when a pass yields no usable scenes', async () => {
+    // A flaky per-episode response must not blank part of the novel.
     const { applyFeedback } = await import('../src/modifier.js');
-    const llmFn = async () => JSON.stringify({ title: '只改了标题' }); // no episodes key
+    const llmFn = passAwareLLM({
+      meta: async () => JSON.stringify({ title: '只改了标题' }),
+      episode: async () => JSON.stringify({ title: '空', scenes: [] }), // no scene content
+    });
     const out = await applyFeedback(sampleDrama(), 'f', { llmFn });
     assert.equal(out.title, '只改了标题');
-    assert.equal(out.episodes.length, 2); // original episodes preserved
+    assert.equal(out.episodes.length, 2);
+    assert.equal(out.episodes[0].scenes[0].content, sampleDrama().episodes[0].scenes[0].content);
     assert.equal(out.characters.length, 1);
   });
 
-  test('applyFeedback does NOT silently restore an explicit empty episodes array', async () => {
-    // Audit #12: explicit episodes:[] is an intentional deletion, honored
-    // (not reverted). The post-merge guard then rejects a scene-less story.
+  test('applyFeedback keeps episode count fixed (no add/delete via feedback)', async () => {
+    // Architecture change: the per-episode rewrite iterates the ORIGINAL
+    // episodes, so a model trying to empty the novel cannot delete episodes.
     const { applyFeedback } = await import('../src/modifier.js');
-    const llmFn = async () => JSON.stringify({ ...sampleDrama(), episodes: [] });
-    await assert.rejects(
-      applyFeedback(sampleDrama(), 'delete everything', { llmFn }),
-      /no usable scene content/,
-    );
+    const llmFn = passAwareLLM({
+      meta: async () => JSON.stringify({}),
+      episode: async () => JSON.stringify({ scenes: [] }),
+    });
+    const out = await applyFeedback(sampleDrama(), 'delete everything', { llmFn });
+    assert.equal(out.episodes.length, 2);
+    assert.ok(out.episodes[0].scenes[0].content); // original body preserved
   });
 
-  test('applyFeedback throws on unparseable response', async () => {
+  test('applyFeedback is resilient to unparseable responses (never destroys content)', async () => {
     const { applyFeedback } = await import('../src/modifier.js');
     const llmFn = async () => 'sorry I cannot do that';
-    await assert.rejects(applyFeedback(sampleDrama(), 'f', { llmFn }), /not parseable JSON/);
+    const out = await applyFeedback(sampleDrama(), 'f', { llmFn });
+    assert.equal(out.title, '原标题'); // metadata fell back
+    assert.equal(out.episodes.length, 2);
+    assert.equal(out.episodes[0].scenes[0].content, sampleDrama().episodes[0].scenes[0].content);
   });
 
   test('applyFeedback requires feedback', async () => {
