@@ -163,6 +163,7 @@ node bin/duanju-writer.js run
 | `--reference-event <path.md>` | 注入预定义事件描述 |
 | `--story <path.{txt,md}>` | 注入参考小说（≤1MB），抽取 story bible 注入下游阶段 |
 | `--fidelity <tight\|medium\|loose>` | 配合 `--story`：改编紧密度（默认 medium）|
+| `--author-style <key>` | 叠加指定中文作家文风（仅影响文笔，与 `--style`/`--story` 正交可叠加）；`duanju-writer author-styles` 查看 15 位作家 |
 | `--no-publish` | 只生成不上传 |
 
 ### 守护进程模式
@@ -188,6 +189,7 @@ duanju-writer scheduler      单独运行调度器
 duanju-writer worker         单独运行 worker
 duanju-writer jobs           查看任务队列
 duanju-writer styles         列出全部 30 个套路
+duanju-writer author-styles  列出 15 位作家文风
 duanju-writer config         查看 / 修改配置
 duanju-writer provider       管理 LLM 供应商
 duanju-writer role           为不同任务角色分配模型
