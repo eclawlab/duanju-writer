@@ -32,6 +32,26 @@ describe('author-styles loader', () => {
     assert.equal(getAuthorStyle('MoYan'.toLowerCase()).name, getAuthorStyle('moyan').name);
   });
 
+  test('getAuthorStyle resolves by Chinese author name', () => {
+    assert.equal(getAuthorStyle('莫言').name, 'Mo Yan (莫言)');
+    assert.equal(getAuthorStyle('鲁迅').category, 'chinese-literary');
+  });
+
+  test('getAuthorStyle resolves by English author name (space/case-insensitive)', () => {
+    assert.equal(getAuthorStyle('Mo Yan').name, 'Mo Yan (莫言)');
+    assert.equal(getAuthorStyle('liu cixin').name, 'Liu Cixin (刘慈欣)');
+    assert.equal(getAuthorStyle('JIN YONG').name, 'Jin Yong (金庸)');
+  });
+
+  test('getAuthorStyle resolves by the full name field', () => {
+    assert.equal(getAuthorStyle('Mo Yan (莫言)').name, 'Mo Yan (莫言)');
+  });
+
+  test('getAuthorStyle still resolves by the original filename key (backward compat)', () => {
+    assert.equal(getAuthorStyle('moyan').name, 'Mo Yan (莫言)');
+    assert.equal(getAuthorStyleSafe('莫言').scene, getAuthorStyleSafe('moyan').scene);
+  });
+
   test('getAuthorStyle throws with available list on unknown key', () => {
     assert.throws(() => getAuthorStyle('nobody'), /Unknown author style: "nobody"[\s\S]*Available author styles:/);
   });

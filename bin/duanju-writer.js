@@ -545,11 +545,11 @@ switch (command) {
     for (const [category, items] of byCategory) {
       console.log(`  [${category}]`);
       for (const s of items) {
-        console.log(`    ${s.key} — ${s.name}`);
+        console.log(`    ${s.name}  (key: ${s.key})`);
       }
       console.log();
     }
-    console.log('Usage: duanju-writer run --author-style moyan');
+    console.log('Usage: duanju-writer run --author-style 莫言   (the key "moyan" also works)');
     console.log('Note: orthogonal to --style and --story (can be combined).');
     break;
   }

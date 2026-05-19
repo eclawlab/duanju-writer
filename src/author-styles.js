@@ -71,6 +71,7 @@ function loadAuthorStylesFromDisk() {
 }
 
 let _cache = null;
+let _aliasCache = null;
 
 function getAuthorStyles() {
   if (!_cache) _cache = loadAuthorStylesFromDisk();
@@ -79,31 +80,69 @@ function getAuthorStyles() {
 
 export function clearAuthorStyleCache() {
   _cache = null;
+  _aliasCache = null;
 }
 
-export function getAuthorStyle(key) {
-  if (!key || key === 'default') return null;
+// Whitespace- and case-insensitive normalization. "Mo Yan" and "moyan" both
+// normalize to "moyan"; Chinese names ("莫言") pass through unchanged.
+function normalizeAlias(s) {
+  return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, '');
+}
+
+// Build an index mapping every accepted spelling of an author to its
+// canonical filename key: the Chinese name (莫言), the English name (Mo Yan),
+// the full `name` field (Mo Yan (莫言)), and the original filename key
+// (moyan). Author names are distinct, so cross-author collisions don't occur;
+// filename keys are written last so they always win.
+function getAliasIndex() {
+  if (_aliasCache) return _aliasCache;
   const styles = getAuthorStyles();
-  const style = styles[key.toLowerCase()];
+  const idx = {};
+  const add = (alias, key) => {
+    const n = normalizeAlias(alias);
+    if (n && !(n in idx)) idx[n] = key;
+  };
+  for (const [key, style] of Object.entries(styles)) {
+    add(style.name, key);
+    const m = String(style.name).match(/^(.+?)\s*\((.+)\)\s*$/);
+    if (m) {
+      add(m[1], key); // English part
+      add(m[2], key); // Chinese part
+    }
+  }
+  for (const key of Object.keys(styles)) idx[normalizeAlias(key)] = key;
+  _aliasCache = idx;
+  return idx;
+}
+
+function resolveStyle(input) {
+  const styles = getAuthorStyles();
+  const key = getAliasIndex()[normalizeAlias(input)];
+  return key ? styles[key] : null;
+}
+
+export function getAuthorStyle(input) {
+  if (!input || input === 'default') return null;
+  const style = resolveStyle(input);
   if (!style) {
+    const styles = getAuthorStyles();
     const available = Object.entries(styles)
-      .map(([k, v]) => `  ${k} — ${v.name}`)
+      .map(([k, v]) => `  ${v.name}  [key: ${k}]`)
       .join('\n');
-    throw new Error(`Unknown author style: "${key}"\nAvailable author styles:\n${available}`);
+    throw new Error(`Unknown author style: "${input}"\nAvailable author styles: (type the author name or the key)\n${available}`);
   }
   return style;
 }
 
 const _warnedMissing = new Set();
-export function getAuthorStyleSafe(key) {
-  if (!key || key === 'default') return null;
-  const styles = getAuthorStyles();
-  const lookup = key.toLowerCase();
-  const style = styles[lookup];
+export function getAuthorStyleSafe(input) {
+  if (!input || input === 'default') return null;
+  const style = resolveStyle(input);
   if (!style) {
-    if (!_warnedMissing.has(lookup)) {
-      _warnedMissing.add(lookup);
-      console.warn(`[author-styles] Unknown author style "${key}" — generating without an author voice. Run 'duanju-writer author-styles' to see available options.`);
+    const seen = normalizeAlias(input);
+    if (!_warnedMissing.has(seen)) {
+      _warnedMissing.add(seen);
+      console.warn(`[author-styles] Unknown author style "${input}" — generating without an author voice. Run 'duanju-writer author-styles' to see available options.`);
     }
     return null;
   }

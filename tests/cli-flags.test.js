@@ -101,11 +101,14 @@ describe('cli flag validation', () => {
     assert.match(r.out, /Only 'cn' is supported/);
   });
 
-  test('--author-style with unknown key is rejected with available list', () => {
-    const r = runCli(['run', '--author-style', 'nobody']);
+  test('--author-style with unknown name is rejected; list shows author names', () => {
+    const r = runCli(['run', '--author-style', 'J.K. Rowling']);
     assert.equal(r.code, 1);
-    assert.match(r.out, /Unknown author style: "nobody"/);
+    assert.match(r.out, /Unknown author style: "J\.K\. Rowling"/);
     assert.match(r.out, /Available author styles:/);
+    // The list must surface author names (not just opaque keys) so users
+    // know what to type for --author-style.
+    assert.match(r.out, /Mo Yan \(莫言\)/);
   });
 
   test('author-styles subcommand lists the 15 authors', () => {
