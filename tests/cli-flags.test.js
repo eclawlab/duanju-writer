@@ -80,6 +80,28 @@ describe('cli flag validation', () => {
     assert.match(r.out, /Only 'cn' is supported/);
   });
 
+  test('--author-style with unknown key is rejected with available list', () => {
+    const r = runCli(['run', '--author-style', 'nobody']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /Unknown author style: "nobody"/);
+    assert.match(r.out, /Available author styles:/);
+  });
+
+  test('author-styles subcommand lists the 15 authors', () => {
+    const r = runCli(['author-styles']);
+    assert.equal(r.code, 0);
+    assert.match(r.out, /moyan/);
+    assert.match(r.out, /chinese-literary/);
+  });
+
+  test('config set accepts authorStyle key', () => {
+    const r = runCli(['config', 'set', 'authorStyle', 'moyan']);
+    assert.equal(r.code, 0);
+    assert.match(r.out, /authorStyle/);
+    // reset so the test is idempotent and does not leak into other runs
+    runCli(['config', 'set', 'authorStyle', '']);
+  });
+
   test('resume subcommand writes the sentinel flag and exits 0', async () => {
     const { mkdtempSync, existsSync, rmSync, readFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');

@@ -125,6 +125,7 @@ switch (command) {
     let episodesPerDrama;
     let clipsPerEpisode;
     let mode;
+    let authorStyle;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
@@ -180,6 +181,9 @@ switch (command) {
           process.exit(1);
         }
         mode = m;
+        a++;
+      } else if (args[a] === '--author-style' && args[a + 1]) {
+        authorStyle = args[a + 1];
         a++;
       } else if (args[a].trim() !== '' && !args[a].startsWith('-')) {
         // Positional count: plain non-negative integer digits only. The old
@@ -296,6 +300,16 @@ switch (command) {
         process.exit(1);
       }
     }
+    // Validate author style before creating any jobs (orthogonal to --style).
+    if (authorStyle && authorStyle !== 'default') {
+      const { getAuthorStyle } = await import('../src/author-styles.js');
+      try {
+        getAuthorStyle(authorStyle);
+      } catch (err) {
+        console.log(err.message);
+        process.exit(1);
+      }
+    }
     // Validate and set model override
     if (model) {
       const { loadConfig } = await import('../src/config.js');
@@ -318,9 +332,9 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode });
+      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode });
+      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -455,7 +469,7 @@ switch (command) {
       'maxRetries', 'publishOnUpload', 'lang', 'genre',
       'referenceCharacter', 'referenceEvent', 'referenceStory', 'fidelity', 'style',
       'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
-      'mode',
+      'mode', 'authorStyle',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
@@ -502,6 +516,28 @@ switch (command) {
       const config = loadConfig();
       console.log(JSON.stringify(config, null, 2));
     }
+    break;
+  }
+  case 'author-styles': {
+    const { listAuthorStyles } = await import('../src/author-styles.js');
+    const styles = listAuthorStyles();
+    const byCategory = new Map();
+    for (const s of styles) {
+      const cat = s.category || 'other';
+      if (!byCategory.has(cat)) byCategory.set(cat, []);
+      byCategory.get(cat).push(s);
+    }
+    console.log('Available author voices (--author-style):\n');
+    console.log('  default — no author voice (plot/trope only)\n');
+    for (const [category, items] of byCategory) {
+      console.log(`  [${category}]`);
+      for (const s of items) {
+        console.log(`    ${s.key} — ${s.name}`);
+      }
+      console.log();
+    }
+    console.log('Usage: duanju-writer run --author-style moyan');
+    console.log('Note: orthogonal to --style and --story (can be combined).');
     break;
   }
   case 'styles': {
@@ -752,8 +788,8 @@ switch (command) {
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|config|provider|role|knowledge|resume]');
-    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell]');
+    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
+    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <key>]');
     console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
     process.exit(1);
 }
