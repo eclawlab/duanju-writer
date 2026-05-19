@@ -14,6 +14,27 @@ function runCli(args) {
 }
 
 describe('cli flag validation', () => {
+  test('bare invocation prints usage and exits 0 (does not start the daemon)', () => {
+    let out = '';
+    let code;
+    try {
+      out = execFileSync('node', [BIN], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 8000,
+      });
+      code = 0;
+    } catch (err) {
+      out = (err.stdout || '') + (err.stderr || '');
+      code = err.status;
+      if (err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT') {
+        assert.fail('bare `duanju-writer` hung (started the daemon) instead of printing usage');
+      }
+    }
+    assert.equal(code, 0);
+    assert.match(out, /Usage: duanju-writer/);
+  });
+
   test('--episodes 5 is rejected (below range)', () => {
     const r = runCli(['run', '--episodes', '5']);
     assert.equal(r.code, 1);

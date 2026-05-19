@@ -26,7 +26,7 @@ if (existsSync(envPath)) {
 mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(JOBS_DIR, { recursive: true });
 
-const command = process.argv[2] || 'start';
+const command = process.argv[2];
 const args = process.argv.slice(3);
 
 function installShutdown(services) {
@@ -80,6 +80,19 @@ function hasFlag(argv, name) {
 }
 
 const fresh = hasFlag(args, '--fresh');
+
+function printUsage() {
+  console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
+  console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <作家名>]');
+  console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
+}
+
+// No subcommand (bare `duanju-writer`) must NOT silently launch the daemon —
+// show usage and exit. The daemon is only started via explicit `start`.
+if (!command || command === 'help' || command === '--help' || command === '-h') {
+  printUsage();
+  process.exit(0);
+}
 
 switch (command) {
   case 'start': {
@@ -788,8 +801,6 @@ switch (command) {
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
-    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <key>]');
-    console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
+    printUsage();
     process.exit(1);
 }
