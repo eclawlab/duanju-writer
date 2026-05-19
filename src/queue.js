@@ -138,6 +138,7 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         episodesPerDrama: options.episodesPerDrama ?? null,
         clipsPerEpisode: options.clipsPerEpisode ?? null,
         mode: options.mode ?? null,
+        authorStyle: options.authorStyle ?? null,
       },
     };
     jobs.push(job);

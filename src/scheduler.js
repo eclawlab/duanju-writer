@@ -80,6 +80,7 @@ function tick() {
     // these, scheduler-created jobs always fell back to default mode and
     // the worker's built-in episodesPerDrama/clipsPerEpisode defaults.
     mode: config.mode || undefined,
+    authorStyle: config.authorStyle || undefined,
     episodesPerDrama: config.episodesPerDrama || undefined,
     clipsPerEpisode: config.clipsPerEpisode || undefined,
   };

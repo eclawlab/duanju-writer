@@ -21,6 +21,7 @@ const DEFAULTS = {
   referenceStory: '',
   fidelity: 'medium',
   style: 'default',
+  authorStyle: '',
   providers: {
     claude: { type: 'claude-cli', claudePath: 'claude', timeout: 1500000 },
     openai: { type: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: '', timeout: 120000 },

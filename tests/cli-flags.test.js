@@ -102,6 +102,14 @@ describe('cli flag validation', () => {
     runCli(['config', 'set', 'authorStyle', '']);
   });
 
+  test('--author-style does not conflict with --story (orthogonal)', () => {
+    const r = runCli(['run', '--story', 'tests/fixtures/__nope__.txt', '--author-style', 'moyan']);
+    assert.equal(r.code, 1);
+    assert.ok(!/mutually exclusive/i.test(r.out), `unexpected mutual-exclusion error: ${r.out}`);
+    assert.ok(!/Unknown author style/.test(r.out), `unexpected unknown-author error: ${r.out}`);
+    assert.match(r.out, /--story/);
+  });
+
   test('resume subcommand writes the sentinel flag and exits 0', async () => {
     const { mkdtempSync, existsSync, rmSync, readFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');

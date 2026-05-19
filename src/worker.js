@@ -263,6 +263,7 @@ async function processJob(jobId, options = {}) {
   }
   const fidelity = options.fidelity || config.fidelity || 'medium';
   const mode = options.mode || config.mode || 'default';
+  const authorStyle = options.authorStyle || config.authorStyle || '';
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
@@ -275,6 +276,7 @@ async function processJob(jobId, options = {}) {
     referenceStory: referenceStory ? `${referenceStory.length} chars` : '(none)',
     fidelity,
     mode,
+    authorStyle: authorStyle || '(none)',
   });
 
   try {
@@ -432,7 +434,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = partialFront || null;
       const frontStory = await generateDrama(materials, {
-        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, log, wlog,
+        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -595,7 +597,7 @@ async function processJob(jobId, options = {}) {
           globalClipIndex: 0,
         };
         variantStory = await generateDrama(materials, {
-          lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, log, wlog,
+          lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, log, wlog,
           vectorStore: variantStore,
           savedSnowflake: snowflake,
           savedOutline: variantOutline,
@@ -740,6 +742,7 @@ async function processJob(jobId, options = {}) {
       `Ref character:   ${referenceCharacter ? `${referenceCharacter.length} chars` : '(none)'}`,
       `Ref event:       ${referenceEvent ? `${referenceEvent.length} chars` : '(none)'}`,
       `Trope:           ${style}`,
+      `Author voice:    ${authorStyle || '(none)'}`,
       `Episodes:        ${episodesPerDrama}`,
       `Clips/episode:   ${clipsPerEpisode}`,
       `Variation Group: ${variationGroupId}`,
@@ -877,6 +880,7 @@ export function startWorker() {
           episodesPerDrama: opts.episodesPerDrama || undefined,
           clipsPerEpisode: opts.clipsPerEpisode || undefined,
           mode: opts.mode || undefined,
+          authorStyle: opts.authorStyle || undefined,
         });
       }
     } catch (err) {
