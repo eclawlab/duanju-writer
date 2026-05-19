@@ -23,7 +23,9 @@ describe('published', () => {
       'upload.v1.json': { storyId: 's-new-1', title: '新剧', variationLabel: '爽爆结局' },
       'upload.v2.json': { storyId: 's-new-2', title: '新剧', variationLabel: '苦尽甘来结局' },
     });
-    const rows = listPublishedStories(root);
+    // Isolate modificationsDir too — otherwise it defaults to the real
+    // ~/.duanju-writer/modifications and leaks machine state into the test.
+    const rows = listPublishedStories(root, join(root, '__no_mods__'));
     assert.equal(rows.length, 3);
     // Newest job first.
     assert.equal(rows[0].jobId, 'job_20260202000000_bbbb');
@@ -39,7 +41,9 @@ describe('published', () => {
       'outline.json': { storyId: 'not-a-story' },
       'upload.v1.json': { storyId: 's-real', title: 'T' },
     });
-    const rows = listPublishedStories(root);
+    // Isolate modificationsDir too — otherwise it defaults to the real
+    // ~/.duanju-writer/modifications and leaks machine state into the test.
+    const rows = listPublishedStories(root, join(root, '__no_mods__'));
     assert.equal(rows.length, 1);
     assert.equal(rows[0].storyId, 's-real');
   });
@@ -52,14 +56,19 @@ describe('published', () => {
     writeFileSync(join(dir, 'upload.v1.json'), '{ broken', 'utf8');
     writeFileSync(join(dir, 'upload.v2.json'), JSON.stringify({ title: 'no id' }), 'utf8');
     writeFileSync(join(dir, 'upload.v3.json'), JSON.stringify({ storyId: 'ok' }), 'utf8');
-    const rows = listPublishedStories(root);
+    // Isolate modificationsDir too — otherwise it defaults to the real
+    // ~/.duanju-writer/modifications and leaks machine state into the test.
+    const rows = listPublishedStories(root, join(root, '__no_mods__'));
     assert.equal(rows.length, 1);
     assert.equal(rows[0].storyId, 'ok');
   });
 
   test('listPublishedStories returns [] for a missing directory', async () => {
     const { listPublishedStories } = await import('../src/published.js');
-    assert.deepEqual(listPublishedStories(join(tmpdir(), 'does-not-exist-xyz')), []);
+    assert.deepEqual(
+      listPublishedStories(join(tmpdir(), 'does-not-exist-xyz'), join(tmpdir(), 'does-not-exist-mods-xyz')),
+      [],
+    );
   });
 
   test('filterPublishedStories matches title, storyId, jobId case-insensitively', async () => {
