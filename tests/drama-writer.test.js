@@ -216,6 +216,37 @@ describe('writer', () => {
     assert.match(p, /是否结局片段：true/);
   });
 
+  test('buildClipPrompt injects author voice when authorVoice set', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const c = clipCtx();
+    c.authorVoice = 'Dense, sensory prose: smells, textures, magical realism.';
+    const p = buildClipPrompt(c);
+    assert.match(p, /文风|Author Voice/);
+    assert.match(p, /Dense, sensory prose/);
+  });
+
+  test('buildClipPrompt omits author-voice block when authorVoice empty', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const p = buildClipPrompt(clipCtx());
+    assert.ok(!/## 文风 \/ Author Voice/.test(p), 'no voice block when authorVoice unset');
+  });
+
+  test('buildRetryClipPrompt carries author voice when set', async () => {
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt({
+      clipSummary: '陆衡推门归来',
+      prevError: 'bad',
+      authorVoice: 'Magical realism, cyclical narrative echoes.',
+    });
+    assert.match(prompt, /Magical realism, cyclical narrative echoes/);
+  });
+
+  test('buildRetryClipPrompt has no voice line when authorVoice empty', async () => {
+    const { buildRetryClipPrompt } = await import('../src/drama-writer.js');
+    const prompt = buildRetryClipPrompt({ clipSummary: 'x', prevError: 'y' });
+    assert.ok(!/文风（仅影响遣词/.test(prompt));
+  });
+
   function validClip() {
     return {
       clipIndex: 0,
