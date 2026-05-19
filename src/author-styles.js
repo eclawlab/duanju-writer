@@ -98,10 +98,11 @@ const _warnedMissing = new Set();
 export function getAuthorStyleSafe(key) {
   if (!key || key === 'default') return null;
   const styles = getAuthorStyles();
-  const style = styles[key.toLowerCase()];
+  const lookup = key.toLowerCase();
+  const style = styles[lookup];
   if (!style) {
-    if (!_warnedMissing.has(key)) {
-      _warnedMissing.add(key);
+    if (!_warnedMissing.has(lookup)) {
+      _warnedMissing.add(lookup);
       console.warn(`[author-styles] Unknown author style "${key}" — generating without an author voice. Run 'duanju-writer author-styles' to see available options.`);
     }
     return null;
