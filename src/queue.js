@@ -23,7 +23,17 @@ function withLock(filePath, fn) {
       try {
         const st = statSync(lockPath);
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          try { unlinkSync(lockPath); } catch {}
+          // Atomic stale takeover: rename (not unlink) to a unique name.
+          // renameSync of a given path succeeds for exactly one racing
+          // process; losers get ENOENT and retry. The old unconditional
+          // unlinkSync let two processes both "take over" the same stale
+          // lock, and could delete a fresh lock a third process had just
+          // created at the same path.
+          try {
+            const claim = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+            renameSync(lockPath, claim);
+            unlinkSync(claim);
+          } catch {}
           continue;
         }
       } catch {}
@@ -128,6 +138,7 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         episodesPerDrama: options.episodesPerDrama ?? null,
         clipsPerEpisode: options.clipsPerEpisode ?? null,
         mode: options.mode ?? null,
+        authorStyle: options.authorStyle ?? null,
       },
     };
     jobs.push(job);

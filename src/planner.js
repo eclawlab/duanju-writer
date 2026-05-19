@@ -113,12 +113,19 @@ export function parsePlan(raw) {
     }
   }
 
-  // Build a lookup map keyed by "episodeIndex:clipIndex" for branching tree access
+  // Build a lookup keyed by "episodeIndex:ordinal" where ordinal is the
+  // 0-based position of the clip WITHIN its episode group, in array order.
+  // The consumer (drama-writer) looks up `${ep.episodeIndex}:${i}` with i =
+  // the per-episode loop position. Keying by the LLM-emitted clipIndex broke
+  // every lookup (→ all plan-driven state silently dropped) whenever the
+  // model emitted 1-based or sparse clipIndex.
   plan.sceneMap = {};
+  const perEpisodeCount = {};
   for (const scene of plan.clips) {
-    if (scene.episodeIndex !== undefined && scene.clipIndex !== undefined) {
-      plan.sceneMap[`${scene.episodeIndex}:${scene.clipIndex}`] = scene;
-    }
+    if (scene.episodeIndex === undefined) continue;
+    const ord = perEpisodeCount[scene.episodeIndex] ?? 0;
+    perEpisodeCount[scene.episodeIndex] = ord + 1;
+    plan.sceneMap[`${scene.episodeIndex}:${ord}`] = scene;
   }
 
   return plan;

@@ -112,6 +112,7 @@ switch (command) {
     // run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--character path.md] [--event path.md]
     //     [--model claude|openai|<provider>] [--episodes N] [--clips-per-episode K]
     let count = 1;
+    let countSet = false;
     let lang;
     let style;
     let genre;
@@ -124,6 +125,7 @@ switch (command) {
     let episodesPerDrama;
     let clipsPerEpisode;
     let mode;
+    let authorStyle;
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
@@ -180,8 +182,26 @@ switch (command) {
         }
         mode = m;
         a++;
-      } else if (!isNaN(args[a]) && args[a].trim() !== '') {
-        count = Math.max(0, parseInt(args[a], 10));
+      } else if (args[a] === '--author-style' && args[a + 1]) {
+        authorStyle = args[a + 1];
+        a++;
+      } else if (args[a].trim() !== '' && !args[a].startsWith('-')) {
+        // Positional count: plain non-negative integer digits only. The old
+        // `!isNaN(x)` check accepted 'Infinity' (→ NaN count → silent
+        // no-op) and a silent second positional overwrite. A bare
+        // `Number()` check is also too loose — Number('1e3') === 1000
+        // passes Number.isInteger, so a typo would launch 1000 jobs.
+        if (!/^\d+$/.test(args[a].trim())) {
+          console.log(`run count must be a non-negative integer, got: ${args[a]}`);
+          process.exit(1);
+        }
+        const n = Number(args[a]);
+        if (countSet) {
+          console.log(`run accepts a single count; got a second one: ${args[a]}`);
+          process.exit(1);
+        }
+        count = n;
+        countSet = true;
       }
     }
     // Resolve reference character + event: CLI flag takes precedence, else config path
@@ -280,6 +300,16 @@ switch (command) {
         process.exit(1);
       }
     }
+    // Validate author style before creating any jobs (orthogonal to --style).
+    if (authorStyle && authorStyle !== 'default') {
+      const { getAuthorStyle } = await import('../src/author-styles.js');
+      try {
+        getAuthorStyle(authorStyle);
+      } catch (err) {
+        console.log(err.message);
+        process.exit(1);
+      }
+    }
     // Validate and set model override
     if (model) {
       const { loadConfig } = await import('../src/config.js');
@@ -302,12 +332,92 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode });
+      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode });
+      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
+    break;
+  }
+  case 'modify': {
+    // Modify & improve: download an existing usaduanju.com novel, apply small
+    // feedback-driven edits, re-upload as a NEW standalone novel.
+    //   modify <storyId> --feedback "..." | --feedback-file path
+    //          [--lang cn] [--model <provider>] [--title "..."] [--dry-run]
+    let storyId;
+    let feedback;
+    let feedbackFile;
+    let lang;
+    let model;
+    let title;
+    let dryRun = false;
+    for (let a = 0; a < args.length; a++) {
+      if (args[a] === '--feedback' && args[a + 1]) { feedback = args[a + 1]; a++; }
+      else if (args[a] === '--feedback-file' && args[a + 1]) { feedbackFile = args[a + 1]; a++; }
+      else if (args[a] === '--lang' && args[a + 1]) {
+        lang = args[a + 1].toLowerCase();
+        if (lang !== 'cn') { console.log(`--lang ${args[a + 1]} is not supported (CN only).`); process.exit(1); }
+        a++;
+      }
+      else if (args[a] === '--model' && args[a + 1]) { model = args[a + 1]; a++; }
+      else if (args[a] === '--title' && args[a + 1]) { title = args[a + 1]; a++; }
+      else if (args[a] === '--dry-run') { dryRun = true; }
+      else if (!args[a].startsWith('--') && !storyId) { storyId = args[a]; }
+    }
+    if (!storyId) {
+      console.log('Usage: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
+      console.log('Tip: run `duanju-writer stories` to list published novels and their storyIds.');
+      process.exit(1);
+    }
+    if (feedback && feedbackFile) {
+      console.error('Error: --feedback and --feedback-file are mutually exclusive.');
+      process.exit(1);
+    }
+    if (feedbackFile) {
+      try {
+        feedback = readFileSync(feedbackFile, 'utf8');
+      } catch (err) {
+        console.error(`Error: --feedback-file unreadable: ${err.message}`);
+        process.exit(1);
+      }
+    }
+    if (!feedback || !feedback.trim()) {
+      console.error('Error: feedback is required (--feedback "..." or --feedback-file path).');
+      process.exit(1);
+    }
+    if (model) {
+      const { loadConfig } = await import('../src/config.js');
+      const config = loadConfig();
+      if (!config.providers || !config.providers[model]) {
+        console.log(`Provider "${model}" not found.`);
+        console.log(`Available providers: ${Object.keys(config.providers || {}).join(', ')}`);
+        process.exit(1);
+      }
+      const providerCfg = config.providers[model];
+      if (providerCfg.type === 'openai' && !providerCfg.apiKey) {
+        console.log(`Provider "${model}" has no API key configured.`);
+        process.exit(1);
+      }
+      const { setModelOverride } = await import('../src/llm.js');
+      setModelOverride(model);
+      console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
+    }
+    const { modifyStory } = await import('../src/modifier.js');
+    try {
+      const result = await modifyStory({
+        storyId, feedback, lang, title, dryRun,
+        log: (msg) => console.log(`  ${msg}`),
+      });
+      if (result.newStoryId) {
+        console.log(`\nModified novel published as new story: ${result.newStoryId}`);
+      } else {
+        console.log(`\nDry run complete — no upload. Review artifacts in ${result.artifactDir}`);
+      }
+    } catch (err) {
+      console.error(`Modify failed: ${err.message}`);
+      process.exit(1);
+    }
     break;
   }
   case 'resume': {
@@ -331,6 +441,27 @@ switch (command) {
     }
     break;
   }
+  case 'stories': {
+    // List novels published to usaduanju.com from this machine, so you know
+    // which storyId to pass to `modify`. Optional substring query filters by
+    // title / storyId / jobId.
+    const { listPublishedStories, filterPublishedStories } = await import('../src/published.js');
+    const query = args.find((a) => !a.startsWith('--'));
+    const rows = filterPublishedStories(listPublishedStories(), query);
+    if (rows.length === 0) {
+      console.log(query
+        ? `No published stories match "${query}".`
+        : 'No published stories found yet. Run `duanju-writer run` to create some.');
+      break;
+    }
+    console.log(`${rows.length} published novel(s)${query ? ` matching "${query}"` : ''}:\n`);
+    for (const r of rows) {
+      const label = r.variationLabel ? ` · ${r.variationLabel}` : '';
+      console.log(`  ${r.storyId}  ${r.title}${label}`);
+    }
+    console.log('\nModify one with: duanju-writer modify <storyId> --feedback "..."');
+    break;
+  }
   case 'config': {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const VALID_KEYS = [
@@ -338,7 +469,7 @@ switch (command) {
       'maxRetries', 'publishOnUpload', 'lang', 'genre',
       'referenceCharacter', 'referenceEvent', 'referenceStory', 'fidelity', 'style',
       'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
-      'mode',
+      'mode', 'authorStyle',
     ];
     if (args[0] === 'set' && args[1]) {
       if (!VALID_KEYS.includes(args[1])) {
@@ -385,6 +516,28 @@ switch (command) {
       const config = loadConfig();
       console.log(JSON.stringify(config, null, 2));
     }
+    break;
+  }
+  case 'author-styles': {
+    const { listAuthorStyles } = await import('../src/author-styles.js');
+    const styles = listAuthorStyles();
+    const byCategory = new Map();
+    for (const s of styles) {
+      const cat = s.category || 'other';
+      if (!byCategory.has(cat)) byCategory.set(cat, []);
+      byCategory.get(cat).push(s);
+    }
+    console.log('Available author voices (--author-style):\n');
+    console.log('  default — no author voice (plot/trope only)\n');
+    for (const [category, items] of byCategory) {
+      console.log(`  [${category}]`);
+      for (const s of items) {
+        console.log(`    ${s.key} — ${s.name}`);
+      }
+      console.log();
+    }
+    console.log('Usage: duanju-writer run --author-style moyan');
+    console.log('Note: orthogonal to --style and --story (can be combined).');
     break;
   }
   case 'styles': {
@@ -635,7 +788,8 @@ switch (command) {
 }
   default:
     console.log(`Unknown command: ${command}`);
-    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|jobs|styles|config|provider|role|knowledge|resume]');
-    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell]');
+    console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
+    console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <key>]');
+    console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
     process.exit(1);
 }

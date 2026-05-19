@@ -29,7 +29,13 @@ function withLock(filePath, fn) {
       try {
         const st = statSync(lockPath);
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          try { unlinkSync(lockPath); } catch {}
+          // Atomic stale takeover (see queue.js for rationale): rename wins
+          // for exactly one racer; never unlink a lock you didn't claim.
+          try {
+            const claim = `${lockPath}.stale.${process.pid}.${Date.now()}`;
+            renameSync(lockPath, claim);
+            unlinkSync(claim);
+          } catch {}
           continue;
         }
       } catch {}

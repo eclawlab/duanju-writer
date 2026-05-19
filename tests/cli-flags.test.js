@@ -44,6 +44,24 @@ describe('cli flag validation', () => {
     assert.match(r.out, /--lang en is not supported \(CN only\)/);
   });
 
+  test('run with a non-finite count (Infinity) is rejected, not a silent no-op', () => {
+    const r = runCli(['run', 'Infinity']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /count/i);
+  });
+
+  test('run with scientific-notation count (1e3) is rejected before any job', () => {
+    const r = runCli(['run', '1e3']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /count must be a non-negative integer/);
+  });
+
+  test('run with two positional counts is rejected', () => {
+    const r = runCli(['run', '2', '3']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /single count/);
+  });
+
   test('config set novelType errors with rename hint', () => {
     const r = runCli(['config', 'set', 'novelType', '都市']);
     assert.equal(r.code, 1);
@@ -60,6 +78,36 @@ describe('cli flag validation', () => {
     const r = runCli(['config', 'set', 'lang', 'en']);
     assert.equal(r.code, 1);
     assert.match(r.out, /Only 'cn' is supported/);
+  });
+
+  test('--author-style with unknown key is rejected with available list', () => {
+    const r = runCli(['run', '--author-style', 'nobody']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /Unknown author style: "nobody"/);
+    assert.match(r.out, /Available author styles:/);
+  });
+
+  test('author-styles subcommand lists the 15 authors', () => {
+    const r = runCli(['author-styles']);
+    assert.equal(r.code, 0);
+    assert.match(r.out, /moyan/);
+    assert.match(r.out, /chinese-literary/);
+  });
+
+  test('config set accepts authorStyle key', () => {
+    const r = runCli(['config', 'set', 'authorStyle', 'moyan']);
+    assert.equal(r.code, 0);
+    assert.match(r.out, /authorStyle/);
+    // reset so the test is idempotent and does not leak into other runs
+    runCli(['config', 'set', 'authorStyle', '']);
+  });
+
+  test('--author-style does not conflict with --story (orthogonal)', () => {
+    const r = runCli(['run', '--story', 'tests/fixtures/__nope__.txt', '--author-style', 'moyan']);
+    assert.equal(r.code, 1);
+    assert.ok(!/mutually exclusive/i.test(r.out), `unexpected mutual-exclusion error: ${r.out}`);
+    assert.ok(!/Unknown author style/.test(r.out), `unexpected unknown-author error: ${r.out}`);
+    assert.match(r.out, /--story/);
   });
 
   test('resume subcommand writes the sentinel flag and exits 0', async () => {

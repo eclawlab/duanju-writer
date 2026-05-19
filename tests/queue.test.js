@@ -165,4 +165,17 @@ describe('queue', () => {
     // job3 is pending
     assert.equal(hasBusyJobIn(JOBS_FILE), true);
   });
+
+  test('createJobIn persists authorStyle alongside style', async () => {
+    const { createJobIn } = await import('../src/queue.js');
+    const job = createJobIn(JOBS_FILE, JOBS_DIR, { style: '战神归来', authorStyle: 'moyan' });
+    assert.equal(job.options.authorStyle, 'moyan');
+    assert.equal(job.options.style, '战神归来');
+  });
+
+  test('createJobIn defaults authorStyle to null when absent', async () => {
+    const { createJobIn } = await import('../src/queue.js');
+    const job = createJobIn(JOBS_FILE, JOBS_DIR, {});
+    assert.equal(job.options.authorStyle, null);
+  });
 });

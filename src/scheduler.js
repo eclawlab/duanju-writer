@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import chalk from 'chalk';
 import { loadConfig } from './config.js';
-import { createJob, listJobs } from './queue.js';
+import { createJob, hasBusyJob } from './queue.js';
 import { DEFAULT_HEARTBEAT_INTERVAL } from './constants.js';
 
 function formatInterval(ms) {
@@ -25,9 +25,10 @@ function resolveReferenceFile(label, filePath) {
 }
 
 function tick() {
-  const jobs = listJobs();
-  const busy = jobs.some(j => ['pending', 'collecting', 'writing', 'uploading'].includes(j.status));
-  if (busy) {
+  // Delegate to the single source of truth in queue.js. The previous inline
+  // status list omitted 'extracting', so a long --story bible-extraction job
+  // wasn't counted busy and the scheduler spawned a duplicate concurrent job.
+  if (hasBusyJob()) {
     console.log(chalk.dim(`[scheduler] Skipping — busy job in queue`));
     return;
   }
@@ -79,6 +80,7 @@ function tick() {
     // these, scheduler-created jobs always fell back to default mode and
     // the worker's built-in episodesPerDrama/clipsPerEpisode defaults.
     mode: config.mode || undefined,
+    authorStyle: config.authorStyle || undefined,
     episodesPerDrama: config.episodesPerDrama || undefined,
     clipsPerEpisode: config.clipsPerEpisode || undefined,
   };

@@ -134,7 +134,11 @@ export function loadStoryArtifacts(jobDir) {
 
 function loadPromptSection(name) {
   const tpl = readFileSync(PROMPT_PATH, 'utf8');
-  const re = new RegExp(`## ${name}\\n([\\s\\S]*?)(?=\\n## |$)`, 'm');
+  // No `m` flag: with multiline, `$` in the lookahead matches at every line
+  // end, so the lazy quantifier stopped at the section's first line (often a
+  // blank line → empty section). Anchor the heading and let `$` mean
+  // end-of-string only. Mirrors styles.js extractSection.
+  const re = new RegExp(`(?:^|\\n)## ${name}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`);
   const m = tpl.match(re);
   if (!m) throw new Error(`story-bible.md: section "${name}" not found`);
   return m[1].trim();

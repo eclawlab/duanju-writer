@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { callLLM } from './llm.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
+import { getAuthorStyleSafe } from './author-styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
 import { compressClips, buildHistoryContext } from './compressor.js';
 import {
@@ -235,6 +236,15 @@ export async function parseOutline(raw) {
     }
     validIndices.add(ep.episodeIndex);
   }
+
+  // Normalize to a dense 0-based episodeIndex by sorted order. parseOutline
+  // only guaranteed uniqueness, not 0..N-1 — but the front/tail split math
+  // (worker.js: slice(0, splitIdx)) and sceneMap/ancestor lookups are
+  // position-keyed. A 1-based LLM emission would otherwise collide the last
+  // front episode with the first renumbered tail episode. Sorting also makes
+  // the final-episode ending check below order-independent.
+  data.episodes.sort((a, b) => a.episodeIndex - b.episodeIndex);
+  data.episodes.forEach((ep, i) => { ep.episodeIndex = i; });
 
   for (const ep of data.episodes) {
     if (!ep.clipPlan || ep.clipPlan.length === 0) {
@@ -537,6 +547,7 @@ export function buildClipPrompt(ctx) {
     episodeChapterRange = null,
     mode = 'default',
     lang = 'cn',
+    authorVoice = '',
   } = ctx || {};
 
   let template = readFileSync(CLIPS_PROMPT_PATH, 'utf8');
@@ -566,6 +577,13 @@ export function buildClipPrompt(ctx) {
 
   if (mode === 'selftell') {
     rendered += '\n' + buildSelftellDirective(lang, 'clip');
+  }
+
+  if (authorVoice) {
+    rendered += '\n\n## 文风 / Author Voice\n\n'
+      + '请用以下作家的文风来写作。这只影响遣词、节奏、意象与句子质感——'
+      + '不改变剧情、套路结构、人物或事件。\n\n'
+      + authorVoice;
   }
 
   return rendered;
@@ -792,7 +810,7 @@ function rewriteNarratorBlocks(dialogue, protagonist, otherNames) {
  * model can correct itself.
  */
 export function buildRetryClipPrompt(ctx = {}) {
-  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', mode = 'default', lang = 'cn' } = ctx;
+  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', mode = 'default', lang = 'cn', authorVoice = '' } = ctx;
   const tail = isConclusion
     ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${ending}" } and you may leave "hook" empty.`
     : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
@@ -806,6 +824,9 @@ export function buildRetryClipPrompt(ctx = {}) {
   ];
   if (mode === 'selftell') {
     parts.push(buildSelftellDirective(lang, 'clip'));
+  }
+  if (authorVoice) {
+    parts.push('文风（仅影响遣词、节奏与意象，不改变剧情、人物或事件）：\n' + authorVoice);
   }
   return parts.join('\n');
 }
@@ -942,6 +963,8 @@ export async function generateDrama(materials, options = {}) {
   const chapters = options.chapters || null;
   const fidelity = options.fidelity || null;
   const mode = options.mode || 'default';
+  const authorStyle = options.authorStyle || '';
+  const authorVoice = getAuthorStyleSafe(authorStyle)?.scene || '';
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -1228,6 +1251,7 @@ export async function generateDrama(materials, options = {}) {
           episodeChapterRange,
           mode,
           lang,
+          authorVoice,
         });
       } catch (firstErr) {
         log(`[clip failed] ${firstErr.message} — retrying with simplified prompt...`);
@@ -1240,6 +1264,7 @@ export async function generateDrama(materials, options = {}) {
             ending: concEnding,
             mode,
             lang,
+            authorVoice,
           });
           const retryRaw = await callLLM(retryPrompt, 'clip');
           scene = await parseClip(retryRaw);
