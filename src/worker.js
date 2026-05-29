@@ -21,6 +21,12 @@ import { upload } from './uploader.js';
 import { logEntry, writeSummary } from './worklog.js';
 import { countWords } from './enrichment.js';
 import { getLLMStats, resetLLMStats } from './llm.js';
+import { mapWithConcurrency } from './async.js';
+
+// Max concurrent per-chapter bible extractions. Bounded so a large novel
+// doesn't fan out hundreds of simultaneous LLM calls (which would trip
+// rate limits); each call still gets callLLM's own transient-retry handling.
+const CHAPTER_EXTRACT_CONCURRENCY = 4;
 
 // Each job produces 3 uploads sharing a variationGroupId, one per ending type.
 // Front half (≈50% of episodes) is generated once and shared; back halves diverge.
@@ -116,12 +122,13 @@ export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = ()
   }
   const chapterChunks = splitChapters(storyText, { log });
   log(`Split novel into ${chapterChunks.length} chapter chunks`);
-  const facts = [];
-  let degradedChapters = 0;
-  for (const chunk of chapterChunks) {
-    let f;
+  // Extract chapters in bounded-concurrency batches rather than serially: a
+  // 100-chapter novel previously made 100 sequential LLM round-trips. Order is
+  // preserved by mapWithConcurrency so synthesis input stays deterministic; the
+  // per-chapter retry-once-then-stub recovery is unchanged.
+  const settled = await mapWithConcurrency(chapterChunks, CHAPTER_EXTRACT_CONCURRENCY, async (chunk) => {
     try {
-      f = await extractChapterFacts(chunk, { llmFn });
+      return { fact: await extractChapterFacts(chunk, { llmFn }), degraded: false };
     } catch (err) {
       // One LLM-side malformation shouldn't abort the whole bible. Retry
       // once with a corrective hint, then fall back to a stub. The
@@ -130,15 +137,18 @@ export async function extractStoryArtifacts({ jobDir, storyText, llmFn, log = ()
       // produce content.
       log(`[bible] chapter ${chunk.chapterIndex} extraction failed: ${err.message} — retrying once`);
       try {
-        f = await extractChapterFacts(chunk, { llmFn, strict: true });
+        return { fact: await extractChapterFacts(chunk, { llmFn, strict: true }), degraded: false };
       } catch (err2) {
         log(`[bible] chapter ${chunk.chapterIndex} retry failed: ${err2.message} — skipping with empty stub`);
-        degradedChapters += 1;
-        f = { chapterIndex: chunk.chapterIndex, characters: [], events: [], hooks: [], themes: [], worldDetail: '' };
+        return {
+          fact: { chapterIndex: chunk.chapterIndex, characters: [], events: [], hooks: [], themes: [], worldDetail: '' },
+          degraded: true,
+        };
       }
     }
-    facts.push(f);
-  }
+  });
+  const facts = settled.map(s => s.fact);
+  const degradedChapters = settled.filter(s => s.degraded).length;
   if (degradedChapters > 0) {
     log(`[bible] ${degradedChapters} of ${chapterChunks.length} chapters extracted as empty stubs`);
   }

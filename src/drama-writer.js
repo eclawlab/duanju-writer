@@ -139,6 +139,19 @@ export const ENDING_LABEL_TO_ENUM = {
 // composeScene lives in ./scene.js (re-exported above) so selftell.js can use
 // it without a circular import.
 
+// Cheap, no-LLM digest of a just-written clip, shaped like a compressClips
+// result so buildHistoryContext can format it. Used for within-episode
+// continuity; the episode-level LLM compression handles cross-episode carry.
+function localSceneDigest(scene, planSummary = '') {
+  const action = (scene && typeof scene.action === 'string') ? scene.action.trim() : '';
+  return {
+    summary: planSummary || action || (scene && scene.content) || '',
+    characterActions: action ? [action] : [],
+    plotProgress: [],
+    emotionalArc: '',
+  };
+}
+
 export async function parseOutline(raw) {
   const data = await parseJsonWithRepair(raw, 'outline');
 
@@ -1041,7 +1054,12 @@ export async function generateDrama(materials, options = {}) {
     const episodeRevealedIds = [];
     const episodeReinforcedForeshadowing = []; // { id, clipIndex }
     const episodeResolvedForeshadowing = [];  // { id, clipIndex }
-    const episodeCompressedHistory = [];
+    // Within-episode continuity uses cheap local digests of already-written
+    // clips (no LLM) so each clip still sees what came before it. The
+    // expensive LLM compression runs ONCE per episode (after the loop) to
+    // produce the forward-carried summary descendants consume — previously it
+    // fired per clip, doubling write-phase LLM calls.
+    const episodeRecentDigests = [];
 
     for (let i = 0; i < totalClips; i++) {
       const plan_clip = ep.clipPlan[i];
@@ -1052,7 +1070,7 @@ export async function generateDrama(materials, options = {}) {
       // priorClipDigest only — state context is intentionally not threaded
       // through (the planner's clipSummary already encodes the relevant beat).
       const branchLocalSceneIndex = branchSceneCount + i;
-      const history = buildHistoryContext([...branchHistory, ...episodeCompressedHistory]);
+      const history = buildHistoryContext([...branchHistory, ...episodeRecentDigests]);
 
       // Get plan scene data for events/pacing using composite key (episodeIndex:clipIndex)
       const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || {};
@@ -1191,14 +1209,10 @@ export async function generateDrama(materials, options = {}) {
         } catch (err) { log(`[state:resolveForeshadowing "${fId}"] ${err.message}`); }
       }
 
-      // Compress scene into history
-      try {
-        const compressed = await compressClips([scene], lang, mode);
-        episodeCompressedHistory.push(compressed);
-      } catch (err) {
-        log(`[compression failed] ${err.message}`);
-        episodeCompressedHistory.push({ summary: plan_clip.summary, characterActions: [], plotProgress: [], emotionalArc: '' });
-      }
+      // Record a cheap local digest of this clip for within-episode continuity.
+      // No LLM call here — the episode-level compression below produces the
+      // summary that descendant episodes consume.
+      episodeRecentDigests.push(localSceneDigest(scene, plan_clip.summary));
 
       // Notify caller of state update
       if (options.onState) options.onState(branchState);
@@ -1219,9 +1233,20 @@ export async function generateDrama(materials, options = {}) {
       globalClipIndex++;
     }
 
+    // One LLM compression per episode (batched over all its clips) produces the
+    // forward-carried summary descendants inherit via branchHistory. Falls back
+    // to the per-clip local digests if the compression call fails.
+    let episodeForwardHistory;
+    try {
+      episodeForwardHistory = [await compressClips(episode.scenes, lang, mode)];
+    } catch (err) {
+      log(`[compression failed] ${err.message} — carrying local digests forward`);
+      episodeForwardHistory = episodeRecentDigests;
+    }
+
     // Save this episode's context snapshot for descendant episodes
     episodeContexts[ep.episodeIndex] = {
-      compressedHistory: episodeCompressedHistory,
+      compressedHistory: episodeForwardHistory,
       stateChanges: {
         characters: episodeCharChanges,
         items: episodeItemChanges,
