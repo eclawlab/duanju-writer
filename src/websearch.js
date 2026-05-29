@@ -1,3 +1,8 @@
+import { decodeHtmlEntities, stripHtmlTags } from './html.js';
+
+// Re-exported so existing importers/tests can keep pulling these from websearch.
+export { decodeHtmlEntities, stripHtmlTags };
+
 const DEFAULT_MAX_RESULTS = 5;
 const MAX_RESULTS = 10;
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -80,26 +85,6 @@ function normalizeUrl(href) {
 
 export function normalizeText(text) {
   return decodeHtmlEntities(stripHtmlTags(text)).replace(/\s+/g, ' ').trim();
-}
-
-export function stripHtmlTags(text) {
-  return text.replace(/<[^>]+>/g, '');
-}
-
-function safeFromCodePoint(cp) {
-  try { return String.fromCodePoint(cp); }
-  catch { return ''; }
-}
-
-export function decodeHtmlEntities(text) {
-  return text
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => safeFromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, n) => safeFromCodePoint(Number(n)))
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&');
 }
 
 function urlEncode(input) {

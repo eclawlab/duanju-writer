@@ -4,29 +4,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseFrontmatter, extractSection } from './markdown.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STYLES_DIR = join(__dirname, '..', 'styles');
-
-function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) return { meta: {}, body: content };
-  const meta = {};
-  for (const line of match[1].split('\n')) {
-    const idx = line.indexOf(':');
-    if (idx === -1) continue;
-    const key = line.slice(0, idx).trim();
-    const val = line.slice(idx + 1).trim();
-    meta[key] = val;
-  }
-  return { meta, body: match[2] };
-}
-
-function extractSection(body, heading) {
-  const re = new RegExp(`(?:^|\\n)## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`);
-  const match = body.match(re);
-  return match ? match[1].trim() : '';
-}
 
 function loadStylesFromDisk() {
   const styles = {};

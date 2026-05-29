@@ -3,34 +3,18 @@
 // (name, category) and ## Outline / ## Scene sections. Only ## Scene is
 // consumed (prose voice for clip generation); ## Outline is ignored.
 //
-// This module is an intentional structural twin of src/styles.js but is
-// kept fully separate so the 短剧 trope system and the author-voice system
-// never share state, parsers, or registries.
+// This module is an intentional structural twin of src/styles.js but keeps its
+// own registry/cache state separate so the 短剧 trope system and the
+// author-voice system never share mutable state. The stateless Markdown parser
+// (parseFrontmatter/extractSection) is shared via ./markdown.js.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseFrontmatter, extractSection } from './markdown.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTHOR_STYLES_DIR = join(__dirname, '..', 'author-styles');
-
-function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) return { meta: {}, body: content };
-  const meta = {};
-  for (const line of match[1].split('\n')) {
-    const idx = line.indexOf(':');
-    if (idx === -1) continue;
-    meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-  }
-  return { meta, body: match[2] };
-}
-
-function extractSection(body, heading) {
-  const re = new RegExp(`(?:^|\\n)## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`);
-  const match = body.match(re);
-  return match ? match[1].trim() : '';
-}
 
 function loadAuthorStylesFromDisk() {
   const styles = {};

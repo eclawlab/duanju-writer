@@ -1,3 +1,5 @@
+import { decodeHtmlEntities } from './html.js';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 const MAX_CONTENT_LENGTH = 50_000;
@@ -138,20 +140,4 @@ export function extractTitle(html) {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   if (!match) return undefined;
   return decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim() || undefined;
-}
-
-function safeFromCodePoint(cp) {
-  try { return String.fromCodePoint(cp); }
-  catch { return ''; }
-}
-
-function decodeHtmlEntities(text) {
-  return text
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => safeFromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, n) => safeFromCodePoint(Number(n)))
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&');
 }
