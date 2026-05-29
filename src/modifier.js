@@ -2,6 +2,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM as defaultCallLLM } from './llm.js';
+import { tryParseJson } from './json.js';
 import { download as defaultDownload } from './downloader.js';
 import { upload as defaultUpload } from './uploader.js';
 import { DATA_DIR } from './constants.js';
@@ -10,24 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const META_TEMPLATE_PATH = join(__dirname, '..', 'prompts', 'modify-meta.md');
 const EPISODE_TEMPLATE_PATH = join(__dirname, '..', 'prompts', 'modify-episode.md');
 
-// Self-contained JSON salvage helpers (story-bible.js keeps its own copies for
-// the same reason — these are tiny and the modify flow shouldn't depend on
-// bible-extraction internals).
-function cleanJson(raw) {
-  let s = String(raw).trim();
-  if (s.startsWith('```')) s = s.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-  return s;
-}
-
-function parseJsonLoose(cleaned) {
-  try { return JSON.parse(cleaned); } catch {}
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
-  }
-  return null;
-}
+// JSON salvage (clean fences + loose parse) is shared via ./json.js.
 
 // Fill `{{name}}` placeholders via function replacement so `$` sequences in
 // story/feedback text are not interpreted as regex replacement patterns. Each
@@ -118,7 +102,7 @@ export async function applyFeedback(drama, feedback, opts = {}) {
   // (resilient: never destroy a whole novel because the model added a
   // preamble), the per-episode pass still runs.
   const metaRaw = await llmFn(buildMetaPrompt(drama, feedback, lang), role);
-  const revised = mergeMeta(drama, parseJsonLoose(cleanJson(metaRaw)));
+  const revised = mergeMeta(drama, tryParseJson(metaRaw));
 
   // Pass 2 — every episode gets its OWN LLM call, so the feedback reaches the
   // entire novel instead of only the first episodes the model bothered to
@@ -133,7 +117,7 @@ export async function applyFeedback(drama, feedback, opts = {}) {
       buildEpisodePrompt(revised, ep, feedback, i + 1, total, lang),
       role,
     );
-    revisedEpisodes.push(mergeEpisode(ep, parseJsonLoose(cleanJson(epRaw))));
+    revisedEpisodes.push(mergeEpisode(ep, tryParseJson(epRaw)));
   }
   revised.episodes = revisedEpisodes;
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
+import { tryParseJson } from './json.js';
 import { buildBibleBlock } from './story-bible.js';
 import { buildSelftellDirective } from './selftell.js';
 
@@ -115,21 +116,9 @@ export async function generateSnowflake(materials, options = {}) {
     log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
     const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent, { bible, fidelity, mode });
     const raw = await callLLM(prompt, 'outline');
-    // Try to parse JSON, fall back to raw text
-    try {
-      const cleaned = raw.trim().replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-      parts.push(JSON.parse(cleaned));
-    } catch {
-      // Try extracting JSON object
-      const start = raw.indexOf('{');
-      const end = raw.lastIndexOf('}');
-      if (start !== -1 && end > start) {
-        try { parts.push(JSON.parse(raw.slice(start, end + 1))); }
-        catch { parts.push({ raw: raw }); }
-      } else {
-        parts.push({ raw: raw });
-      }
-    }
+    // Parse JSON (clean fences / extract object), falling back to raw text so a
+    // single unparseable step degrades to `{ raw }` instead of aborting.
+    parts.push(tryParseJson(raw) || { raw });
   }
 
   return {

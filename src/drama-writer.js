@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import chalk from 'chalk';
 import { callLLM } from './llm.js';
+import { parseJsonWithRepair } from './json.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { getAuthorStyleSafe } from './author-styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
@@ -35,71 +35,7 @@ export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
 // growing further and to avoid circular imports from planner/snowflake.
 export { buildSelftellDirective };
 
-// ─── JSON extraction and repair ───────────────────────────────────────────────
-
-function cleanRaw(raw) {
-  let cleaned = raw.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-  }
-  return cleaned;
-}
-
-function extractJsonObject(text) {
-  // Find the first { and last } to extract JSON from surrounding text
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return null;
-  const candidate = text.slice(start, end + 1);
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
-  }
-}
-
-function tryParseJson(raw) {
-  const cleaned = cleanRaw(raw);
-
-  // Attempt 1: direct parse
-  try { return JSON.parse(cleaned); } catch {}
-
-  // Attempt 2: extract JSON object from mixed output
-  const extracted = extractJsonObject(cleaned);
-  if (extracted) return extracted;
-
-  return null;
-}
-
-async function repairJson(broken, label) {
-  // Surface JSON-repair invocations so users can spot recurring LLM JSON malformation
-  // (each call costs an extra LLM round-trip). chalk.dim keeps it low-visual-weight.
-  console.log(chalk.dim(`  [json-repair] ${label}: primary parse failed, invoking LLM repair pass`));
-
-  const prompt = [
-    'The following text was supposed to be valid JSON but has syntax errors.',
-    'Common issues: unescaped quotes inside strings, missing commas, trailing commas, unescaped newlines in strings.',
-    'Fix ALL issues and return ONLY the corrected valid JSON object. No explanation, no markdown fences.',
-    '',
-    broken,
-  ].join('\n');
-
-  const fixed = await callLLM(prompt, 'repair');
-  const result = tryParseJson(fixed);
-  if (result) return result;
-
-  // Last resort: try extracting from the raw repair output
-  const extracted = extractJsonObject(fixed);
-  if (extracted) return extracted;
-
-  throw new Error(`Failed to parse ${label} JSON even after LLM repair`);
-}
-
-async function parseJsonWithRepair(raw, label) {
-  const result = tryParseJson(raw);
-  if (result) return result;
-  return await repairJson(cleanRaw(raw), label);
-}
+// JSON extraction + repair helpers are shared via ./json.js.
 
 // ─── Step 1: Generate outline ─────────────────────────────────────────────────
 

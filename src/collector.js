@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import chalk from 'chalk';
 import { callLLM } from './llm.js';
+import { tryParseJson, parseJsonWithRepair } from './json.js';
 import { search } from './websearch.js';
 import { fetchPage } from './webfetch.js';
 
@@ -142,52 +142,8 @@ export function buildResearchPrompt(history, webResearch, lang = 'cn', genre = '
     .replace('{{history}}', () => historyText);
 }
 
-function cleanRaw(raw) {
-  let cleaned = raw.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-  }
-  return cleaned;
-}
-
-function extractJsonObject(text) {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return null;
-  try { return JSON.parse(text.slice(start, end + 1)); }
-  catch { return null; }
-}
-
-function tryParseJson(raw) {
-  const cleaned = cleanRaw(raw);
-  try { return JSON.parse(cleaned); } catch {}
-  const extracted = extractJsonObject(cleaned);
-  if (extracted) return extracted;
-  return null;
-}
-
-async function repairJson(broken) {
-  console.log(chalk.dim('  [json-repair] materials: primary parse failed, invoking LLM repair pass'));
-  const prompt = [
-    'The following text was supposed to be valid JSON but has syntax errors.',
-    'Common issues: unescaped quotes, missing commas, trailing commas, unescaped newlines in strings.',
-    'Fix ALL issues and return ONLY the corrected valid JSON object. No explanation, no markdown fences.',
-    '',
-    broken,
-  ].join('\n');
-  const fixed = await callLLM(prompt, 'repair');
-  const result = tryParseJson(fixed);
-  if (result) return result;
-  const extracted = extractJsonObject(fixed);
-  if (extracted) return extracted;
-  throw new Error('Failed to parse materials JSON even after LLM repair');
-}
-
 export async function parseMaterials(raw) {
-  let data = tryParseJson(raw);
-  if (!data) {
-    data = await repairJson(cleanRaw(raw));
-  }
+  const data = await parseJsonWithRepair(raw, 'materials');
 
   if (!data.topics || !Array.isArray(data.topics)) {
     throw new Error('Missing topics array');
@@ -234,8 +190,7 @@ async function extractNewsKeywords(article, lang) {
       ].join('\n');
 
   const raw = await callLLM(prompt, 'research');
-  let data = tryParseJson(raw);
-  if (!data) data = extractJsonObject(raw);
+  const data = tryParseJson(raw);
   if (!data || !Array.isArray(data.keywords)) return { keywords: [], theme: '', emotionalCore: '' };
   return data;
 }

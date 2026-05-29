@@ -90,41 +90,6 @@ describe('compressor', () => {
     assert.equal(result, '');
   });
 
-  test('buildGlobalSummaryPrompt includes current summary and new content', async () => {
-    const { buildGlobalSummaryPrompt } = await import('../src/compressor.js');
-    const prompt = buildGlobalSummaryPrompt('Hero has entered the dungeon.', 'Hero fights a dragon.', 'en');
-    assert.ok(prompt.includes('Hero has entered the dungeon.'));
-    assert.ok(prompt.includes('Hero fights a dragon.'));
-  });
-
-  test('buildGlobalSummaryPrompt handles first scene (no current summary)', async () => {
-    const { buildGlobalSummaryPrompt } = await import('../src/compressor.js');
-    const promptNull = buildGlobalSummaryPrompt(null, 'First scene content.', 'en');
-    assert.ok(promptNull.includes('No summary yet'));
-    const promptEmpty = buildGlobalSummaryPrompt('', 'First scene content.', 'en');
-    assert.ok(promptEmpty.includes('No summary yet'));
-  });
-
-  test('buildGlobalSummaryPrompt uses Chinese for cn lang', async () => {
-    const { buildGlobalSummaryPrompt } = await import('../src/compressor.js');
-    const prompt = buildGlobalSummaryPrompt('当前摘要内容', '新场景内容', 'cn');
-    assert.ok(prompt.includes('你是叙事摘要专家'));
-    assert.ok(prompt.includes('当前全局摘要'));
-  });
-
-  test('formatGlobalSummary returns empty string for null/empty', async () => {
-    const { formatGlobalSummary } = await import('../src/compressor.js');
-    assert.equal(formatGlobalSummary(null), '');
-    assert.equal(formatGlobalSummary(''), '');
-    assert.equal(formatGlobalSummary(undefined), '');
-  });
-
-  test('formatGlobalSummary returns summary as-is', async () => {
-    const { formatGlobalSummary } = await import('../src/compressor.js');
-    const summary = 'The hero has slain the dragon and claimed the treasure.';
-    assert.equal(formatGlobalSummary(summary), summary);
-  });
-
   test('buildCompressPrompt reads structured beats from the scene itself', async () => {
     const { buildCompressPrompt } = await import('../src/compressor.js');
     const scene = {

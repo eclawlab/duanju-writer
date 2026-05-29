@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
+import { tryParseJson } from './json.js';
 import { buildBibleBlock, buildProseBlock } from './story-bible.js';
 import { buildSelftellDirective } from './selftell.js';
 import {
@@ -14,23 +15,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ─── JSON extraction helpers (same pattern as compressor.js / drama-writer.js) ────────
-
-function cleanRaw(raw) {
-  let cleaned = raw.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-  }
-  return cleaned;
-}
-
-function extractJsonObject(text) {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return null;
-  try { return JSON.parse(text.slice(start, end + 1)); }
-  catch { return null; }
-}
+// JSON extraction helpers are shared via ./json.js.
 
 // ─── Prompt builder ────────────────────────────────────────────────────────────
 
@@ -84,17 +69,7 @@ export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceChara
  * @returns {object}
  */
 export function parsePlan(raw) {
-  const cleaned = cleanRaw(raw);
-
-  let plan;
-
-  // Attempt 1: direct parse
-  try { plan = JSON.parse(cleaned); } catch { plan = null; }
-
-  // Attempt 2: extract JSON object from surrounding text
-  if (!plan) {
-    plan = extractJsonObject(cleaned);
-  }
+  const plan = tryParseJson(raw);
 
   if (!plan) {
     throw new Error('Failed to parse plan output as JSON');

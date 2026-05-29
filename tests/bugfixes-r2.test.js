@@ -49,20 +49,28 @@ describe('R2 Fix #2/#3 — variantPlan persistence guard', () => {
 // malformation triggers an extra repair LLM call.
 // ──────────────────────────────────────────────────────────────────────────────
 describe('R2 Fix #4 — JSON repair is observable', () => {
-  test('writer.js repairJson logs invocation', async () => {
+  // repairJson was consolidated into the shared src/json.js module (used by
+  // drama-writer, collector, and the other pipeline stages). The observable
+  // 'json-repair' log lives there now.
+  test('json.js repairJson logs invocation', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/drama-writer.js', import.meta.url), 'utf8');
-    const fnMatch = src.match(/async function repairJson\([^]*?\n\}/);
-    assert.ok(fnMatch, 'writer.js repairJson should be defined');
-    assert.ok(fnMatch[0].includes('json-repair'), 'writer.js repairJson should log on invocation');
+    const src = readFileSync(new URL('../src/json.js', import.meta.url), 'utf8');
+    const fnMatch = src.match(/export async function repairJson\([^]*?\n\}/);
+    assert.ok(fnMatch, 'json.js repairJson should be defined');
+    assert.ok(fnMatch[0].includes('json-repair'), 'json.js repairJson should log on invocation');
   });
 
-  test('collector.js repairJson logs invocation', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/collector.js', import.meta.url), 'utf8');
-    const fnMatch = src.match(/async function repairJson\([^]*?\n\}/);
-    assert.ok(fnMatch, 'collector.js repairJson should be defined');
-    assert.ok(fnMatch[0].includes('json-repair'), 'collector.js repairJson should log on invocation');
+  test('repairJson logs through chalk.dim with the json-repair tag', async () => {
+    const { repairJson } = await import('../src/json.js');
+    const logs = [];
+    const origLog = console.log;
+    console.log = (...a) => logs.push(a.join(' '));
+    try {
+      await repairJson('{bad', 'demo', async () => '{"ok":1}');
+    } finally {
+      console.log = origLog;
+    }
+    assert.ok(logs.some((l) => l.includes('json-repair')), 'repair pass should emit a json-repair log');
   });
 });
 

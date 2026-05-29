@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM as defaultCallLLM } from './llm.js';
+import { cleanRaw, parseJsonLoose } from './json.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROMPT_PATH = join(__dirname, '..', 'prompts', 'story-bible.md');
@@ -144,31 +145,10 @@ function loadPromptSection(name) {
   return m[1].trim();
 }
 
-function cleanJson(raw) {
-  let s = raw.trim();
-  if (s.startsWith('```')) s = s.replace(/^```\w*\n?/, '').replace(/\n?```\s*$/, '');
-  return s;
-}
-
-// Extract a balanced JSON object from surrounding prose. LLMs sometimes prefix
-// the response with explanatory text ("This input...", "I'll output...") even
-// when the prompt forbids it; falling back to slicing between the first { and
-// last } handles that case without losing strict-parse correctness on clean
-// responses.
-function extractJsonObject(text) {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return null;
-  try { return JSON.parse(text.slice(start, end + 1)); }
-  catch { return null; }
-}
-
-function parseJsonLoose(cleaned) {
-  try { return JSON.parse(cleaned); } catch {}
-  const extracted = extractJsonObject(cleaned);
-  if (extracted) return extracted;
-  return null;
-}
+// JSON cleaning + loose-parse helpers (cleanRaw/parseJsonLoose) are shared via
+// ./json.js. The loose parse slices between the first { and last } as a
+// fallback for LLMs that prefix prose ("This input...", "I'll output...") even
+// when the prompt forbids it.
 
 // Always-on guard prepended to bible-extraction prompts. The Claude CLI
 // frequently treats short/structured prompts conversationally — opening with
@@ -232,7 +212,7 @@ export async function extractChapterFacts(chapter, opts = {}) {
   const retryHint = opts.strict ? STRICT_RETRY_HINT : '';
   const prompt = `${JSON_GUARD}${retryHint}${section}\n\n## 输入\n\n章节编号：${chapter.chapterIndex}\n章节标题：${chapter.title || '(无)'}\n\n${chapter.prose}`;
   const raw = await llmFn(prompt, role);
-  const cleaned = cleanJson(raw);
+  const cleaned = cleanRaw(raw);
   const parsed = parseJsonLoose(cleaned);
   if (!parsed) {
     throw new Error(`extractChapterFacts: failed to parse JSON: Unexpected token ${JSON.stringify(cleaned.slice(0, 10))}... is not valid JSON`);
@@ -252,7 +232,7 @@ export async function synthesizeBible(chapterFacts, opts = {}) {
   const retryHint = opts.strict ? STRICT_RETRY_HINT : '';
   const prompt = `${JSON_GUARD}${retryHint}${section}\n\n## 输入\n\n源标题：${sourceTitle}\n\nChapterFacts JSON：\n${JSON.stringify(chapterFacts, null, 2)}`;
   const raw = await llmFn(prompt, role);
-  const cleaned = cleanJson(raw);
+  const cleaned = cleanRaw(raw);
   const bible = parseJsonLoose(cleaned);
   if (!bible) {
     throw new Error(`synthesizeBible: failed to parse JSON: Unexpected token ${JSON.stringify(cleaned.slice(0, 10))}... is not valid JSON`);
