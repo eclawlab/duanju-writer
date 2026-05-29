@@ -1,55 +1,14 @@
 import {
   existsSync, readFileSync, writeFileSync, renameSync,
-  openSync, closeSync, unlinkSync, statSync,
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { PIDFILE } from './constants.js';
+import { withLock, sleepSync } from './lock.js';
 
-const LOCK_STALE_MS = 30_000;
-const LOCK_MAX_ATTEMPTS = 100;
-const LOCK_SLEEP_MS = 20;
 const DEFAULT_GRACE_MS = 2000;
 
 function emptyState() { return { parent: null, children: [] }; }
-
-function sleepSync(ms) {
-  const sab = new SharedArrayBuffer(4);
-  Atomics.wait(new Int32Array(sab), 0, 0, ms);
-}
-
-function withLock(filePath, fn) {
-  const lockPath = filePath + '.lock';
-  for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt++) {
-    let fd;
-    try {
-      fd = openSync(lockPath, 'wx');
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      try {
-        const st = statSync(lockPath);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          // Atomic stale takeover (see queue.js for rationale): rename wins
-          // for exactly one racer; never unlink a lock you didn't claim.
-          try {
-            const claim = `${lockPath}.stale.${process.pid}.${Date.now()}`;
-            renameSync(lockPath, claim);
-            unlinkSync(claim);
-          } catch {}
-          continue;
-        }
-      } catch {}
-      sleepSync(LOCK_SLEEP_MS);
-      continue;
-    }
-    try { return fn(); }
-    finally {
-      try { closeSync(fd); } catch {}
-      try { unlinkSync(lockPath); } catch {}
-    }
-  }
-  throw new Error(`Could not acquire lock on ${filePath}`);
-}
 
 function normalizeState(raw) {
   if (!raw || typeof raw !== 'object') return emptyState();

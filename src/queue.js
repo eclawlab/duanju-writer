@@ -1,53 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, openSync, closeSync, unlinkSync, statSync, rmSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { JOBS_FILE, JOBS_DIR } from './constants.js';
-
-const LOCK_STALE_MS = 30_000;
-const LOCK_MAX_ATTEMPTS = 100;
-const LOCK_SLEEP_MS = 20;
-
-function sleepSync(ms) {
-  const sab = new SharedArrayBuffer(4);
-  Atomics.wait(new Int32Array(sab), 0, 0, ms);
-}
-
-function withLock(filePath, fn) {
-  const lockPath = filePath + '.lock';
-  for (let attempt = 0; attempt < LOCK_MAX_ATTEMPTS; attempt++) {
-    let fd;
-    try {
-      fd = openSync(lockPath, 'wx');
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      try {
-        const st = statSync(lockPath);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          // Atomic stale takeover: rename (not unlink) to a unique name.
-          // renameSync of a given path succeeds for exactly one racing
-          // process; losers get ENOENT and retry. The old unconditional
-          // unlinkSync let two processes both "take over" the same stale
-          // lock, and could delete a fresh lock a third process had just
-          // created at the same path.
-          try {
-            const claim = `${lockPath}.stale.${process.pid}.${Date.now()}`;
-            renameSync(lockPath, claim);
-            unlinkSync(claim);
-          } catch {}
-          continue;
-        }
-      } catch {}
-      sleepSync(LOCK_SLEEP_MS);
-      continue;
-    }
-    try { return fn(); }
-    finally {
-      try { closeSync(fd); } catch {}
-      try { unlinkSync(lockPath); } catch {}
-    }
-  }
-  throw new Error(`Could not acquire lock on ${filePath}`);
-}
+import { withLock } from './lock.js';
 
 function readJobs(filePath) {
   if (!existsSync(filePath)) return [];
