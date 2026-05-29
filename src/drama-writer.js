@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { parseJsonWithRepair } from './json.js';
+import { buildReferenceBlock } from './references.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { getAuthorStyleSafe } from './author-styles.js';
 import { generatePlan, initStateFromPlan } from './planner.js';
@@ -22,7 +23,14 @@ import { checkHookDensity } from './consistency.js';
 import { buildBibleBlock, buildProseBlock, compressBibleForEpisode } from './story-bible.js';
 import { generateSnowflake } from './snowflake.js';
 import { countWords } from './enrichment.js';
-import { buildSelftellDirective } from './selftell.js';
+import {
+  buildSelftellDirective,
+  enforceSelftellPOV,
+  pickSelftellProtagonist,
+  collectOtherCharacterNames,
+  substituteProtagonist,
+} from './selftell.js';
+import { composeScene } from './scene.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -31,9 +39,10 @@ const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
 
 export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
 
-// Selftell narration mode lives in selftell.js to keep this module from
-// growing further and to avoid circular imports from planner/snowflake.
-export { buildSelftellDirective };
+// Selftell narration + POV enforcement live in selftell.js, and composeScene in
+// scene.js, to keep this module focused and avoid circular imports. Re-exported
+// here so existing importers/tests can keep pulling them from drama-writer.
+export { buildSelftellDirective, enforceSelftellPOV, composeScene };
 
 // JSON extraction + repair helpers are shared via ./json.js.
 
@@ -54,16 +63,20 @@ export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '',
     template += section;
   }
   if (referenceCharacter) {
-    const section = lang === 'cn'
-      ? `\n\n## 参考角色（必须使用）\n\n本故事必须包含以下预先定义的角色。请在 episodes 与人物列表中完整保留该角色的姓名、身份、性格、背景、动机与弧光；不要替换或改名。其他角色可按需要虚构。\n\n---\n${referenceCharacter}\n---\n`
-      : `\n\n## Reference Character (REQUIRED)\n\nThis story MUST feature the following predefined character. Preserve their name, identity, traits, background, motivations, and arc exactly as described across episodes and character lists. Do NOT rename or replace them. Other characters may be invented as needed.\n\n---\n${referenceCharacter}\n---\n`;
-    template += section;
+    template += buildReferenceBlock({
+      kind: 'character', lang, content: referenceCharacter,
+      instruction: lang === 'cn'
+        ? '本故事必须包含以下预先定义的角色。请在 episodes 与人物列表中完整保留该角色的姓名、身份、性格、背景、动机与弧光；不要替换或改名。其他角色可按需要虚构。'
+        : 'This story MUST feature the following predefined character. Preserve their name, identity, traits, background, motivations, and arc exactly as described across episodes and character lists. Do NOT rename or replace them. Other characters may be invented as needed.',
+    });
   }
   if (referenceEvent) {
-    const section = lang === 'cn'
-      ? `\n\n## 参考事件（必须使用）\n\n本故事必须围绕以下预定义事件展开。请将其作为核心情节节点编入 episodes 中——保留其事实、情感分量与后果；不要淡化或偏离。事件在剧情中的位置（如开篇触发、高潮揭示或结局）应与其叙事分量相匹配。\n\n---\n${referenceEvent}\n---\n`
-      : `\n\n## Reference Event (REQUIRED)\n\nThis story MUST be built around the following predefined event. Weave it into the episode structure as a load-bearing plot beat — preserve its facts, emotional weight, and consequences; do not sanitize or drift from it. Its position in the episode arc (inciting incident, climactic revelation, or finale) should match its narrative weight.\n\n---\n${referenceEvent}\n---\n`;
-    template += section;
+    template += buildReferenceBlock({
+      kind: 'event', lang, content: referenceEvent,
+      instruction: lang === 'cn'
+        ? '本故事必须围绕以下预定义事件展开。请将其作为核心情节节点编入 episodes 中——保留其事实、情感分量与后果；不要淡化或偏离。事件在剧情中的位置（如开篇触发、高潮揭示或结局）应与其叙事分量相匹配。'
+        : 'This story MUST be built around the following predefined event. Weave it into the episode structure as a load-bearing plot beat — preserve its facts, emotional weight, and consequences; do not sanitize or drift from it. Its position in the episode arc (inciting incident, climactic revelation, or finale) should match its narrative weight.',
+    });
   }
   if (materials.newsSource) {
     const ns = materials.newsSource;
@@ -123,21 +136,8 @@ export const ENDING_LABEL_TO_ENUM = {
   '反转':   'SPECIAL',  // final twist outside the standard taxonomy
 };
 
-/**
- * Compose four-beat clip data into a single block-format `content` string.
- * Each non-empty beat becomes a [narrator] block (dialogue is inserted verbatim
- * because the LLM emits it pre-formatted with [narrator]/[character:Name] tags).
- * Blocks are separated by a blank line. Throws if all beats are empty.
- */
-export function composeScene({ setting, action, dialogue, hook }) {
-  const blocks = [];
-  if (setting && setting.trim()) blocks.push(`[narrator]\n${setting}`);
-  if (action  && action.trim())  blocks.push(`[narrator]\n${action}`);
-  if (dialogue && dialogue.trim()) blocks.push(dialogue);
-  if (hook    && hook.trim())    blocks.push(`[narrator]\n${hook}`);
-  if (blocks.length === 0) throw new Error('composeScene: empty content (all beats were empty)');
-  return blocks.join('\n\n');
-}
+// composeScene lives in ./scene.js (re-exported above) so selftell.js can use
+// it without a circular import.
 
 export async function parseOutline(raw) {
   const data = await parseJsonWithRepair(raw, 'outline');
@@ -288,14 +288,20 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
       : `\n\n## Novel Type Requirement\n\nThis story MUST remain a **${genre}** novel. All plot, tone, and language in the back half must stay consistent with this genre — do NOT drift.\n`;
   }
   if (referenceCharacter) {
-    filled += lang === 'cn'
-      ? `\n\n## 参考角色（必须保留）\n\n前半段已确立的以下预定义角色必须贯穿后半段。保留其姓名、身份、动机与弧光；不得替换或改名。其弧光应在后半段自然推进并收束于所选结局。\n\n---\n${referenceCharacter}\n---\n`
-      : `\n\n## Reference Character (PRESERVE)\n\nThe following predefined character established in the front half MUST carry through the back half. Preserve their name, identity, motivations, and arc; do NOT rename or replace them. Their arc should advance naturally and resolve into the chosen ending.\n\n---\n${referenceCharacter}\n---\n`;
+    filled += buildReferenceBlock({
+      kind: 'character', lang, variant: 'preserve', content: referenceCharacter,
+      instruction: lang === 'cn'
+        ? '前半段已确立的以下预定义角色必须贯穿后半段。保留其姓名、身份、动机与弧光；不得替换或改名。其弧光应在后半段自然推进并收束于所选结局。'
+        : 'The following predefined character established in the front half MUST carry through the back half. Preserve their name, identity, motivations, and arc; do NOT rename or replace them. Their arc should advance naturally and resolve into the chosen ending.',
+    });
   }
   if (referenceEvent) {
-    filled += lang === 'cn'
-      ? `\n\n## 参考事件（必须延续）\n\n以下预定义事件已在前半段或作为核心背景确立，其后果、情感回响与揭示必须在后半段得到真实的延续与解决，不得淡化或回避。\n\n---\n${referenceEvent}\n---\n`
-      : `\n\n## Reference Event (CONTINUE)\n\nThe following predefined event was established in the front half or as core backdrop. Its consequences, emotional echoes, and revelations MUST continue and resolve in the back half — do NOT sanitize or sidestep them.\n\n---\n${referenceEvent}\n---\n`;
+    filled += buildReferenceBlock({
+      kind: 'event', lang, variant: 'continue', content: referenceEvent,
+      instruction: lang === 'cn'
+        ? '以下预定义事件已在前半段或作为核心背景确立，其后果、情感回响与揭示必须在后半段得到真实的延续与解决，不得淡化或回避。'
+        : 'The following predefined event was established in the front half or as core backdrop. Its consequences, emotional echoes, and revelations MUST continue and resolve in the back half — do NOT sanitize or sidestep them.',
+    });
   }
   if (newsSource) {
     filled += lang === 'cn'
@@ -626,117 +632,7 @@ export async function generateClip(ctx) {
   return parsed;
 }
 
-// ─── Selftell POV enforcement ────────────────────────────────────────────────
-//
-// Heuristic guard: if the LLM slips into third-person about the protagonist in
-// selftell mode (e.g. emits "陆衡 推开大门" instead of "我推开大门"), substitute
-// the protagonist's name with "我" in narrator-context fields. We only touch
-// the protagonist's name, not other characters'. Keeps the CN-char limits
-// intact (substitution never grows the field).
-//
-// Substring-overlap safety: a co-star named "李婷" must NOT be mangled when the
-// protagonist is "李". We protect every OTHER character's name with a
-// unicode-sentinel placeholder before the protagonist substitution and restore
-// them afterwards, so partial-name matches are impossible regardless of the
-// regex.
-export function enforceSelftellPOV(clip, ctx = {}) {
-  const protagonist = pickSelftellProtagonist(ctx.outline);
-  if (!protagonist) return clip;
-  const otherNames = collectOtherCharacterNames(ctx.outline, protagonist);
-  const subFirstPerson = (s) => substituteProtagonist(s, protagonist, otherNames);
-  const out = {
-    ...clip,
-    setting: subFirstPerson(clip.setting),
-    action: subFirstPerson(clip.action),
-    hook: subFirstPerson(clip.hook),
-  };
-  // For dialogue, only rewrite content inside [narrator] blocks. [character:Name]
-  // blocks may legitimately name the protagonist as a speaker.
-  if (typeof clip.dialogue === 'string') {
-    out.dialogue = rewriteNarratorBlocks(clip.dialogue, protagonist, otherNames);
-  }
-  // Conclusion title/overview also flow downstream verbatim (uploader sends
-  // them to the platform). Rewrite them in selftell mode so the ending stays
-  // in first person.
-  if (clip.conclusion && typeof clip.conclusion === 'object') {
-    out.conclusion = {
-      ...clip.conclusion,
-      title: subFirstPerson(clip.conclusion.title),
-      overview: subFirstPerson(clip.conclusion.overview),
-    };
-  }
-  // Re-compose content from the (possibly rewritten) beats so the final clip
-  // string reflects the substitution.
-  try {
-    out.content = composeScene({
-      setting: out.setting,
-      action: out.action,
-      dialogue: out.dialogue,
-      hook: out.hook,
-    });
-  } catch {
-    // composeScene throws only if every beat is empty — keep original content.
-  }
-  return out;
-}
-
-function pickSelftellProtagonist(outline) {
-  if (!outline || !Array.isArray(outline.characters)) return null;
-  // Prefer an explicitly tagged POV character; fall back to the first character.
-  const tagged = outline.characters.find(c => {
-    if (!c) return false;
-    const hay = [c.role, c.tag, c.pov, c.note].filter(Boolean).join(' ');
-    return /selftell|自述|主角\s*\(?自述/i.test(hay);
-  });
-  const chosen = tagged || outline.characters[0];
-  return chosen?.name || null;
-}
-
-function collectOtherCharacterNames(outline, protagonist) {
-  if (!outline || !Array.isArray(outline.characters)) return [];
-  // Only sentinelize names that actually contain the protagonist's name as a
-  // substring — those are the ones at risk of partial-name mangling. We sort
-  // by descending length so longer names are protected first (a name like
-  // "李婷婷" must be sentinelized before "李婷").
-  return outline.characters
-    .map(c => c?.name)
-    .filter(n => typeof n === 'string' && n.length > 0 && n !== protagonist && n.includes(protagonist))
-    .sort((a, b) => b.length - a.length);
-}
-
-const SENTINEL = '';
-
-function substituteProtagonist(s, protagonist, otherNames) {
-  if (typeof s !== 'string' || !s.includes(protagonist)) return s;
-  let working = s;
-  // Replace each other-name occurrence with a unique sentinel before touching
-  // the protagonist's name; restore them after.
-  const replacements = [];
-  for (let i = 0; i < otherNames.length; i++) {
-    const placeholder = SENTINEL + i + SENTINEL;
-    working = working.split(otherNames[i]).join(placeholder);
-    replacements.push({ placeholder, original: otherNames[i] });
-  }
-  working = working.split(protagonist).join('我');
-  for (const { placeholder, original } of replacements) {
-    working = working.split(placeholder).join(original);
-  }
-  return working;
-}
-
-function rewriteNarratorBlocks(dialogue, protagonist, otherNames) {
-  // Dialogue is a sequence of [narrator]\n... or [character:Name]\n... blocks
-  // separated by blank lines. Walk block by block and only rewrite narrator
-  // blocks. We deliberately leave [character:ProtagonistName] alone so the
-  // protagonist may still appear as a speaker.
-  const blocks = dialogue.split(/\n(?=\[(?:narrator|character:))/);
-  return blocks.map((block) => {
-    if (/^\[narrator\]/i.test(block)) {
-      return substituteProtagonist(block, protagonist, otherNames);
-    }
-    return block;
-  }).join('\n');
-}
+// Selftell POV enforcement (enforceSelftellPOV + helpers) lives in ./selftell.js.
 
 // ─── Retry & fallback ────────────────────────────────────────────────────────
 

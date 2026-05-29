@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { tryParseJson } from './json.js';
+import { buildReferenceBlock } from './references.js';
 import { buildBibleBlock, buildProseBlock } from './story-bible.js';
 import { buildSelftellDirective } from './selftell.js';
 import {
@@ -36,16 +37,20 @@ export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceChara
     template += section;
   }
   if (referenceCharacter) {
-    const section = lang === 'cn'
-      ? `\n\n## 参考角色（必须使用）\n\n以下角色已预先定义并必须出现在本故事中。在 characters 数组中请以其姓名、身份、动机与背景填入一项，并确保其行为、情绪、弧光在所有 clips.events 中与以下描述一致。不得改名或替换。\n\n---\n${referenceCharacter}\n---\n`
-      : `\n\n## Reference Character (REQUIRED)\n\nThe following character is predefined and MUST appear in this story. Include them in the characters array using their exact name, identity, motivations, and background, and ensure their behavior, emotions, and arc across all clips.events remain consistent with the description below. Do NOT rename or replace them.\n\n---\n${referenceCharacter}\n---\n`;
-    template += section;
+    template += buildReferenceBlock({
+      kind: 'character', lang, content: referenceCharacter,
+      instruction: lang === 'cn'
+        ? '以下角色已预先定义并必须出现在本故事中。在 characters 数组中请以其姓名、身份、动机与背景填入一项，并确保其行为、情绪、弧光在所有 clips.events 中与以下描述一致。不得改名或替换。'
+        : 'The following character is predefined and MUST appear in this story. Include them in the characters array using their exact name, identity, motivations, and background, and ensure their behavior, emotions, and arc across all clips.events remain consistent with the description below. Do NOT rename or replace them.',
+    });
   }
   if (referenceEvent) {
-    const section = lang === 'cn'
-      ? `\n\n## 参考事件（必须使用）\n\n以下事件已预先定义并必须在本故事中发生。请将其编入 clips.events 中具体的场景节点，确保相关角色的情绪、revelations（揭示）与后续情节弧线都与该事件及其后果保持一致。不要淡化或改写事件的核心事实。\n\n---\n${referenceEvent}\n---\n`
-      : `\n\n## Reference Event (REQUIRED)\n\nThe following event is predefined and MUST occur in this story. Schedule it into specific clips.events entries, and ensure the emotional states, revelations, and subsequent plot arcs of affected characters remain consistent with this event and its aftermath. Do NOT sanitize or rewrite its core facts.\n\n---\n${referenceEvent}\n---\n`;
-    template += section;
+    template += buildReferenceBlock({
+      kind: 'event', lang, content: referenceEvent,
+      instruction: lang === 'cn'
+        ? '以下事件已预先定义并必须在本故事中发生。请将其编入 clips.events 中具体的场景节点，确保相关角色的情绪、revelations（揭示）与后续情节弧线都与该事件及其后果保持一致。不要淡化或改写事件的核心事实。'
+        : 'The following event is predefined and MUST occur in this story. Schedule it into specific clips.events entries, and ensure the emotional states, revelations, and subsequent plot arcs of affected characters remain consistent with this event and its aftermath. Do NOT sanitize or rewrite its core facts.',
+    });
   }
   if (options.bible && options.fidelity) {
     template += '\n\n' + buildBibleBlock(options.bible, options.fidelity) + '\n';
