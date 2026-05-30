@@ -47,6 +47,87 @@ export function parseFlags(args, spec) {
 }
 
 /**
+ * Parse + validate the `run` subcommand's args. Pure: returns a result the
+ * caller prints/exits on, instead of calling process.exit itself (so it's
+ * unit-testable). Preserves the original behavior: a single non-negative
+ * integer positional count, value-flags, the `--no-publish` boolean, and the
+ * per-flag range/enum validation. Unknown flags are reported as errors.
+ *
+ * @returns {{ ok: boolean, error?: string, count?: number, opts?: object }}
+ */
+export function parseRunFlags(args) {
+  const { values, positionals, errors } = parseFlags(args, {
+    lang: { type: 'string' },
+    style: { type: 'string' },
+    type: { type: 'string' },          // CLI flag name; maps to `genre`
+    news: { type: 'string' },
+    character: { type: 'string' },
+    event: { type: 'string' },
+    story: { type: 'string' },
+    fidelity: { type: 'string' },
+    model: { type: 'string' },
+    episodes: { type: 'string' },
+    'clips-per-episode': { type: 'string' },
+    mode: { type: 'string' },
+    'author-style': { type: 'string' },
+    'no-publish': { type: 'boolean' },
+  });
+  if (errors.length) return { ok: false, error: errors[0] };
+
+  // Positional count: at most one, plain non-negative integer digits only.
+  if (positionals.length > 1) {
+    return { ok: false, error: `run accepts a single count; got a second one: ${positionals[1]}` };
+  }
+  let count = 1;
+  if (positionals.length === 1) {
+    const p = positionals[0].trim();
+    if (!/^\d+$/.test(p)) {
+      return { ok: false, error: `run count must be a non-negative integer, got: ${positionals[0]}` };
+    }
+    count = Number(p);
+  }
+
+  const opts = {};
+  if (values.lang !== undefined) {
+    opts.lang = values.lang.toLowerCase();
+    if (opts.lang !== 'cn') return { ok: false, error: `--lang ${values.lang} is not supported (CN only).` };
+  }
+  if (values.style !== undefined) opts.style = values.style;
+  if (values.type !== undefined) opts.genre = values.type;
+  if (values.news !== undefined) opts.newsUrl = values.news;
+  if (values.character !== undefined) opts.characterPath = values.character;
+  if (values.event !== undefined) opts.eventPath = values.event;
+  if (values.story !== undefined) opts.storyPath = values.story;
+  if (values.fidelity !== undefined) opts.fidelity = values.fidelity;
+  if (values.model !== undefined) opts.model = values.model;
+  if (values.episodes !== undefined) {
+    const n = Number(values.episodes);
+    if (!Number.isInteger(n) || n < 10 || n > 40) {
+      return { ok: false, error: `--episodes must be an integer in [10, 40], got: ${values.episodes}` };
+    }
+    opts.episodesPerDrama = n;
+  }
+  if (values['clips-per-episode'] !== undefined) {
+    const k = Number(values['clips-per-episode']);
+    if (!Number.isInteger(k) || k < 4 || k > 10) {
+      return { ok: false, error: `--clips-per-episode must be an integer in [4, 10], got: ${values['clips-per-episode']}` };
+    }
+    opts.clipsPerEpisode = k;
+  }
+  if (values.mode !== undefined) {
+    const m = values.mode.toLowerCase();
+    if (m !== 'default' && m !== 'selftell') {
+      return { ok: false, error: `Unknown mode: "${m}". Supported: default, selftell.` };
+    }
+    opts.mode = m;
+  }
+  if (values['author-style'] !== undefined) opts.authorStyle = values['author-style'];
+  if (values['no-publish']) opts.publish = false;
+
+  return { ok: true, count, opts };
+}
+
+/**
  * Validate that a named provider exists and is usable as a model override.
  * Pure (config injected); returns a result instead of calling process.exit so
  * it's testable. The caller applies setModelOverride + reports.

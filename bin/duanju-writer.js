@@ -124,102 +124,18 @@ switch (command) {
     // Parse count, lang, style, type, news, character, event, model, episodes, clips-per-episode from args
     // run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--character path.md] [--event path.md]
     //     [--model claude|openai|<provider>] [--episodes N] [--clips-per-episode K]
-    let count = 1;
-    let countSet = false;
-    let lang;
-    let style;
-    let genre;
-    let newsUrl;
-    let characterPath;
-    let eventPath;
-    let storyPath;
-    let fidelity;
-    let model;
-    let episodesPerDrama;
-    let clipsPerEpisode;
-    let mode;
-    let authorStyle;
-    let publish;  // undefined = default (publish); false via --no-publish
-    for (let a = 0; a < args.length; a++) {
-      if (args[a] === '--lang' && args[a + 1]) {
-        lang = args[a + 1].toLowerCase();
-        if (lang !== 'cn') {
-          console.log(`--lang ${args[a + 1]} is not supported (CN only).`);
-          process.exit(1);
-        }
-        a++;
-      } else if (args[a] === '--style' && args[a + 1]) {
-        style = args[a + 1];
-        a++;
-      } else if (args[a] === '--type' && args[a + 1]) {
-        genre = args[a + 1];
-        a++;
-      } else if (args[a] === '--news' && args[a + 1]) {
-        newsUrl = args[a + 1];
-        a++;
-      } else if (args[a] === '--character' && args[a + 1]) {
-        characterPath = args[a + 1];
-        a++;
-      } else if (args[a] === '--event' && args[a + 1]) {
-        eventPath = args[a + 1];
-        a++;
-      } else if (args[a] === '--story' && args[a + 1]) {
-        storyPath = args[a + 1];
-        a++;
-      } else if (args[a] === '--fidelity' && args[a + 1]) {
-        fidelity = args[a + 1];
-        a++;
-      } else if (args[a] === '--model' && args[a + 1]) {
-        model = args[a + 1];
-        a++;
-      } else if (args[a] === '--episodes' && args[a + 1]) {
-        const n = Number(args[a + 1]);
-        if (!Number.isInteger(n) || n < 10 || n > 40) {
-          console.log(`--episodes must be an integer in [10, 40], got: ${args[a + 1]}`);
-          process.exit(1);
-        }
-        episodesPerDrama = n;
-        a++;
-      } else if (args[a] === '--clips-per-episode' && args[a + 1]) {
-        const k = Number(args[a + 1]);
-        if (!Number.isInteger(k) || k < 4 || k > 10) {
-          console.log(`--clips-per-episode must be an integer in [4, 10], got: ${args[a + 1]}`);
-          process.exit(1);
-        }
-        clipsPerEpisode = k;
-        a++;
-      } else if (args[a] === '--mode' && args[a + 1]) {
-        const m = args[a + 1].toLowerCase();
-        if (m !== 'default' && m !== 'selftell') {
-          console.log(`Unknown mode: "${m}". Supported: default, selftell.`);
-          process.exit(1);
-        }
-        mode = m;
-        a++;
-      } else if (args[a] === '--author-style' && args[a + 1]) {
-        authorStyle = args[a + 1];
-        a++;
-      } else if (args[a] === '--no-publish') {
-        publish = false;
-      } else if (args[a].trim() !== '' && !args[a].startsWith('-')) {
-        // Positional count: plain non-negative integer digits only. The old
-        // `!isNaN(x)` check accepted 'Infinity' (→ NaN count → silent
-        // no-op) and a silent second positional overwrite. A bare
-        // `Number()` check is also too loose — Number('1e3') === 1000
-        // passes Number.isInteger, so a typo would launch 1000 jobs.
-        if (!/^\d+$/.test(args[a].trim())) {
-          console.log(`run count must be a non-negative integer, got: ${args[a]}`);
-          process.exit(1);
-        }
-        const n = Number(args[a]);
-        if (countSet) {
-          console.log(`run accepts a single count; got a second one: ${args[a]}`);
-          process.exit(1);
-        }
-        count = n;
-        countSet = true;
-      }
-    }
+    const { parseRunFlags } = await import('../src/cli.js');
+    const parsed = parseRunFlags(args);
+    if (!parsed.ok) { console.log(parsed.error); process.exit(1); }
+    const { count } = parsed;
+    const {
+      lang, style, genre, newsUrl, characterPath, eventPath, storyPath,
+      fidelity: fidelityOpt, model, episodesPerDrama, clipsPerEpisode,
+      mode, authorStyle, publish,
+    } = parsed.opts;
+    // fidelity may be reassigned below (defaulted from config when --story is
+    // set without --fidelity), so it needs a mutable binding.
+    let fidelity = fidelityOpt;
     // Resolve reference character + event: CLI flag takes precedence, else config path
     let referenceCharacter;
     let referenceEvent;

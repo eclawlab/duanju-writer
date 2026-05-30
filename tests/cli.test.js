@@ -53,3 +53,48 @@ test('resolveModelOverride: claude-cli provider label uses claudePath', () => {
   assert.equal(r.ok, true);
   assert.match(r.label, /claude-cli/);
 });
+
+import { parseRunFlags } from '../src/cli.js';
+
+test('parseRunFlags: defaults to count=1, empty opts', () => {
+  const r = parseRunFlags([]);
+  assert.equal(r.ok, true);
+  assert.equal(r.count, 1);
+  assert.deepEqual(r.opts, {});
+});
+
+test('parseRunFlags: maps --type to genre and --no-publish to publish:false', () => {
+  const r = parseRunFlags(['3', '--type', '都市', '--no-publish']);
+  assert.equal(r.ok, true);
+  assert.equal(r.count, 3);
+  assert.equal(r.opts.genre, '都市');
+  assert.equal(r.opts.publish, false);
+});
+
+test('parseRunFlags: validates episodes range', () => {
+  assert.match(parseRunFlags(['--episodes', '99']).error, /\[10, 40\]/);
+  assert.equal(parseRunFlags(['--episodes', '20']).opts.episodesPerDrama, 20);
+});
+
+test('parseRunFlags: validates clips-per-episode range', () => {
+  assert.match(parseRunFlags(['--clips-per-episode', '1']).error, /\[4, 10\]/);
+  assert.equal(parseRunFlags(['--clips-per-episode', '6']).opts.clipsPerEpisode, 6);
+});
+
+test('parseRunFlags: rejects non-cn lang and bad count and second count', () => {
+  assert.match(parseRunFlags(['--lang', 'en']).error, /CN only/);
+  assert.match(parseRunFlags(['abc']).error, /non-negative integer/);
+  assert.match(parseRunFlags(['1', '2']).error, /single count/);
+});
+
+test('parseRunFlags: mode allowlist + author-style + paths', () => {
+  assert.match(parseRunFlags(['--mode', 'weird']).error, /Supported: default, selftell/);
+  const r = parseRunFlags(['--mode', 'selftell', '--author-style', '莫言', '--story', 's.txt']);
+  assert.equal(r.opts.mode, 'selftell');
+  assert.equal(r.opts.authorStyle, '莫言');
+  assert.equal(r.opts.storyPath, 's.txt');
+});
+
+test('parseRunFlags: unknown flag errors', () => {
+  assert.match(parseRunFlags(['--bogus']).error, /Unknown flag/);
+});
