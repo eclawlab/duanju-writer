@@ -88,7 +88,7 @@
 不知道 storyId？每次 `run` 上传后会把平台 storyId 记录在 `~/.duanju-writer/jobs/<id>/upload.v*.json`。运行 **`duanju-writer stories`** 即可列出本机发布过的全部剧（storyId + 标题 + 结局变体），`duanju-writer stories 关键词` 按标题/ID 过滤。
 
 ### 🔌 多模型供应商
-可插拔的 LLM 后端：默认 Claude CLI，亦支持任何 OpenAI 兼容 API。可为 8 个任务角色（research / outline / plan / clip / compress / repair / consistency / enrichment）分别配置不同模型。
+可插拔的 LLM 后端：默认 Claude CLI，亦支持任何 OpenAI 兼容 API。可为 9 个任务角色（research / outline / tail-outline / plan / clip / compress / consistency / style / repair）分别配置不同模型。
 
 ### 🔄 断点续传 + 上传幂等
 每个流水线阶段产物（materials / snowflake / outline / plan / drama / variants）持久化在 `~/.duanju-writer/jobs/<id>/`。任务中断自动从断点恢复，已上线的剧不会重复发布。Artifact 带 `schemaVersion` 标记防止旧数据混入。
@@ -247,7 +247,7 @@ duanju-writer provider add deepseek --base-url https://api.deepseek.com --model 
 duanju-writer role assign clip deepseek    # 让片段写作走 deepseek
 ```
 
-可为 8 个角色独立配置：`research`、`outline`、`plan`、`clip`、`compress`、`repair`、`consistency`、`enrichment`。
+可为 9 个角色独立配置：`research`、`outline`、`tail-outline`、`plan`、`clip`、`compress`、`consistency`、`style`、`repair`。
 
 ---
 
@@ -265,17 +265,20 @@ duanju-writer role assign clip deepseek    # 让片段写作走 deepseek
   "clipsPerEpisode": 6,
   "targetCharsPerClip": 50,
   "publish": true,
-  "heartbeatInterval": 60000,
+  "publishOnUpload": true,
+  "mode": "default",
+  "heartbeatInterval": 1800000,
   "uploadTimeout": 60000,
   "roles": {
     "research": "claude",
     "outline": "claude",
+    "tail-outline": "claude",
     "plan": "claude",
     "clip": "claude",
     "compress": "claude",
-    "repair": "claude",
     "consistency": "claude",
-    "enrichment": "claude"
+    "style": "claude",
+    "repair": "claude"
   }
 }
 ```
@@ -295,7 +298,7 @@ duanju/
 │   ├── planner.js           # 片段级状态规划
 │   ├── compressor.js        # 历史片段压缩
 │   ├── consistency.js       # 钩点密度 / 重复检查
-│   ├── enrichment.js        # 字数检查（中文）
+│   ├── enrichment.js        # 字数检查 + 过短片段扩写（按 targetCharsPerClip）
 │   ├── uploader.js          # POST 到 /api/ai/stories
 │   ├── downloader.js        # GET /api/ai/stories/<id> + 归一化
 │   ├── modifier.js          # 下载 → 反馈修改 → 作为新剧上传
@@ -316,7 +319,7 @@ duanju/
 ├── styles/                  # 30 个 短剧 套路
 │   ├── 复仇/  都市/  甜宠/
 │   └── 古装/  家庭/  玄幻/
-└── tests/                   # 508 个单元测试
+└── tests/                   # 623 个单元测试
 ```
 
 ---
