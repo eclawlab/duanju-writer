@@ -97,9 +97,9 @@ export function parseCompressorOutput(raw) {
 
 // ─── Compress via Claude ───────────────────────────────────────────────────────
 
-export async function compressClips(clips, lang = 'cn', mode = 'default') {
+export async function compressClips(clips, lang = 'cn', mode = 'default', llmFn = callLLM) {
   const prompt = buildCompressPrompt(clips, lang, mode);
-  const raw = await callLLM(prompt, 'compress');
+  const raw = await llmFn(prompt, 'compress');
   return parseCompressorOutput(raw);
 }
 

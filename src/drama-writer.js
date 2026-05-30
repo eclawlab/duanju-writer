@@ -1171,6 +1171,7 @@ export async function generateDrama(materials, options = {}) {
           mode,
           lang,
           authorVoice,
+          llmFn,
         });
       } catch (firstErr) {
         log(`[clip failed] ${firstErr.message} — retrying with simplified prompt...`);
@@ -1185,7 +1186,7 @@ export async function generateDrama(materials, options = {}) {
             lang,
             authorVoice,
           });
-          const retryRaw = await callLLM(retryPrompt, 'clip');
+          const retryRaw = await llmFn(retryPrompt, 'clip');
           scene = await parseClip(retryRaw);
           if (mode === 'selftell') scene = enforceSelftellPOV(scene, { outline });
         } catch (retryErr) {
@@ -1323,7 +1324,7 @@ export async function generateDrama(materials, options = {}) {
     // to the per-clip local digests if the compression call fails.
     let episodeForwardHistory;
     try {
-      episodeForwardHistory = [await compressClips(episode.scenes, lang, mode)];
+      episodeForwardHistory = [await compressClips(episode.scenes, lang, mode, llmFn)];
     } catch (err) {
       log(`[compression failed] ${err.message} — carrying local digests forward`);
       episodeForwardHistory = episodeRecentDigests;
