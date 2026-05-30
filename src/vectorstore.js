@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { JOBS_DIR } from './constants.js';
@@ -247,7 +248,13 @@ export function createStore(filepath) {
       const data = {
         entries: Array.from(entries.values()),
       };
-      writeFileSync(filepath, JSON.stringify(data, null, 2), 'utf8');
+      // Atomic write: serialize to a temp file then rename over the target, so a
+      // crash mid-write can't leave a half-written (corrupt) store that load()
+      // would silently discard — losing every indexed clip embedding. Mirrors
+      // the temp+rename pattern in queue.js / history.js / artifacts.js.
+      const tmp = `${filepath}.tmp.${process.pid}.${randomBytes(2).toString('hex')}`;
+      writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+      renameSync(tmp, filepath);
     },
 
     /**
