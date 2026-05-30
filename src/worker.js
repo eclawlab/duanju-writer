@@ -22,6 +22,7 @@ import { logEntry, writeSummary } from './worklog.js';
 import { countWords } from './enrichment.js';
 import { getLLMStats, resetLLMStats } from './llm.js';
 import { mapWithConcurrency } from './async.js';
+import { pickJobOptions } from './job-options.js';
 import { saveArtifact as saveArtifactAt, loadArtifact as loadArtifactAt, removeArtifact as removeArtifactAt } from './artifacts.js';
 
 // Max concurrent per-chapter bible extractions. Bounded so a large novel
