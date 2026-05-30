@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, copyFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
@@ -22,6 +22,7 @@ import { logEntry, writeSummary } from './worklog.js';
 import { countWords } from './enrichment.js';
 import { getLLMStats, resetLLMStats } from './llm.js';
 import { mapWithConcurrency } from './async.js';
+import { saveArtifact as saveArtifactAt, loadArtifact as loadArtifactAt, removeArtifact as removeArtifactAt } from './artifacts.js';
 
 // Max concurrent per-chapter bible extractions. Bounded so a large novel
 // doesn't fan out hundreds of simultaneous LLM calls (which would trip
@@ -188,34 +189,21 @@ const BIBLE_DEPENDENT_ARTIFACTS = [
 
 export function invalidateBibleDependentArtifacts(jobId, log = () => {}, opts = {}) {
   const jobDir = opts.jobDir || join(JOBS_DIR, jobId);
-  const removed = [];
-  for (const name of BIBLE_DEPENDENT_ARTIFACTS) {
-    const p = join(jobDir, name);
-    if (existsSync(p)) {
-      try { unlinkSync(p); removed.push(name); } catch (err) {
-        log(`[bible-invalidate] failed to remove ${name}: ${err.message}`);
-      }
-    }
-  }
-  // Variant artifacts: outline.v*.json, plan.v*.json, tail-outline.v*.json,
-  // story.v*.json, story.v*.progress.json, state.v*.json
+  // Base artifacts + per-variant artifacts (outline.v*/plan.v*/tail-outline.v*/
+  // story.v*/story.v*.progress/state.v*) all depend on the bible.
+  const names = [...BIBLE_DEPENDENT_ARTIFACTS];
   for (const v of VARIANTS) {
-    for (const name of [
+    names.push(
       `outline.${v.key}.json`,
       `plan.${v.key}.json`,
       `tail-outline.${v.key}.json`,
       `story.${v.key}.json`,
       `story.${v.key}.progress.json`,
       `state.${v.key}.json`,
-    ]) {
-      const p = join(jobDir, name);
-      if (existsSync(p)) {
-        try { unlinkSync(p); removed.push(name); } catch (err) {
-          log(`[bible-invalidate] failed to remove ${name}: ${err.message}`);
-        }
-      }
-    }
+    );
   }
+  const removed = names.filter((name) =>
+    removeArtifactAt(join(jobDir, name), { label: name, log: (m) => log(`[bible-invalidate] ${m}`) }));
   if (removed.length) {
     log(`Fresh bible synthesized — invalidated ${removed.length} stale artifact(s): ${removed.join(', ')}`);
   }
