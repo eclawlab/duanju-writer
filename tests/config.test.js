@@ -21,7 +21,6 @@ describe('config', () => {
     assert.equal(config.heartbeatInterval, 1800000);
     assert.equal(config.claudePath, 'claude');
     assert.equal(config.maxRetries, 3);
-    assert.equal(config.maxConcurrentJobs, 1);
     assert.equal(config.publishOnUpload, true);
     assert.equal(config.aiApiKey, '');
   });

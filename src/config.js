@@ -9,7 +9,6 @@ const DEFAULTS = {
   heartbeatInterval: 1800000,
   claudePath: 'claude',
   maxRetries: 3,
-  maxConcurrentJobs: 1,
   // `publish`: whether a job uploads to the platform at all (false = generate
   // only, skip the upload + auth preflight). `publishOnUpload`: when we DO
   // upload, whether the story goes live vs. stays a draft (sent in the request
