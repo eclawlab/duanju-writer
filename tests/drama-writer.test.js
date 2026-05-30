@@ -866,6 +866,7 @@ describe('vector store retrieval wiring (search now consumed)', () => {
 
   test('retrieveRelatedScenes returns empty string for an empty / missing store', async () => {
     const { retrieveRelatedScenes } = await import('../src/drama-writer.js');
+    const { createStore } = await import('../src/vectorstore.js');
     assert.equal(retrieveRelatedScenes(null, 'q', 0), '');
     const store = createStore('/tmp/dw-retrieval-empty-' + process.pid + '.json');
     assert.equal(retrieveRelatedScenes(store, 'q', 0), '');
