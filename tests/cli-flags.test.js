@@ -278,3 +278,31 @@ test('createJob persists publish:false and defaults to null', () => {
     _rm(dir, { recursive: true, force: true });
   }
 });
+
+describe('config set numeric range validation', () => {
+  // Validation rejects (exit 1) BEFORE any config write, so these never touch
+  // the real config file. Only rejection paths are asserted for that reason.
+  test('episodesPerDrama out of range is rejected', () => {
+    const r = runCLI(['config', 'set', 'episodesPerDrama', '99']);
+    assert.equal(r.code, 1);
+    assert.match(r.stdout, /Must be a number in \[10, 40\]/);
+  });
+
+  test('clipsPerEpisode out of range is rejected', () => {
+    const r = runCLI(['config', 'set', 'clipsPerEpisode', '1']);
+    assert.equal(r.code, 1);
+    assert.match(r.stdout, /Must be a number in \[4, 10\]/);
+  });
+
+  test('maxRetries non-numeric is rejected', () => {
+    const r = runCLI(['config', 'set', 'maxRetries', 'abc']);
+    assert.equal(r.code, 1);
+    assert.match(r.stdout, /Must be a number in \[0, 10\]/);
+  });
+
+  test('uploadTimeout below floor is rejected', () => {
+    const r = runCLI(['config', 'set', 'uploadTimeout', '100']);
+    assert.equal(r.code, 1);
+    assert.match(r.stdout, /\[1000, 600000\]/);
+  });
+});

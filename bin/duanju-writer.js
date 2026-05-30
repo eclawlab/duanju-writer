@@ -431,6 +431,23 @@ switch (command) {
         console.log(`Invalid mode "${value}". Supported: default, selftell.`);
         process.exit(1);
       }
+      // Numeric range validation — mirror the bounds the CLI flags enforce so
+      // `config set` can't smuggle out-of-range values past them.
+      const NUMERIC_RANGES = {
+        episodesPerDrama: [10, 40],
+        clipsPerEpisode: [4, 10],
+        maxRetries: [0, 10],
+        targetCharsPerClip: [0, 500],
+        uploadTimeout: [1000, 600000],
+        heartbeatInterval: [60000, 86400000],
+      };
+      if (NUMERIC_RANGES[args[1]]) {
+        const [min, max] = NUMERIC_RANGES[args[1]];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+          console.log(`Invalid ${args[1]} "${args.slice(2).join(' ')}". Must be a number in [${min}, ${max}].`);
+          process.exit(1);
+        }
+      }
       config[args[1]] = value;
       saveConfig(config);
       console.log(`Set ${args[1]} = ${JSON.stringify(value)}`);
