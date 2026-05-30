@@ -872,3 +872,22 @@ describe('vector store retrieval wiring (search now consumed)', () => {
     assert.equal(retrieveRelatedScenes(store, 'q', 0), '');
   });
 });
+
+describe('clip prompt state-context wiring (toPromptContext)', () => {
+  test('buildClipPrompt renders stateContext into the 故事状态 section', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const out = buildClipPrompt({
+      outline: { title: 't' }, episode: { episodeIndex: 0 }, clipIndex: 0, totalClips: 1,
+      clipSummary: 'x', stateContext: '【角色】陆衡：活着',
+    });
+    assert.ok(out.includes('## 故事状态'), 'state section header present');
+    assert.ok(out.includes('【角色】陆衡：活着'), 'state context content injected');
+  });
+
+  test('buildClipPrompt shows placeholder when no stateContext', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const out = buildClipPrompt({ outline: { title: 't' }, episode: {}, clipIndex: 0, totalClips: 1, clipSummary: 'x' });
+    assert.ok(out.includes('## 故事状态'));
+    assert.ok(!out.includes('{{stateContext}}'), 'placeholder token replaced');
+  });
+});

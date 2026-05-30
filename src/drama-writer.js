@@ -18,6 +18,7 @@ import {
   resolveForeshadowing,
   addRelationship,
   setCharacterArc,
+  toPromptContext,
 } from './drama-state.js';
 import { checkHookDensity } from './consistency.js';
 import { buildBibleBlock, buildProseBlock, compressBibleForEpisode } from './story-bible.js';
@@ -516,6 +517,7 @@ export function buildClipPrompt(ctx) {
     isConclusion = false,
     priorClipDigest = '',
     retrievedScenes = '',
+    stateContext = '',
     tropeSection = '',
     referenceCharacter = '',
     referenceEvent = '',
@@ -541,6 +543,7 @@ export function buildClipPrompt(ctx) {
     .replace(/\{\{isConclusion\}\}/g, isConclusion ? 'true' : 'false')
     .replace(/\{\{priorClipDigest\}\}/g, priorClipDigest || '(none)')
     .replace(/\{\{retrievedScenes\}\}/g, () => retrievedScenes || '（无）')
+    .replace(/\{\{stateContext\}\}/g, () => stateContext || '（无）')
     .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
     .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
     .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
@@ -1113,6 +1116,12 @@ export async function generateDrama(materials, options = {}) {
       // than echoing the immediately-preceding clips. Best-effort: any failure
       // (or an empty store) just yields no retrieved context.
       const retrievedScenes = retrieveRelatedScenes(options.vectorStore, plan_clip.summary || ep.title, ep.episodeIndex, log);
+      // Inject the structured narrative state (characters/items/revelations/
+      // foreshadowing/relationships) accumulated by prior clips so the LLM stays
+      // consistent with what's already been established. Best-effort: any error
+      // formatting state must not abort clip generation.
+      let stateContext = '';
+      try { stateContext = toPromptContext(branchState); } catch (err) { log(`[state context] ${err.message}`); }
       try {
         scene = await generateClip({
           outline,
@@ -1123,6 +1132,7 @@ export async function generateDrama(materials, options = {}) {
           isConclusion: isConcl,
           priorClipDigest: history || '',
           retrievedScenes,
+          stateContext,
           tropeSection,
           referenceCharacter,
           referenceEvent,
