@@ -231,6 +231,9 @@ async function processJob(jobId, options = {}) {
   const style = options.style || config.style || 'default';
   const episodesPerDrama = options.episodesPerDrama || config.episodesPerDrama || 20;
   const clipsPerEpisode = options.clipsPerEpisode || config.clipsPerEpisode || 6;
+  // Scene-length floor (CN words). 0 = disabled. ?? so an explicit 0 in config
+  // disables enrichment rather than falling through to the default.
+  const targetCharsPerClip = options.targetCharsPerClip ?? config.targetCharsPerClip ?? 0;
   // Reference character/event: prefer snapshotted content from job options; otherwise read config path.
   let referenceCharacter = options.referenceCharacter || '';
   if (!referenceCharacter && config.referenceCharacter) {
@@ -469,7 +472,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = partialFront || null;
       const frontStory = await generateDrama(materials, {
-        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, log, wlog,
+        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, targetCharsPerClip, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -514,6 +517,7 @@ async function processJob(jobId, options = {}) {
         baseOutline, splitIdx, frontEpisodes, frontProgress, frontStore,
         snowflake, materials, bible, chapters, fidelity,
         genre, lang, style, mode, authorStyle, referenceCharacter, referenceEvent,
+        targetCharsPerClip,
         log, wlog, saveArtifact, loadArtifact, computeStoryMetrics,
       });
       if (r.storyId) storyIds.push(r.storyId);

@@ -78,3 +78,14 @@ describe('enrichment', () => {
     });
   });
 });
+
+// Gate behavior: enrichment is opt-in via targetCharsPerClip (0 = disabled).
+test('needsEnrichment is disabled when targetWords is 0/falsy', () => {
+  assert.equal(needsEnrichment('短', 0), false);
+  assert.equal(needsEnrichment('短', undefined), false);
+});
+
+test('needsEnrichment triggers only when content is below 80% of target', () => {
+  assert.equal(needsEnrichment('一二三四五', 100), true);       // 5 < 80 → expand
+  assert.equal(needsEnrichment('字'.repeat(90), 100), false);   // 90 ≥ 80 → leave
+});

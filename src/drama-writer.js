@@ -22,7 +22,7 @@ import {
 } from './drama-state.js';
 import { checkHookDensity } from './consistency.js';
 import { buildBibleBlock, buildProseBlock, compressBibleForEpisode } from './story-bible.js';
-import { countWords } from './enrichment.js';
+import { countWords, needsEnrichment, enrichScene } from './enrichment.js';
 import {
   buildSelftellDirective,
   enforceSelftellPOV,
@@ -863,6 +863,8 @@ export async function generateDrama(materials, options = {}) {
   const mode = options.mode || 'default';
   const authorStyle = options.authorStyle || '';
   const authorVoice = getAuthorStyleSafe(authorStyle)?.scene || '';
+  // Optional scene-length floor (CN words). 0/undefined = disabled (default).
+  const targetCharsPerClip = options.targetCharsPerClip || 0;
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -1274,6 +1276,22 @@ export async function generateDrama(materials, options = {}) {
           resolveForeshadowing(branchState, fId, branchLocalSceneIndex);
           episodeResolvedForeshadowing.push({ id: fId, clipIndex: branchLocalSceneIndex });
         } catch (err) { log(`[state:resolveForeshadowing "${fId}"] ${err.message}`); }
+      }
+
+      // Scene enrichment: when a length floor is configured (targetCharsPerClip)
+      // and the generated clip is well under it, expand it once via the LLM.
+      // Disabled by default (targetCharsPerClip=0 ⇒ needsEnrichment returns
+      // false). Best-effort: a failed/empty expansion keeps the original scene.
+      if (targetCharsPerClip && needsEnrichment(scene.content, targetCharsPerClip)) {
+        try {
+          const expanded = await enrichScene(scene.content, targetCharsPerClip, lang);
+          if (expanded && expanded.trim()) {
+            scene.content = expanded.trim();
+            wlog('scene_enriched', { episodeIndex: ep.episodeIndex, clipIndex: i, words: countWords(scene.content) });
+          }
+        } catch (err) {
+          log(`[enrich failed] ep${ep.episodeIndex} clip${i}: ${err.message} — keeping original`);
+        }
       }
 
       // Record a cheap local digest of this clip for within-episode continuity.
