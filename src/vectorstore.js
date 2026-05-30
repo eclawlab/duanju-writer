@@ -251,6 +251,26 @@ export function createStore(filepath) {
     },
 
     /**
+     * Create an independent copy of this store at `targetPath`. Writes the
+     * CURRENT in-memory entries directly (not a file copy), so the fork can
+     * never clone a stale on-disk snapshot or come up empty when this store had
+     * unsaved entries — the two failure modes the worker previously guarded
+     * against with re-save-before-copy + empty-after-fork warnings. Returns a
+     * new, loaded store.
+     * @param {string} targetPath
+     * @returns {object} a new store backed by targetPath
+     */
+    fork(targetPath) {
+      const dir = dirname(targetPath);
+      mkdirSync(dir, { recursive: true });
+      const data = { entries: Array.from(entries.values()) };
+      writeFileSync(targetPath, JSON.stringify(data, null, 2), 'utf8');
+      const forked = createStore(targetPath);
+      forked.load();
+      return forked;
+    },
+
+    /**
      * Load store from JSON file (if it exists).
      */
     load() {
