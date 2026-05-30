@@ -6,7 +6,7 @@ import { parseJsonWithRepair } from './json.js';
 import { buildReferenceBlock } from './references.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { getAuthorStyleSafe } from './author-styles.js';
-import { generatePlan, initStateFromPlan } from './planner.js';
+import { initStateFromPlan } from './planner.js';
 import { compressClips, buildHistoryContext } from './compressor.js';
 import {
   updateCharacter,
@@ -21,7 +21,6 @@ import {
 } from './drama-state.js';
 import { checkHookDensity } from './consistency.js';
 import { buildBibleBlock, buildProseBlock, compressBibleForEpisode } from './story-bible.js';
-import { generateSnowflake } from './snowflake.js';
 import { countWords } from './enrichment.js';
 import {
   buildSelftellDirective,
