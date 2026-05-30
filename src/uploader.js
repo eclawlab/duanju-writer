@@ -149,8 +149,19 @@ export function buildRequest(drama, config, variationOptions = {}) {
     'X-Api-Key': config.aiApiKey,
   };
   if (variationOptions.idempotencyKey) {
-    // Standard idempotency mechanism. Server doesn't dedup today, but the header
-    // is the agreed surface — body-level idempotencyKey was non-standard noise.
+    // Idempotency-Key is the agreed surface for de-duplicating retried uploads.
+    //
+    // ⚠️ SERVER CONTRACT (required for at-most-once publishing): the platform
+    // MUST return the SAME storyId for repeated POSTs carrying the same
+    // Idempotency-Key. The worker writes a pending artifact before the upload
+    // and records the returned storyId after; but if the process is killed in
+    // the window between a successful upload and that record being persisted,
+    // the next run re-POSTs with the same key. If the server does NOT dedup on
+    // the key, that retry creates a DUPLICATE story. variant-generator logs a
+    // loud "DUPLICATE UPLOAD" when it sees the storyId change across attempts,
+    // but the client cannot prevent the duplicate — only the server honoring
+    // this key can. As of this writing the server is reported to NOT dedup yet;
+    // implement that before relying on crash-retry safety.
     headers['Idempotency-Key'] = variationOptions.idempotencyKey;
   }
 

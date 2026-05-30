@@ -93,6 +93,8 @@
 ### 🔄 断点续传 + 上传幂等
 每个流水线阶段产物（materials / snowflake / outline / plan / drama / variants）持久化在 `~/.duanju-writer/jobs/<id>/`。任务中断自动从断点恢复，已上线的剧不会重复发布。Artifact 带 `schemaVersion` 标记防止旧数据混入。
 
+> ⚠️ **上传幂等依赖服务端契约**：客户端每次上传都会携带 `Idempotency-Key` 头，并在上传成功后记录返回的 storyId。但若进程在「上传成功」与「记录 storyId」之间被杀死，下次重试会用相同的 key 重新 POST。**只有当平台对相同 `Idempotency-Key` 返回相同 storyId（即服务端去重）时，重试才不会产生重复剧集。** 请确保 Duanju 平台已实现该去重逻辑。
+
 ---
 
 ## 生成流程
