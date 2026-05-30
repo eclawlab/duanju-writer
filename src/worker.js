@@ -17,7 +17,7 @@ import {
   saveStoryArtifacts,
 } from './story-bible.js';
 import { createStore, getStoreDir } from './vectorstore.js';
-import { upload } from './uploader.js';
+import { upload, verifyUploadAuth } from './uploader.js';
 import { logEntry, writeSummary } from './worklog.js';
 import { countWords } from './enrichment.js';
 import { getLLMStats, resetLLMStats } from './llm.js';
@@ -290,6 +290,24 @@ async function processJob(jobId, options = {}) {
   });
 
   try {
+    // ─── Preflight: verify the upload API key BEFORE any generation ────────
+    // A missing/invalid key would otherwise surface only at the upload step,
+    // after ~30 min of LLM time. Fail fast (no retry — a bad key won't fix
+    // itself) unless publishing is explicitly disabled. A network blip during
+    // the probe is treated as inconclusive (warn, don't block).
+    if (config.publish !== false && options.publish !== false) {
+      const auth = await verifyUploadAuth();
+      if (auth.warning) log(auth.warning);
+      if (!auth.ok) {
+        console.log(chalk.red(`  [${jobId}] Upload auth preflight failed: ${auth.error}`));
+        wlog('upload_auth_preflight_failed', { error: auth.error });
+        updateJob(jobId, { status: 'failed', error: auth.error, completedAt: new Date().toISOString() });
+        return false;
+      }
+      log('Upload API key verified — proceeding with generation.');
+      wlog('upload_auth_preflight_ok');
+    }
+
     // ─── Step 0: Story extraction (only when --story is set) ───────────────
     let bible = null;
     let chapters = null;

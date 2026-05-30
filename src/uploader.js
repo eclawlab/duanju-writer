@@ -6,6 +6,72 @@ import { loadConfig } from './config.js';
 // job never returns. Configurable via config.uploadTimeout.
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60_000;
 
+// Preflight probe budget — short, since it runs before any generation work.
+const AUTH_PREFLIGHT_TIMEOUT_MS = 15_000;
+
+/**
+ * Verify the upload API will accept our credentials BEFORE the (expensive)
+ * novel generation runs, so a missing/invalid key fails in seconds instead of
+ * after ~30 minutes of LLM time ("Upload failed (401): Missing API key").
+ *
+ * Returns { ok: boolean, error?: string, warning?: string }:
+ *  - No aiApiKey configured        -> ok:false (the reported "Missing API key" case).
+ *  - Server returns 401/403        -> ok:false (key present but rejected).
+ *  - Network/other error reaching  -> ok:true + warning (inconclusive; don't
+ *    the server                       block on a transient blip — the real
+ *                                     upload later has its own error handling).
+ *  - Any other status (404/200/…)  -> ok:true (key accepted; a missing sentinel
+ *                                     story just 404s).
+ *
+ * @param {object} [options]
+ * @param {number} [options.timeout]
+ * @param {function} [options.fetchFn] - injectable for tests
+ * @param {object} [options.config] - injectable for tests (defaults to loadConfig())
+ */
+export async function verifyUploadAuth(options = {}) {
+  const config = options.config || loadConfig();
+  const baseUrl = config.autostoryUrl;
+  const apiKey = config.aiApiKey;
+
+  if (!apiKey || !String(apiKey).trim()) {
+    return {
+      ok: false,
+      error: `No upload API key configured (config.aiApiKey is empty). `
+        + `Run 'duanju-writer setup', or generate a key via POST ${baseUrl}/api/ai/keys `
+        + `and set it with 'duanju-writer config set aiApiKey <key>'.`,
+    };
+  }
+
+  const timeout = options.timeout || AUTH_PREFLIGHT_TIMEOUT_MS;
+  const fetchFn = options.fetchFn || fetch;
+  // Probe an authenticated GET against a sentinel story id. This distinguishes
+  // auth failure (401/403) from a missing story (404) — any non-auth status
+  // means the X-Api-Key header was accepted.
+  const url = `${baseUrl}/api/ai/stories/__auth_preflight__`;
+  let res;
+  try {
+    res = await fetchFn(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json', 'X-Api-Key': apiKey },
+      signal: AbortSignal.timeout(timeout),
+    });
+  } catch (err) {
+    return { ok: true, warning: `Upload auth preflight could not reach ${baseUrl}: ${err.message}` };
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    let detail = '';
+    try { detail = (await res.text()).slice(0, 200); } catch {}
+    return {
+      ok: false,
+      error: `Upload API rejected the configured key (HTTP ${res.status})${detail ? `: ${detail}` : ''}. `
+        + `Check config.aiApiKey or regenerate it via POST ${baseUrl}/api/ai/keys.`,
+    };
+  }
+
+  return { ok: true };
+}
+
 // Whitelisted scene fields sent to the server. Drops writer-internal flags
 // (clipIndex, isConclusion) the server doesn't need (sort_order and the
 // conclusion table cover those).
