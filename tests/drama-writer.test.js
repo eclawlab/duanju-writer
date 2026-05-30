@@ -854,6 +854,7 @@ describe('vector store retrieval wiring (search now consumed)', () => {
 
   test('retrieveRelatedScenes formats hits from other episodes, excludes current', async () => {
     const { retrieveRelatedScenes } = await import('../src/drama-writer.js');
+    const { createStore } = await import('../src/vectorstore.js');
     const store = createStore('/tmp/dw-retrieval-test-' + process.pid + '.json');
     store.add('a', '陆衡 推开 大门 龙鳞 戒指 特写', { episodeIndex: 0 });
     store.add('b', '完全 无关 的 风景 描写 田园', { episodeIndex: 1 });
