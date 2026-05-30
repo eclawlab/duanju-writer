@@ -27,3 +27,16 @@ test('unknown kind/variant throws', () => {
   assert.throws(() => buildReferenceBlock({ kind: 'nope', content: '', instruction: '' }), /unknown kind\/variant/);
   assert.throws(() => buildReferenceBlock({ kind: 'event', variant: 'preserve', content: '', instruction: '' }), /unknown kind\/variant/);
 });
+
+import { buildGenreBlock } from '../src/references.js';
+
+test('buildGenreBlock wraps body under the shared heading (cn/en)', () => {
+  assert.equal(
+    buildGenreBlock('cn', '这个故事必须是**都市**类型。', 'EN body'),
+    '\n\n## 题材要求\n\n这个故事必须是**都市**类型。\n',
+  );
+  assert.equal(
+    buildGenreBlock('en', 'CN body', 'This story MUST be a **urban** novel.'),
+    '\n\n## Novel Type Requirement\n\nThis story MUST be a **urban** novel.\n',
+  );
+});

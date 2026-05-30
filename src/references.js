@@ -37,3 +37,15 @@ export function buildReferenceBlock({ kind, lang = 'cn', variant = 'required', i
   const heading = set[lang === 'cn' ? 'cn' : 'en'];
   return `\n\n## ${heading}\n\n${instruction}\n\n---\n${content}\n---\n`;
 }
+
+// Genre/novel-type constraint block under the shared `## 题材要求` /
+// `## Novel Type Requirement` heading. The body sentence is stage-specific
+// (outline/plan/tail each phrase it differently), so the caller supplies the
+// CN and EN bodies; this helper standardizes only the heading + wrapper.
+// (snowflake.js deliberately uses a different inline `重要：` format and does
+// not use this helper.)
+export function buildGenreBlock(lang, cnBody, enBody) {
+  const heading = lang === 'cn' ? '题材要求' : 'Novel Type Requirement';
+  const body = lang === 'cn' ? cnBody : enBody;
+  return `\n\n## ${heading}\n\n${body}\n`;
+}

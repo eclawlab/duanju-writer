@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { parseJsonWithRepair } from './json.js';
-import { buildReferenceBlock } from './references.js';
+import { buildReferenceBlock, buildGenreBlock } from './references.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { getAuthorStyleSafe } from './author-styles.js';
 import { initStateFromPlan } from './planner.js';
@@ -56,10 +56,9 @@ export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '',
     template += `\n\n## Writing Style\n\n${style.outline}\n`;
   }
   if (genre) {
-    const section = lang === 'cn'
-      ? `\n\n## 题材要求\n\n这个故事必须是**${genre}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。\n`
-      : `\n\n## Novel Type Requirement\n\nThis story MUST be a **${genre}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.\n`;
-    template += section;
+    template += buildGenreBlock(lang,
+      `这个故事必须是**${genre}**类型的小说。所有情节、角色、世界观和叙事风格都必须符合此类型的特征和读者期望。`,
+      `This story MUST be a **${genre}** novel. All plot elements, characters, world-building, and narrative style must align with this genre/type and its reader expectations.`);
   }
   if (referenceCharacter) {
     template += buildReferenceBlock({
@@ -318,9 +317,9 @@ export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snow
   const totalChapters = options.totalChapters || 0;
 
   if (genre) {
-    filled += lang === 'cn'
-      ? `\n\n## 题材要求\n\n本故事必须保持**${genre}**类型。后半段的所有情节、基调、语言必须与此类型一致，不得偏移。\n`
-      : `\n\n## Novel Type Requirement\n\nThis story MUST remain a **${genre}** novel. All plot, tone, and language in the back half must stay consistent with this genre — do NOT drift.\n`;
+    filled += buildGenreBlock(lang,
+      `本故事必须保持**${genre}**类型。后半段的所有情节、基调、语言必须与此类型一致，不得偏移。`,
+      `This story MUST remain a **${genre}** novel. All plot, tone, and language in the back half must stay consistent with this genre — do NOT drift.`);
   }
   if (referenceCharacter) {
     filled += buildReferenceBlock({

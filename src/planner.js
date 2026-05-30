@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { tryParseJson } from './json.js';
-import { buildReferenceBlock } from './references.js';
+import { buildReferenceBlock, buildGenreBlock } from './references.js';
 import { buildBibleBlock, buildProseBlock } from './story-bible.js';
 import { buildSelftellDirective } from './selftell.js';
 import {
@@ -31,10 +31,9 @@ export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceChara
   const templatePath = join(__dirname, '..', 'prompts', 'plan.md');
   let template = readFileSync(templatePath, 'utf8');
   if (genre) {
-    const section = lang === 'cn'
-      ? `\n\n## 题材要求\n\n这个故事是**${genre}**类型的小说。所有场景规划、角色行为、事件设计都必须符合此类型的特征。\n`
-      : `\n\n## Novel Type Requirement\n\nThis story is a **${genre}** novel. All scene planning, character behavior, and event design must align with this genre/type.\n`;
-    template += section;
+    template += buildGenreBlock(lang,
+      `这个故事是**${genre}**类型的小说。所有场景规划、角色行为、事件设计都必须符合此类型的特征。`,
+      `This story is a **${genre}** novel. All scene planning, character behavior, and event design must align with this genre/type.`);
   }
   if (referenceCharacter) {
     template += buildReferenceBlock({
