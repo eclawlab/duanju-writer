@@ -154,3 +154,9 @@ describe('planner', () => {
     assert.ok(state.revelations.some(r => r.id === 'rev_2'), 'state should have rev_2');
   });
 });
+
+test('sceneKey composes episodeIndex:ordinal', async () => {
+  const { sceneKey } = await import('../src/planner.js');
+  assert.equal(sceneKey(3, 0), '3:0');
+  assert.equal(sceneKey(0, 5), '0:5');
+});

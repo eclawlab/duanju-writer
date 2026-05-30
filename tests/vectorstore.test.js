@@ -144,3 +144,29 @@ describe('vectorstore', () => {
     assert.ok(!ids.includes('m'), 'removed entry should not appear in results');
   });
 });
+
+// ─── fork() — independent copy from in-memory state ──────────────────────────
+import { mkdtempSync as _vmkd, rmSync as _vrm } from 'node:fs';
+import { tmpdir as _vtmp } from 'node:os';
+import { join as _vjoin } from 'node:path';
+
+test('fork copies current in-memory entries to a new independent store', async () => {
+  const { createStore } = await import('../src/vectorstore.js');
+  const d = _vmkd(_vjoin(_vtmp(), 'vsfork-'));
+  try {
+    const front = createStore(_vjoin(d, 'front.json'));
+    front.add('a', 'machine learning neural networks', { episodeIndex: 0 });
+    front.add('b', 'romance drama betrayal', { episodeIndex: 1 });
+    // Note: NOT calling front.save() first — fork must use in-memory state.
+    const forked = front.fork(_vjoin(d, 'v1.json'));
+    assert.equal(forked.size(), 2, 'fork should carry all in-memory entries');
+    // Independence: mutating the fork must not affect the front store.
+    forked.add('c', 'extra entry', { episodeIndex: 2 });
+    assert.equal(forked.size(), 3);
+    assert.equal(front.size(), 2);
+    // Persisted file is loadable on its own.
+    const reloaded = createStore(_vjoin(d, 'v1.json'));
+    reloaded.load();
+    assert.equal(reloaded.size(), 2, 'forked file should hold the 2 original entries');
+  } finally { _vrm(d, { recursive: true, force: true }); }
+});

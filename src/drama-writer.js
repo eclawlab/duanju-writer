@@ -6,7 +6,7 @@ import { parseJsonWithRepair } from './json.js';
 import { buildReferenceBlock, buildGenreBlock } from './references.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { getAuthorStyleSafe } from './author-styles.js';
-import { initStateFromPlan } from './planner.js';
+import { initStateFromPlan, sceneKey } from './planner.js';
 import { compressClips, buildHistoryContext } from './compressor.js';
 import {
   updateCharacter,
@@ -1097,7 +1097,7 @@ export async function generateDrama(materials, options = {}) {
       const history = buildHistoryContext([...branchHistory, ...episodeRecentDigests]);
 
       // Get plan scene data for events/pacing using composite key (episodeIndex:clipIndex)
-      const planScene = (plan.sceneMap && plan.sceneMap[`${ep.episodeIndex}:${i}`]) || {};
+      const planScene = (plan.sceneMap && plan.sceneMap[sceneKey(ep.episodeIndex, i)]) || {};
 
       // Generate clip via the new ctx-object pipeline (with retry and fallback).
       // Trope `## Clip` section is resolved from the style key.

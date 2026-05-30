@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
@@ -575,30 +575,26 @@ async function processJob(jobId, options = {}) {
         if (variantPlanSucceeded) saveArtifact(jobId, `plan.${v.key}.json`, variantPlan);
       }
 
-      // Fork the front vector store so variants don't cross-contaminate retrieval.
-      // Re-save the in-memory front store right before the fork: an earlier save
-      // may have failed (and only logged), in which case the on-disk file is
-      // stale and copyFileSync would clone the stale snapshot into the variant
-      // store with no warning.
+      // Fork the front vector store so variants don't cross-contaminate
+      // retrieval. store.fork() writes the in-memory front entries directly to
+      // the variant path, so it can't clone a stale on-disk snapshot or come up
+      // empty (the two failure modes the old re-save + copyFileSync dance had to
+      // guard against). On resume, the variant store already exists — load it.
       const variantStorePath = join(JOBS_DIR, jobId, `vectorstore.${v.key}.json`);
-      if (!existsSync(variantStorePath)) {
+      let variantStore;
+      if (existsSync(variantStorePath)) {
+        variantStore = createStore(variantStorePath);
+        variantStore.load();
+      } else {
         try {
-          frontStore.save();
+          variantStore = frontStore.fork(variantStorePath);
         } catch (err) {
-          log(`[variant ${v.key}] front store re-save before fork failed: ${err.message} — fork may use a stale snapshot`);
-          wlog('front_store_resave_failed', { variant: v.key, error: err.message });
-        }
-        if (existsSync(frontStorePath)) {
-          try {
-            copyFileSync(frontStorePath, variantStorePath);
-          } catch (err) {
-            log(`[variant ${v.key}] vector store fork failed: ${err.message} — variant will start with empty retrieval`);
-            wlog('variant_store_fork_failed', { variant: v.key, error: err.message });
-          }
+          log(`[variant ${v.key}] vector store fork failed: ${err.message} — variant will start with empty retrieval`);
+          wlog('variant_store_fork_failed', { variant: v.key, error: err.message });
+          variantStore = createStore(variantStorePath);
+          variantStore.load();
         }
       }
-      const variantStore = createStore(variantStorePath);
-      variantStore.load();
       const frontSize = frontStore.size();
       const variantSize = variantStore.size();
       if (frontSize > 0 && variantSize === 0) {

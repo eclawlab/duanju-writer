@@ -18,6 +18,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // JSON extraction helpers are shared via ./json.js.
 
+// Composite key for plan.sceneMap entries: a clip's position within its
+// episode (NOT its unreliable LLM-assigned clipIndex). Both the builder
+// (parsePlan) and the consumer (drama-writer's clip loop) must use this so the
+// keying convention lives in exactly one place.
+export function sceneKey(episodeIndex, ordinal) {
+  return `${episodeIndex}:${ordinal}`;
+}
+
 // ─── Prompt builder ────────────────────────────────────────────────────────────
 
 /**
