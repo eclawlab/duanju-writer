@@ -16,10 +16,13 @@ const EVENT_MD = '# Bridge Collapse\nThirty-seven dead.';
 // Round-2 Fix #2/#3: variantPlan failure no longer persists basePlan fallback
 // to disk (would poison retries + commit wrong-ending plan to variant artifact).
 // ──────────────────────────────────────────────────────────────────────────────
+// NOTE: the per-variant logic moved from worker.js to src/variant-generator.js
+// (generateVariant extraction). Behavior is unchanged; these source-inspection
+// tests follow the code to its new home.
 describe('R2 Fix #2/#3 — variantPlan persistence guard', () => {
-  test('worker.js gates variant plan saveArtifact on success', async () => {
+  test('variant-generator gates variant plan saveArtifact on success', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../src/variant-generator.js', import.meta.url), 'utf8');
     // The variant plan save must be gated on a success flag, mirroring Fix #3 for basePlan.
     assert.ok(
       src.includes('if (variantPlanSucceeded) saveArtifact'),
@@ -27,9 +30,9 @@ describe('R2 Fix #2/#3 — variantPlan persistence guard', () => {
     );
   });
 
-  test('worker.js falls back to empty skeleton on variant-plan failure (NOT basePlan)', async () => {
+  test('variant-generator falls back to empty skeleton on variant-plan failure (NOT basePlan)', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('../src/variant-generator.js', import.meta.url), 'utf8');
     // Audit Bug #7: basePlan was generated for the original outline (different
     // ending). Reusing it for a variant feeds wrong-ending sceneMap entries
     // into the variant's tail clips. Variant must fall back to empty skeleton.
