@@ -86,6 +86,17 @@ function loadArtifact(jobId, filename) {
   }
 }
 
+// Count clips and CN words across a story's episodes. Defensive on every level
+// (episodes/scenes/content may be absent on partial/cached artifacts) so the
+// cached-resume and fresh-generation paths share one consistent computation.
+export function computeStoryMetrics(story) {
+  const episodes = story?.episodes || [];
+  const clips = episodes.reduce((sum, ep) => sum + ((ep.scenes || []).length), 0);
+  const words = episodes.reduce(
+    (sum, ep) => sum + (ep.scenes || []).reduce((s, sc) => s + countWords(sc.content), 0), 0);
+  return { clips, words };
+}
+
 /**
  * Build a minimal `materials` shape from a bible so downstream stages
  * (which expect materials.topics/plotHooks/...) keep working when trend
@@ -509,11 +520,9 @@ async function processJob(jobId, options = {}) {
         const cachedStory = loadArtifact(jobId, `story.${v.key}.json`);
         if (cachedStory) {
           if (!sampleStory) sampleStory = cachedStory;
-          const vClips = (cachedStory.episodes || []).reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
-          const vWords = (cachedStory.episodes || []).reduce(
-            (sum, ep) => sum + (ep.scenes || []).reduce((s, sc) => s + countWords(sc.content), 0), 0);
-          totalClipsAcrossVariants += vClips;
-          totalWordsAcrossVariants += vWords;
+          const { clips, words } = computeStoryMetrics(cachedStory);
+          totalClipsAcrossVariants += clips;
+          totalWordsAcrossVariants += words;
         }
         continue;
       }
@@ -637,9 +646,7 @@ async function processJob(jobId, options = {}) {
       }
 
       if (!sampleStory) sampleStory = variantStory;
-      const vClips = variantStory.episodes.reduce((sum, ep) => sum + (ep.scenes?.length || 0), 0);
-      const vWords = variantStory.episodes.reduce(
-        (sum, ep) => sum + ep.scenes.reduce((s, sc) => s + countWords(sc.content), 0), 0);
+      const { clips: vClips, words: vWords } = computeStoryMetrics(variantStory);
       totalClipsAcrossVariants += vClips;
       totalWordsAcrossVariants += vWords;
       log(`Variant ${v.key}: "${variantStory.title}" — ${variantStory.episodes.length} eps, ${vClips} clips, ${vWords} words`);
@@ -665,12 +672,14 @@ async function processJob(jobId, options = {}) {
       // for the same key — log loudly if it changes (signals the platform
       // didn't honor idempotency, so we'd be creating duplicates).
       const priorPending = loadArtifact(jobId, pendingKey);
-      saveArtifact(jobId, pendingKey, {
+      // Shared fields for both the pre-upload and post-upload pending writes;
+      // only the storyId differs (null before the call, real id after).
+      const pendingBase = {
         idempotencyKey, variationGroupId, variationLabel: v.label, ending: v.ending,
         startedAt: priorPending?.startedAt || new Date().toISOString(),
-        priorStoryId: priorPending?.storyId || null,
         attempts: (priorPending?.attempts || 0) + 1,
-      });
+      };
+      saveArtifact(jobId, pendingKey, { ...pendingBase, priorStoryId: priorPending?.storyId || null });
       log(`Variant ${v.key}: uploading (${v.label})...`);
       wlog('variant_upload_start', { variant: v.key, label: v.label, variationGroupId, idempotencyKey, retryAttempt: priorPending?.attempts || 0 });
       const uploadStartTime = Date.now();
@@ -691,12 +700,7 @@ async function processJob(jobId, options = {}) {
       // Persist the storyId in the pending artifact so a future retry can
       // detect duplicates (above check) even after a crash before the final
       // saveArtifact below.
-      saveArtifact(jobId, pendingKey, {
-        idempotencyKey, variationGroupId, variationLabel: v.label, ending: v.ending,
-        startedAt: priorPending?.startedAt || new Date().toISOString(),
-        storyId: uploadResult.storyId,
-        attempts: (priorPending?.attempts || 0) + 1,
-      });
+      saveArtifact(jobId, pendingKey, { ...pendingBase, storyId: uploadResult.storyId });
       log(`Variant ${v.key} uploaded: ${uploadResult.storyId}`);
       wlog('variant_upload_done', {
         variant: v.key, storyId: uploadResult.storyId, durationMs: uploadDuration,

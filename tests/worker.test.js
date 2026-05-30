@@ -56,3 +56,21 @@ describe('worker', () => {
     assert.ok(transitions.some(t => t.from === 'extracting' && t.to === 'writing'));
   });
 });
+
+import { computeStoryMetrics } from '../src/worker.js';
+
+test('computeStoryMetrics counts clips and words defensively', () => {
+  const story = { episodes: [
+    { scenes: [{ content: 'a b c' }, { content: 'd e' }] },
+    { scenes: [{ content: 'f' }] },
+  ] };
+  const m = computeStoryMetrics(story);
+  assert.equal(m.clips, 3);
+  assert.equal(m.words, 6);
+});
+
+test('computeStoryMetrics handles missing episodes/scenes/content', () => {
+  assert.deepEqual(computeStoryMetrics(null), { clips: 0, words: 0 });
+  assert.deepEqual(computeStoryMetrics({}), { clips: 0, words: 0 });
+  assert.deepEqual(computeStoryMetrics({ episodes: [{}, { scenes: [{}] }] }), { clips: 1, words: 0 });
+});
