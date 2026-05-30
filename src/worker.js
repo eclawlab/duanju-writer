@@ -6,9 +6,8 @@ import { loadConfig } from './config.js';
 import { updateJob, getJob, claimNextPending, claimJob, unstickJob } from './queue.js';
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
-import { generateDrama, generateOutline, generateTailOutline, validateOutlineChapterCoverage } from './drama-writer.js';
+import { generateDrama, generateOutline, validateOutlineChapterCoverage } from './drama-writer.js';
 import { generateSnowflake } from './snowflake.js';
-import { generatePlan } from './planner.js';
 import {
   splitChapters,
   extractChapterFacts,
@@ -17,12 +16,13 @@ import {
   saveStoryArtifacts,
 } from './story-bible.js';
 import { createStore, getStoreDir } from './vectorstore.js';
-import { upload, verifyUploadAuth } from './uploader.js';
+import { verifyUploadAuth } from './uploader.js';
 import { logEntry, writeSummary } from './worklog.js';
 import { countWords } from './enrichment.js';
 import { getLLMStats, resetLLMStats } from './llm.js';
 import { mapWithConcurrency } from './async.js';
 import { pickJobOptions } from './job-options.js';
+import { generateVariant } from './variant-generator.js';
 import { saveArtifact as saveArtifactAt, loadArtifact as loadArtifactAt, removeArtifact as removeArtifactAt } from './artifacts.js';
 
 // Max concurrent per-chapter bible extractions. Bounded so a large novel
@@ -509,214 +509,17 @@ async function processJob(jobId, options = {}) {
     let totalWordsAcrossVariants = 0;
 
     for (const v of VARIANTS) {
-      const uploadedKey = `upload.${v.key}.json`;
-      const prior = publish ? loadArtifact(jobId, uploadedKey) : null;
-      if (prior && prior.storyId) {
-        log(`Variant ${v.key} (${v.label}) already uploaded: ${prior.storyId}`);
-        storyIds.push(prior.storyId);
-        // Populate sampleStory AND fold the cached variant's clip/word totals
-        // into the summary counters — earlier the resume path silently dropped
-        // them, so a job that completed via multiple runOnce calls reported
-        // totals only for the variants generated in the final run.
-        const cachedStory = loadArtifact(jobId, `story.${v.key}.json`);
-        if (cachedStory) {
-          if (!sampleStory) sampleStory = cachedStory;
-          const { clips, words } = computeStoryMetrics(cachedStory);
-          totalClipsAcrossVariants += clips;
-          totalWordsAcrossVariants += words;
-        }
-        continue;
-      }
-
-      // Tail outline — divergent back half with target ending
-      let tailOutline = loadArtifact(jobId, `tail-outline.${v.key}.json`);
-      if (!tailOutline) {
-        log(`Variant ${v.key}: generating ${v.ending} tail outline...`);
-        wlog('tail_outline_start', { variant: v.key, ending: v.ending });
-        const totalChaptersForTail = chapters ? chapters.chapters.length : 0;
-        tailOutline = await generateTailOutline(baseOutline, splitIdx, v.ending, {
-          snowflake,
-          lang,
-          genre,
-          referenceCharacter,
-          referenceEvent,
-          newsSource: materials?.newsSource || null,
-          bible,
-          fidelity,
-          totalChapters: totalChaptersForTail,
-          mode,
-          log,
-        });
-        saveArtifact(jobId, `tail-outline.${v.key}.json`, tailOutline);
-        wlog('tail_outline_done', { variant: v.key, episodes: tailOutline.episodes.length });
-      }
-
-      // Full variant outline = shared front + variant tail
-      const variantOutline = {
-        ...baseOutline,
-        episodes: [...frontEpisodes, ...tailOutline.episodes],
-      };
-      // Re-validate full-coverage chapter range for the assembled variant
-      // outline under tight fidelity. The base outline passed validation
-      // pre-split, but the tail LLM may have skipped chapters.
-      if (bible && fidelity === 'tight') {
-        const totalChaptersForVariant = chapters ? chapters.chapters.length : 0;
-        validateOutlineChapterCoverage(variantOutline, fidelity, totalChaptersForVariant);
-      }
-      saveArtifact(jobId, `outline.${v.key}.json`, variantOutline);
-
-      // Variant plan — regenerate so it covers the new tail episodes
-      let variantPlan = loadArtifact(jobId, `plan.${v.key}.json`);
-      if (!variantPlan) {
-        let variantPlanSucceeded = false;
-        try {
-          log(`Variant ${v.key}: planning tail clips...`);
-          const aggregateChapterRange = chapters && chapters.chapters.length ? [1, chapters.chapters.length] : null;
-          variantPlan = await generatePlan(variantOutline, { lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, aggregateChapterRange, mode });
-          variantPlanSucceeded = true;
-        } catch (err) {
-          log(`[variant ${v.key} planning failed] ${err.message} — falling back to empty skeleton; will retry on next run`);
-          // basePlan was generated for the original outline (different ending).
-          // Reusing it here would feed wrong-ending sceneMap entries into the
-          // variant's tail clips. Empty skeleton means clips run without plan
-          // augmentation — degraded but not actively wrong.
-          variantPlan = { clips: [], characters: [], items: [], locations: [], revelations: [] };
-        }
-        if (variantPlanSucceeded) saveArtifact(jobId, `plan.${v.key}.json`, variantPlan);
-      }
-
-      // Fork the front vector store so variants don't cross-contaminate
-      // retrieval. store.fork() writes the in-memory front entries directly to
-      // the variant path, so it can't clone a stale on-disk snapshot or come up
-      // empty (the two failure modes the old re-save + copyFileSync dance had to
-      // guard against). On resume, the variant store already exists — load it.
-      const variantStorePath = join(JOBS_DIR, jobId, `vectorstore.${v.key}.json`);
-      let variantStore;
-      if (existsSync(variantStorePath)) {
-        variantStore = createStore(variantStorePath);
-        variantStore.load();
-      } else {
-        try {
-          variantStore = frontStore.fork(variantStorePath);
-        } catch (err) {
-          log(`[variant ${v.key}] vector store fork failed: ${err.message} — variant will start with empty retrieval`);
-          wlog('variant_store_fork_failed', { variant: v.key, error: err.message });
-          variantStore = createStore(variantStorePath);
-          variantStore.load();
-        }
-      }
-      const frontSize = frontStore.size();
-      const variantSize = variantStore.size();
-      if (frontSize > 0 && variantSize === 0) {
-        log(`[variant ${v.key}] WARNING: forked store is empty while front store has ${frontSize} entries — retrieval will be degraded`);
-        wlog('variant_store_empty_after_fork', { variant: v.key, frontSize, variantSize });
-      }
-
-      // Tail scene generation. Pass front episodes via `progress` so
-      // generateDrama skips them and only generates the tail.
-      // globalClipIndex is reset to 0; the skip loop re-accumulates it
-      // as it passes through completed front episodes.
-      let variantStory = loadArtifact(jobId, `story.${v.key}.json`);
-      if (!variantStory) {
-        log(`Variant ${v.key}: generating ${v.ending} tail clips...`);
-        wlog('variant_clips_start', { variant: v.key, ending: v.ending });
-        const seedProgress = {
-          episodes: frontProgress.episodes,
-          episodeContexts: frontProgress.episodeContexts || {},
-          globalClipIndex: 0,
-        };
-        variantStory = await generateDrama(materials, {
-          lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, log, wlog,
-          vectorStore: variantStore,
-          savedSnowflake: snowflake,
-          savedOutline: variantOutline,
-          savedPlan: variantPlan,
-          progress: seedProgress,
-          onEpisode: (pd) => saveArtifact(jobId, `story.${v.key}.progress.json`, pd),
-          onState: (s) => saveArtifact(jobId, `state.${v.key}.json`, s),
-        });
-        saveArtifact(jobId, `story.${v.key}.json`, variantStory);
-        try {
-          variantStore.save();
-        } catch (err) {
-          log(`[variant ${v.key} vector store save failed] ${err.message}`);
-          wlog('variant_store_save_failed', { variant: v.key, error: err.message });
-        }
-      } else {
-        log(`Resuming — variant ${v.key} story already generated`);
-      }
-
-      if (!sampleStory) sampleStory = variantStory;
-      const { clips: vClips, words: vWords } = computeStoryMetrics(variantStory);
-      totalClipsAcrossVariants += vClips;
-      totalWordsAcrossVariants += vWords;
-      log(`Variant ${v.key}: "${variantStory.title}" — ${variantStory.episodes.length} eps, ${vClips} clips, ${vWords} words`);
-
-      // Generation-only mode: skip the upload entirely. The story artifact is
-      // already persisted above, so a later run without --no-publish can upload it.
-      if (!publish) {
-        log(`Variant ${v.key}: generated (not uploaded — publishing disabled).`);
-        wlog('variant_upload_skipped', { variant: v.key });
-        continue;
-      }
-
-      // Upload — write a "pending" artifact with the idempotency key BEFORE
-      // the HTTP call so a crash between request-success and artifact-save
-      // doesn't produce a duplicate platform story on retry. The platform
-      // is expected to honor the Idempotency-Key header / body field and
-      // return the same storyId for repeated POSTs with the same key.
-      const idempotencyKey = `${jobId}.${v.key}`;
-      const pendingKey = `upload.${v.key}.pending.json`;
-      // If a previous attempt already started an upload for this variant, the
-      // pending artifact records the idempotency key and (after first response)
-      // the storyId. On retry, the platform should return the same storyId
-      // for the same key — log loudly if it changes (signals the platform
-      // didn't honor idempotency, so we'd be creating duplicates).
-      const priorPending = loadArtifact(jobId, pendingKey);
-      // Shared fields for both the pre-upload and post-upload pending writes;
-      // only the storyId differs (null before the call, real id after).
-      const pendingBase = {
-        idempotencyKey, variationGroupId, variationLabel: v.label, ending: v.ending,
-        startedAt: priorPending?.startedAt || new Date().toISOString(),
-        attempts: (priorPending?.attempts || 0) + 1,
-      };
-      saveArtifact(jobId, pendingKey, { ...pendingBase, priorStoryId: priorPending?.storyId || null });
-      log(`Variant ${v.key}: uploading (${v.label})...`);
-      wlog('variant_upload_start', { variant: v.key, label: v.label, variationGroupId, idempotencyKey, retryAttempt: priorPending?.attempts || 0 });
-      const uploadStartTime = Date.now();
-      const uploadResult = await upload(variantStory, {
-        variationGroupId,
-        variationLabel: v.label,
-        idempotencyKey,
+      const r = await generateVariant(v, {
+        jobId, publish, variationGroupId,
+        baseOutline, splitIdx, frontEpisodes, frontProgress, frontStore,
+        snowflake, materials, bible, chapters, fidelity,
+        genre, lang, style, mode, authorStyle, referenceCharacter, referenceEvent,
+        log, wlog, saveArtifact, loadArtifact, computeStoryMetrics,
       });
-      const uploadDuration = Date.now() - uploadStartTime;
-      if (priorPending?.storyId && priorPending.storyId !== uploadResult.storyId) {
-        log(chalk.red(`[variant ${v.key}] DUPLICATE UPLOAD: previous attempt produced storyId=${priorPending.storyId}, retry returned ${uploadResult.storyId}. Platform did not honor Idempotency-Key=${idempotencyKey}.`));
-        wlog('variant_upload_duplicate_detected', {
-          variant: v.key, idempotencyKey,
-          priorStoryId: priorPending.storyId,
-          newStoryId: uploadResult.storyId,
-        });
-      }
-      // Persist the storyId in the pending artifact so a future retry can
-      // detect duplicates (above check) even after a crash before the final
-      // saveArtifact below.
-      saveArtifact(jobId, pendingKey, { ...pendingBase, storyId: uploadResult.storyId });
-      log(`Variant ${v.key} uploaded: ${uploadResult.storyId}`);
-      wlog('variant_upload_done', {
-        variant: v.key, storyId: uploadResult.storyId, durationMs: uploadDuration,
-      });
-      saveArtifact(jobId, uploadedKey, {
-        storyId: uploadResult.storyId,
-        title: variantStory.title,
-        variationGroupId,
-        variationLabel: v.label,
-        ending: v.ending,
-        idempotencyKey,
-        success: uploadResult.success,
-      });
-
-      storyIds.push(uploadResult.storyId);
+      if (r.storyId) storyIds.push(r.storyId);
+      if (r.story && !sampleStory) sampleStory = r.story;
+      totalClipsAcrossVariants += r.clips;
+      totalWordsAcrossVariants += r.words;
     }
 
     // Record exactly one history entry per drama group (not per variant —
