@@ -329,23 +329,12 @@ switch (command) {
     // Validate and set model override
     if (model) {
       const { loadConfig } = await import('../src/config.js');
-      const config = loadConfig();
-      if (!config.providers || !config.providers[model]) {
-        console.log(`Provider "${model}" not found.`);
-        console.log(`Available providers: ${Object.keys(config.providers || {}).join(', ')}`);
-        console.log('Add one with: duanju-writer provider add <name> --type openai ...');
-        process.exit(1);
-      }
-      // Check OpenAI providers have an API key configured
-      const providerCfg = config.providers[model];
-      if (providerCfg.type === 'openai' && !providerCfg.apiKey) {
-        console.log(`Provider "${model}" has no API key configured.`);
-        console.log(`Set it with: duanju-writer provider add ${model} --type openai --base-url ${providerCfg.baseUrl} --model ${providerCfg.model} --api-key <your-key>`);
-        process.exit(1);
-      }
+      const { resolveModelOverride } = await import('../src/cli.js');
+      const res = resolveModelOverride(model, loadConfig());
+      if (!res.ok) { console.log(res.error); process.exit(1); }
       const { setModelOverride } = await import('../src/llm.js');
       setModelOverride(model);
-      console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
+      console.log(`Using model: ${res.label}`);
     }
     for (let i = 0; i < count; i++) {
       const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle, publish });
@@ -368,18 +357,27 @@ switch (command) {
     let model;
     let title;
     let dryRun = false;
-    for (let a = 0; a < args.length; a++) {
-      if (args[a] === '--feedback' && args[a + 1]) { feedback = args[a + 1]; a++; }
-      else if (args[a] === '--feedback-file' && args[a + 1]) { feedbackFile = args[a + 1]; a++; }
-      else if (args[a] === '--lang' && args[a + 1]) {
-        lang = args[a + 1].toLowerCase();
-        if (lang !== 'cn') { console.log(`--lang ${args[a + 1]} is not supported (CN only).`); process.exit(1); }
-        a++;
+    {
+      const { parseFlags } = await import('../src/cli.js');
+      const parsed = parseFlags(args, {
+        feedback: { type: 'string' },
+        'feedback-file': { type: 'string' },
+        lang: { type: 'string' },
+        model: { type: 'string' },
+        title: { type: 'string' },
+        'dry-run': { type: 'boolean' },
+      });
+      if (parsed.errors.length) { console.error(`Error: ${parsed.errors[0]}`); process.exit(1); }
+      storyId = parsed.positionals[0];
+      feedback = parsed.values.feedback;
+      feedbackFile = parsed.values['feedback-file'];
+      model = parsed.values.model;
+      title = parsed.values.title;
+      dryRun = !!parsed.values['dry-run'];
+      if (parsed.values.lang !== undefined) {
+        lang = parsed.values.lang.toLowerCase();
+        if (lang !== 'cn') { console.log(`--lang ${parsed.values.lang} is not supported (CN only).`); process.exit(1); }
       }
-      else if (args[a] === '--model' && args[a + 1]) { model = args[a + 1]; a++; }
-      else if (args[a] === '--title' && args[a + 1]) { title = args[a + 1]; a++; }
-      else if (args[a] === '--dry-run') { dryRun = true; }
-      else if (!args[a].startsWith('--') && !storyId) { storyId = args[a]; }
     }
     if (!storyId) {
       console.log('Usage: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
@@ -404,20 +402,12 @@ switch (command) {
     }
     if (model) {
       const { loadConfig } = await import('../src/config.js');
-      const config = loadConfig();
-      if (!config.providers || !config.providers[model]) {
-        console.log(`Provider "${model}" not found.`);
-        console.log(`Available providers: ${Object.keys(config.providers || {}).join(', ')}`);
-        process.exit(1);
-      }
-      const providerCfg = config.providers[model];
-      if (providerCfg.type === 'openai' && !providerCfg.apiKey) {
-        console.log(`Provider "${model}" has no API key configured.`);
-        process.exit(1);
-      }
+      const { resolveModelOverride } = await import('../src/cli.js');
+      const res = resolveModelOverride(model, loadConfig());
+      if (!res.ok) { console.log(res.error); process.exit(1); }
       const { setModelOverride } = await import('../src/llm.js');
       setModelOverride(model);
-      console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
+      console.log(`Using model: ${res.label}`);
     }
     const { modifyStory } = await import('../src/modifier.js');
     try {
