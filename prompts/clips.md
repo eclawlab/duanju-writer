@@ -16,6 +16,10 @@
 
 之前片段：{{priorClipDigest}}
 
+## 相关历史片段（语义检索）
+
+{{retrievedScenes}}
+
 ## 角色表
 
 {{characters}}

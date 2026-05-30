@@ -139,6 +139,29 @@ export const ENDING_LABEL_TO_ENUM = {
 // composeScene lives in ./scene.js (re-exported above) so selftell.js can use
 // it without a circular import.
 
+// Query the vector store for scenes most relevant to the upcoming clip and
+// format them for prompt injection. Restricted to clips from OTHER episodes
+// (the current episode's clips are already carried in episodeRecentDigests),
+// so retrieval surfaces cross-episode callbacks/setups. Returns '' when there
+// is no store, no signal, or on any error — retrieval is strictly additive.
+export function retrieveRelatedScenes(vectorStore, query, currentEpisodeIndex, log = () => {}) {
+  if (!vectorStore || typeof vectorStore.search !== 'function' || !query) return '';
+  try {
+    const hits = vectorStore.search(query, 5)
+      .filter(h => h.score > 0 && h.metadata?.episodeIndex !== currentEpisodeIndex)
+      .slice(0, 2);
+    if (!hits.length) return '';
+    return hits.map(h => {
+      const epi = h.metadata?.episodeIndex ?? '?';
+      const text = (h.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      return `【第${epi}集相关片段】${text}`;
+    }).join('\n');
+  } catch (err) {
+    log(`[scene retrieval failed] ${err.message}`);
+    return '';
+  }
+}
+
 // Cheap, no-LLM digest of a just-written clip, shaped like a compressClips
 // result so buildHistoryContext can format it. Used for within-episode
 // continuity; the episode-level LLM compression handles cross-episode carry.
@@ -480,6 +503,7 @@ const CLIPS_PROMPT_PATH = join(__dirname, '..', 'prompts', 'clips.md');
  * @param {string} ctx.clipSummary       Plan summary for this clip
  * @param {boolean} [ctx.isConclusion]   True only for last clip of last episode
  * @param {string} [ctx.priorClipDigest] Compressed summary of prior clips
+ * @param {string} [ctx.retrievedScenes] Semantically-retrieved earlier scenes (vector store)
  * @param {string} [ctx.tropeSection]    `## Clip` injection from the trope file
  * @param {string} [ctx.referenceCharacter]
  * @param {string} [ctx.referenceEvent]
@@ -493,6 +517,7 @@ export function buildClipPrompt(ctx) {
     clipSummary = '',
     isConclusion = false,
     priorClipDigest = '',
+    retrievedScenes = '',
     tropeSection = '',
     referenceCharacter = '',
     referenceEvent = '',
@@ -517,6 +542,7 @@ export function buildClipPrompt(ctx) {
     .replace(/\{\{clipSummary\}\}/g, clipSummary || '')
     .replace(/\{\{isConclusion\}\}/g, isConclusion ? 'true' : 'false')
     .replace(/\{\{priorClipDigest\}\}/g, priorClipDigest || '(none)')
+    .replace(/\{\{retrievedScenes\}\}/g, () => retrievedScenes || '（无）')
     .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
     .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
     .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
@@ -1083,6 +1109,12 @@ export async function generateDrama(materials, options = {}) {
       const concEnding = plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆');
       let scene;
       const episodeChapterRange = bible && Array.isArray(ep.sourceChapterRange) ? ep.sourceChapterRange : null;
+      // Semantic retrieval: pull the most relevant scenes from EARLIER episodes
+      // (callbacks, planted setups) to supplement the linear recent-clip digest.
+      // Scoped to prior episodes so it complements episodeRecentDigests rather
+      // than echoing the immediately-preceding clips. Best-effort: any failure
+      // (or an empty store) just yields no retrieved context.
+      const retrievedScenes = retrieveRelatedScenes(options.vectorStore, plan_clip.summary || ep.title, ep.episodeIndex, log);
       try {
         scene = await generateClip({
           outline,
@@ -1092,6 +1124,7 @@ export async function generateDrama(materials, options = {}) {
           clipSummary: plan_clip.summary || '',
           isConclusion: isConcl,
           priorClipDigest: history || '',
+          retrievedScenes,
           tropeSection,
           referenceCharacter,
           referenceEvent,

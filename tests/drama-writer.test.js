@@ -831,3 +831,42 @@ describe('clip-stage bible injection', () => {
     assert.ok(!loose.includes('## 原文片段'));
   });
 });
+
+describe('vector store retrieval wiring (search now consumed)', () => {
+  test('buildClipPrompt renders retrievedScenes into the prompt', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const out = buildClipPrompt({
+      outline: { title: 't' }, episode: { episodeIndex: 3 }, clipIndex: 0, totalClips: 1,
+      clipSummary: 'x', retrievedScenes: '【第0集相关片段】关键道具特写',
+    });
+    assert.ok(out.includes('## 相关历史片段（语义检索）'));
+    assert.ok(out.includes('关键道具特写'));
+  });
+
+  test('buildClipPrompt shows （无） when no retrieved scenes', async () => {
+    const { buildClipPrompt } = await import('../src/drama-writer.js');
+    const out = buildClipPrompt({
+      outline: { title: 't' }, episode: {}, clipIndex: 0, totalClips: 1, clipSummary: 'x',
+    });
+    assert.ok(out.includes('## 相关历史片段（语义检索）'));
+    assert.ok(out.includes('（无）'));
+  });
+
+  test('retrieveRelatedScenes formats hits from other episodes, excludes current', async () => {
+    const { retrieveRelatedScenes } = await import('../src/drama-writer.js');
+    const store = createStore('/tmp/dw-retrieval-test-' + process.pid + '.json');
+    store.add('a', '陆衡 推开 大门 龙鳞 戒指 特写', { episodeIndex: 0 });
+    store.add('b', '完全 无关 的 风景 描写 田园', { episodeIndex: 1 });
+    store.add('c', '陆衡 龙鳞 戒指 再次 出现', { episodeIndex: 5 }); // current ep — must be excluded
+    const out = retrieveRelatedScenes(store, '龙鳞 戒指 特写', 5);
+    assert.ok(out.includes('第0集相关片段'), 'should surface the related ep-0 scene');
+    assert.ok(!out.includes('第5集'), 'must exclude the current episode');
+  });
+
+  test('retrieveRelatedScenes returns empty string for an empty / missing store', async () => {
+    const { retrieveRelatedScenes } = await import('../src/drama-writer.js');
+    assert.equal(retrieveRelatedScenes(null, 'q', 0), '');
+    const store = createStore('/tmp/dw-retrieval-empty-' + process.pid + '.json');
+    assert.equal(retrieveRelatedScenes(store, 'q', 0), '');
+  });
+});
