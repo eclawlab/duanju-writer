@@ -388,7 +388,7 @@ switch (command) {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
-      'maxRetries', 'publish', 'publishOnUpload', 'lang', 'genre',
+      'maxRetries', 'publish', 'publishOnUpload', 'uploadTimeout', 'lang', 'genre',
       'referenceCharacter', 'referenceEvent', 'referenceStory', 'fidelity', 'style',
       'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
       'mode', 'authorStyle',

@@ -16,10 +16,16 @@ const DEFAULTS = {
   // body). They are independent — a draft upload still needs a valid key.
   publish: true,
   publishOnUpload: true,
+  // Per-request HTTP timeout (ms) for upload (POST) and download (GET) against
+  // the platform. Read by uploader.js / downloader.js; 0 or non-finite falls
+  // back to their built-in 60s default.
+  uploadTimeout: 60000,
   targetCharsPerClip: 50,         // 0 = disabled
   episodesPerDrama: 20,
   clipsPerEpisode: 6,
   lang: 'cn',
+  // Narration mode: 'default' (third-person) or 'selftell' (first-person POV).
+  mode: 'default',
   genre: '',
   referenceCharacter: '',
   referenceEvent: '',
