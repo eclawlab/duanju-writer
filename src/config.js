@@ -10,6 +10,11 @@ const DEFAULTS = {
   claudePath: 'claude',
   maxRetries: 3,
   maxConcurrentJobs: 1,
+  // `publish`: whether a job uploads to the platform at all (false = generate
+  // only, skip the upload + auth preflight). `publishOnUpload`: when we DO
+  // upload, whether the story goes live vs. stays a draft (sent in the request
+  // body). They are independent — a draft upload still needs a valid key.
+  publish: true,
   publishOnUpload: true,
   targetCharsPerClip: 50,         // 0 = disabled
   episodesPerDrama: 20,

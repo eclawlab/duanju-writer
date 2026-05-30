@@ -83,7 +83,7 @@ const fresh = hasFlag(args, '--fresh');
 
 function printUsage() {
   console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
-  console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <作家名>]');
+  console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <作家名>] [--no-publish]');
   console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
 }
 
@@ -139,6 +139,7 @@ switch (command) {
     let clipsPerEpisode;
     let mode;
     let authorStyle;
+    let publish;  // undefined = default (publish); false via --no-publish
     for (let a = 0; a < args.length; a++) {
       if (args[a] === '--lang' && args[a + 1]) {
         lang = args[a + 1].toLowerCase();
@@ -198,6 +199,8 @@ switch (command) {
       } else if (args[a] === '--author-style' && args[a + 1]) {
         authorStyle = args[a + 1];
         a++;
+      } else if (args[a] === '--no-publish') {
+        publish = false;
       } else if (args[a].trim() !== '' && !args[a].startsWith('-')) {
         // Positional count: plain non-negative integer digits only. The old
         // `!isNaN(x)` check accepted 'Infinity' (→ NaN count → silent
@@ -345,9 +348,9 @@ switch (command) {
       console.log(`Using model: ${model} (${providerCfg.type}, ${providerCfg.model || providerCfg.claudePath || 'default'})`);
     }
     for (let i = 0; i < count; i++) {
-      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle });
+      const job = createJob({ lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle, publish });
       console.log(`\n[${i + 1}/${count}] Created job ${job.id}`);
-      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle });
+      await runOnce(job.id, { lang, style, genre, newsUrl, referenceCharacter, referenceEvent, referenceStory, fidelity, episodesPerDrama, clipsPerEpisode, mode, authorStyle, publish });
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
@@ -479,7 +482,7 @@ switch (command) {
     const { loadConfig, saveConfig } = await import('../src/config.js');
     const VALID_KEYS = [
       'autostoryUrl', 'aiApiKey', 'heartbeatInterval', 'claudePath',
-      'maxRetries', 'publishOnUpload', 'lang', 'genre',
+      'maxRetries', 'publish', 'publishOnUpload', 'lang', 'genre',
       'referenceCharacter', 'referenceEvent', 'referenceStory', 'fidelity', 'style',
       'targetCharsPerClip', 'episodesPerDrama', 'clipsPerEpisode',
       'mode', 'authorStyle',

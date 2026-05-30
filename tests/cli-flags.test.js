@@ -257,3 +257,24 @@ describe('--story flag validation', () => {
     }
   });
 });
+
+// ─── --no-publish wiring (task: unify publish flag) ──────────────────────────
+import { mkdtempSync as _mkd, rmSync as _rm } from 'node:fs';
+import { tmpdir as _tmp } from 'node:os';
+import { join as _join } from 'node:path';
+import { createJobIn, getJobFrom } from '../src/queue.js';
+
+test('createJob persists publish:false and defaults to null', () => {
+  const dir = _mkd(_join(_tmp(), 'pub-'));
+  try {
+    const jf = _join(dir, 'jobs.json');
+    const j1 = createJobIn(jf, _join(dir, 'jobs'), { publish: false });
+    assert.equal(getJobFrom(jf, j1.id).options.publish, false, 'explicit false must persist');
+    const j2 = createJobIn(jf, _join(dir, 'jobs'), {});
+    assert.equal(getJobFrom(jf, j2.id).options.publish, null, 'default must be null (= publish)');
+    const j3 = createJobIn(jf, _join(dir, 'jobs'), { publish: true });
+    assert.equal(getJobFrom(jf, j3.id).options.publish, null, 'explicit true normalizes to null (default)');
+  } finally {
+    _rm(dir, { recursive: true, force: true });
+  }
+});

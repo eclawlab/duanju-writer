@@ -274,6 +274,10 @@ async function processJob(jobId, options = {}) {
   const fidelity = options.fidelity || config.fidelity || 'medium';
   const mode = options.mode || config.mode || 'default';
   const authorStyle = options.authorStyle || config.authorStyle || '';
+  // Whether to upload at all. `--no-publish` sets options.publish=false; the
+  // config `publish` key (default true) is the global switch. Distinct from
+  // publishOnUpload (draft-vs-live), which only matters once we DO upload.
+  const publish = options.publish !== false && config.publish !== false;
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
@@ -293,9 +297,9 @@ async function processJob(jobId, options = {}) {
     // ─── Preflight: verify the upload API key BEFORE any generation ────────
     // A missing/invalid key would otherwise surface only at the upload step,
     // after ~30 min of LLM time. Fail fast (no retry — a bad key won't fix
-    // itself) unless publishing is explicitly disabled. A network blip during
-    // the probe is treated as inconclusive (warn, don't block).
-    if (config.publish !== false && options.publish !== false) {
+    // itself) unless publishing is disabled. A network blip during the probe
+    // is treated as inconclusive (warn, don't block).
+    if (publish) {
       const auth = await verifyUploadAuth();
       if (auth.warning) log(auth.warning);
       if (!auth.ok) {
@@ -306,6 +310,9 @@ async function processJob(jobId, options = {}) {
       }
       log('Upload API key verified — proceeding with generation.');
       wlog('upload_auth_preflight_ok');
+    } else {
+      log('Publishing disabled (--no-publish / config.publish=false) — generating without upload.');
+      wlog('publish_disabled');
     }
 
     // ─── Step 0: Story extraction (only when --story is set) ───────────────
@@ -503,7 +510,7 @@ async function processJob(jobId, options = {}) {
 
     for (const v of VARIANTS) {
       const uploadedKey = `upload.${v.key}.json`;
-      const prior = loadArtifact(jobId, uploadedKey);
+      const prior = publish ? loadArtifact(jobId, uploadedKey) : null;
       if (prior && prior.storyId) {
         log(`Variant ${v.key} (${v.label}) already uploaded: ${prior.storyId}`);
         storyIds.push(prior.storyId);
@@ -653,6 +660,14 @@ async function processJob(jobId, options = {}) {
       totalWordsAcrossVariants += vWords;
       log(`Variant ${v.key}: "${variantStory.title}" — ${variantStory.episodes.length} eps, ${vClips} clips, ${vWords} words`);
 
+      // Generation-only mode: skip the upload entirely. The story artifact is
+      // already persisted above, so a later run without --no-publish can upload it.
+      if (!publish) {
+        log(`Variant ${v.key}: generated (not uploaded — publishing disabled).`);
+        wlog('variant_upload_skipped', { variant: v.key });
+        continue;
+      }
+
       // Upload — write a "pending" artifact with the idempotency key BEFORE
       // the HTTP call so a crash between request-success and artifact-save
       // doesn't produce a duplicate platform story on retry. The platform
@@ -750,6 +765,7 @@ async function processJob(jobId, options = {}) {
       log(`  ${VARIANTS[i].label}: ${storyIds[i]}`);
     }
     log(`Episodes per variant: ${epsPerVariant}, total clips across variants: ${totalClipsAcrossVariants}, total words across variants: ${totalWordsAcrossVariants}`);
+    if (!publish) log(`Publishing disabled — ${VARIANTS.length} variant(s) generated but NOT uploaded.`);
     log(`Total time: ${minutes} min (LLM time: ${llmMinutes} min)`);
     log(`LLM calls: ${llmStats.calls}`);
     if (llmStats.inputTokens || llmStats.outputTokens) {
@@ -796,7 +812,9 @@ async function processJob(jobId, options = {}) {
     ];
     writeSummary(jobId, summaryLines);
 
-    console.log(chalk.green(`  [${jobId}] Done — ${storyIds.length} variations published in group ${variationGroupId}`));
+    console.log(chalk.green(publish
+      ? `  [${jobId}] Done — ${storyIds.length} variations published in group ${variationGroupId}`
+      : `  [${jobId}] Done — ${VARIANTS.length} variations generated (not published) in group ${variationGroupId}`));
     return true;
   } catch (err) {
     const job = getJob(jobId);
@@ -909,6 +927,8 @@ export function startWorker() {
           clipsPerEpisode: opts.clipsPerEpisode || undefined,
           mode: opts.mode || undefined,
           authorStyle: opts.authorStyle || undefined,
+          // Boolean: must NOT use `|| undefined` (that would turn false→true).
+          publish: opts.publish === false ? false : undefined,
         });
       }
     } catch (err) {

@@ -94,6 +94,9 @@ export function createJobIn(filePath, jobsDir, options = {}) {
         clipsPerEpisode: options.clipsPerEpisode ?? null,
         mode: options.mode ?? null,
         authorStyle: options.authorStyle ?? null,
+        // Boolean: persist only the explicit false (publishing disabled);
+        // null/undefined means "use default (publish)".
+        publish: options.publish === false ? false : null,
       },
     };
     jobs.push(job);
