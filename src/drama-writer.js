@@ -94,6 +94,30 @@ export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '',
       : `不填写。`;
     template += `\n\n请在每集 episode 对象中加入 \`sourceChapterRange: [start, end]\` 字段：\n- ${options.fidelity}: ${rangeRule}\n`;
   }
+  // Episode/clip count directive. The base template only states the generic
+  // 10–40 集 / 4–10 片段 ranges; when the caller specifies exact counts
+  // (--episodes / --clips-per-episode) we must tell the LLM, otherwise the
+  // flags are silently ignored. Skipped under a bible: there, chapter coverage
+  // (sourceChapterRange) drives the episode count instead.
+  if (!options.bible) {
+    const eps = options.episodesPerDrama;
+    const clips = options.clipsPerEpisode;
+    const parts = [];
+    if (Number.isInteger(eps)) {
+      parts.push(lang === 'cn'
+        ? `本剧必须正好 **${eps} 集**（episodes 数组长度 = ${eps}，episodeIndex 从 0 到 ${eps - 1}）。`
+        : `This drama MUST have exactly **${eps} episodes** (episodes array length = ${eps}, episodeIndex 0..${eps - 1}).`);
+    }
+    if (Number.isInteger(clips)) {
+      parts.push(lang === 'cn'
+        ? `每集应有约 **${clips} 个片段**（clipPlan 长度 ≈ ${clips}，可 ±1 以服务剧情节奏）。`
+        : `Each episode should have about **${clips} clips** (clipPlan length ≈ ${clips}, ±1 is acceptable for pacing).`);
+    }
+    if (parts.length) {
+      const heading = lang === 'cn' ? '集数 / 片段数要求' : 'Episode / Clip Count Requirement';
+      template += `\n\n## ${heading}\n\n${parts.join('\n')}\n`;
+    }
+  }
   if (options.mode === 'selftell') {
     template += '\n' + buildSelftellDirective(lang, 'outline');
   }
@@ -255,7 +279,9 @@ export async function generateOutline(materials, options = {}) {
   const fidelity = options.fidelity || null;
   const totalChapters = options.totalChapters || 0;
   const mode = options.mode || 'default';
-  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent, { bible, fidelity, totalChapters, mode });
+  const episodesPerDrama = options.episodesPerDrama;
+  const clipsPerEpisode = options.clipsPerEpisode;
+  const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent, { bible, fidelity, totalChapters, mode, episodesPerDrama, clipsPerEpisode });
   const raw = await callLLM(prompt, 'outline');
   return await parseOutline(raw);
 }

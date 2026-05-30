@@ -404,7 +404,7 @@ async function processJob(jobId, options = {}) {
       log('Generating base story outline...');
       const enrichedMaterials = snowflake ? { ...materials, snowflake } : materials;
       const totalChapters = chapters ? chapters.chapters.length : 0;
-      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters, mode });
+      baseOutline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters, mode, episodesPerDrama, clipsPerEpisode });
       if (bible && fidelity === 'tight') {
         validateOutlineChapterCoverage(baseOutline, fidelity, totalChapters);
       }

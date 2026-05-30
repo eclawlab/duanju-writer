@@ -891,3 +891,34 @@ describe('clip prompt state-context wiring (toPromptContext)', () => {
     assert.ok(!out.includes('{{stateContext}}'), 'placeholder token replaced');
   });
 });
+
+describe('outline episode/clip count directive', () => {
+  test('buildOutlinePrompt omits the count directive when no counts given', async () => {
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
+    const out = buildOutlinePrompt({ topics: [] }, 'cn', undefined, '', '', '', {});
+    assert.ok(!out.includes('集数 / 片段数要求'));
+  });
+
+  test('buildOutlinePrompt injects exact episode + clip counts', async () => {
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
+    const out = buildOutlinePrompt({ topics: [] }, 'cn', undefined, '', '', '', { episodesPerDrama: 30, clipsPerEpisode: 8 });
+    assert.ok(out.includes('正好 **30 集**'), 'should pin exact episode count');
+    assert.ok(out.includes('episodeIndex 从 0 到 29'));
+    assert.ok(out.includes('约 **8 个片段**'), 'should suggest clip count');
+  });
+
+  test('buildOutlinePrompt skips count directive under a bible (chapter coverage drives it)', async () => {
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
+    const out = buildOutlinePrompt({ topics: [] }, 'cn', undefined, '', '', '', {
+      episodesPerDrama: 30, clipsPerEpisode: 8, bible: { characters: [], events: [] }, fidelity: 'medium',
+    });
+    assert.ok(!out.includes('集数 / 片段数要求'));
+  });
+
+  test('buildOutlinePrompt count directive is English under lang=en', async () => {
+    const { buildOutlinePrompt } = await import('../src/drama-writer.js');
+    const out = buildOutlinePrompt({ topics: [] }, 'en', undefined, '', '', '', { episodesPerDrama: 12 });
+    assert.ok(out.includes('Episode / Clip Count Requirement'));
+    assert.ok(out.includes('exactly **12 episodes**'));
+  });
+});
