@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { JOBS_DIR, WORKER_POLL_INTERVAL, MAX_RETRIES, SCHEMA_VERSION } from './constants.js';
@@ -53,38 +53,21 @@ export function getStatusTransitions() {
   ];
 }
 
-function saveArtifact(jobId, filename, data) {
-  const dir = join(JOBS_DIR, jobId);
-  // Tag JSON-object artifacts with schemaVersion so the loader can refuse to
-  // resume jobs whose artifacts predate this pivot. Arrays and primitives pass
-  // through untouched. Spread `data` first so the literal SCHEMA_VERSION wins
-  // over any stale schemaVersion already present (re-saving a previously
-  // loaded artifact must update the tag, not preserve the old one).
-  const tagged = (data && typeof data === 'object' && !Array.isArray(data))
-    ? { ...data, schemaVersion: SCHEMA_VERSION }
-    : data;
-  writeFileSync(join(dir, filename), JSON.stringify(tagged, null, 2) + '\n', 'utf8');
+// Per-job artifact persistence. Thin (jobId, filename) → path adapters over the
+// shared, schemaVersion-aware helpers in artifacts.js. Keeping these as the
+// canonical save/load path (rather than re-implementing fs writes here) is what
+// the "unify artifact persistence" refactor intended; a stray local writeFileSync
+// that survived that refactor — without the matching fs import — crashed every
+// job with "writeFileSync is not defined" the moment it persisted an artifact.
+export function saveArtifact(jobId, filename, data) {
+  saveArtifactAt(join(JOBS_DIR, jobId, filename), data, SCHEMA_VERSION);
 }
 
-function loadArtifact(jobId, filename) {
-  const filePath = join(JOBS_DIR, jobId, filename);
-  if (!existsSync(filePath)) return null;
-  try {
-    const data = JSON.parse(readFileSync(filePath, 'utf8'));
-    // Reject mismatched schema versions: a stale (v1) artifact would silently
-    // produce garbage if fed into the new (v2) pipeline. Log loudly and treat
-    // as missing so the worker regenerates from the latest valid upstream stage.
-    if (data && typeof data === 'object' && !Array.isArray(data) && data.schemaVersion !== SCHEMA_VERSION) {
-      console.log(chalk.yellow(`  [${jobId}] Artifact "${filename}" has schemaVersion=${data.schemaVersion} (expected ${SCHEMA_VERSION}) — will regenerate`));
-      return null;
-    }
-    return data;
-  } catch (err) {
-    // Corrupt artifact (e.g., half-written after process kill). Log loudly so it's
-    // not silently skipped, and return null so the caller re-runs that stage.
-    console.log(chalk.yellow(`  [${jobId}] Artifact "${filename}" is corrupt (${err.message}) — will regenerate`));
-    return null;
-  }
+export function loadArtifact(jobId, filename) {
+  return loadArtifactAt(join(JOBS_DIR, jobId, filename), SCHEMA_VERSION, {
+    label: filename,
+    log: (msg) => console.log(chalk.yellow(`  [${jobId}] ${msg}`)),
+  });
 }
 
 // Count clips and CN words across a story's episodes. Defensive on every level
