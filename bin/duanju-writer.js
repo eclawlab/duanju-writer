@@ -368,7 +368,13 @@ switch (command) {
     // which storyId to pass to `modify`. Optional substring query filters by
     // title / storyId / jobId.
     const { listPublishedStories, filterPublishedStories } = await import('../src/published.js');
-    const query = args.find((a) => !a.startsWith('--'));
+    const { parseFlags } = await import('../src/cli.js');
+    // `stories` takes no flags — route through parseFlags so a stray `--foo`
+    // is reported as an error instead of having its value silently treated as
+    // the search query (args.find used to grab the first non-`--` token).
+    const parsed = parseFlags(args, {});
+    if (parsed.errors.length) { console.error(`Error: ${parsed.errors[0]}`); process.exit(1); }
+    const query = parsed.positionals[0];
     const rows = filterPublishedStories(listPublishedStories(), query);
     if (rows.length === 0) {
       console.log(query

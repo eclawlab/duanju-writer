@@ -293,7 +293,10 @@ export function isTransientLLMError(err) {
   if (/HTTP 429/.test(msg)) return true;
   if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND/i.test(msg)) return true;
   if (err?.code && /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND/i.test(err.code)) return true;
-  if (/Claude CLI failed.*overloaded/i.test(msg)) return true;
+  // [\s\S] (not .) so the match spans the newline the Claude CLI adapter
+  // inserts between its message and the stderr that actually carries
+  // "overloaded" (`Claude CLI failed: ${err.message}\n${stderr}`).
+  if (/Claude CLI failed[\s\S]*overloaded/i.test(msg)) return true;
   return false;
 }
 
@@ -433,19 +436,16 @@ export async function callLLM(prompt, role) {
 
   const provider = providerCache.get(providerName);
 
-  return retryTransient(async () => {
-    const start = Date.now();
-    try {
-      const result = await provider.call(prompt);
-      stats.totalMs += Date.now() - start;
-      stats.calls += 1;
-      return result;
-    } catch (err) {
-      stats.totalMs += Date.now() - start;
-      stats.calls += 1;
-      throw err;
-    }
-  });
+  // Count one logical call per callLLM (not per retry attempt). Timing is
+  // accumulated across attempts so totalMs reflects real wall time spent,
+  // but stats.calls must not be inflated by transient retries.
+  stats.calls += 1;
+  const start = Date.now();
+  try {
+    return await retryTransient(() => provider.call(prompt));
+  } finally {
+    stats.totalMs += Date.now() - start;
+  }
 }
 
 /**

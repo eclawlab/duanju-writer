@@ -8,7 +8,12 @@ const MAX_ENTRIES = 50;
 function readHistory(filePath) {
   if (!existsSync(filePath)) return [];
   try {
-    return JSON.parse(readFileSync(filePath, 'utf8'));
+    const parsed = JSON.parse(readFileSync(filePath, 'utf8'));
+    // A valid-but-non-array file (e.g. {} or a corrupted-yet-parseable shape)
+    // would slip past the JSON catch and then crash addEntryTo's entries.push.
+    // Treat it as corrupt: preserve aside and degrade to []. (Mirror queue.js.)
+    if (!Array.isArray(parsed)) throw new Error('history.json is not an array');
+    return parsed;
   } catch {
     // Corrupt history. Returning [] alone is data loss: the next addEntry
     // would overwrite the file, destroying up to 50 dedupe records. Preserve

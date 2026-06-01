@@ -7,6 +7,7 @@ import { updateJob, getJob, claimNextPending, claimJob, unstickJob } from './que
 import { getHistory, addEntry } from './history.js';
 import { collect } from './collector.js';
 import { generateDrama, generateOutline, validateOutlineChapterCoverage } from './drama-writer.js';
+import { generatePlan } from './planner.js';
 import { generateSnowflake } from './snowflake.js';
 import {
   splitChapters,
@@ -553,7 +554,7 @@ async function processJob(jobId, options = {}) {
     const llmStats = getLLMStats();
     const minutes = (jobElapsedMs / 60000).toFixed(1);
     const llmMinutes = (llmStats.totalMs / 60000).toFixed(1);
-    const epsPerVariant = sampleStory?.episodes.length || 0;
+    const epsPerVariant = sampleStory?.episodes?.length || 0;
 
     log(`\n--- Generation Report ---`);
     log(`Variations: ${storyIds.length} (group ${variationGroupId})`);

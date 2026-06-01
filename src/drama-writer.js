@@ -690,7 +690,10 @@ export async function parseClip(raw) {
 
 export async function generateClip(ctx) {
   const prompt = buildClipPrompt(ctx);
-  const raw = await callLLM(prompt, 'clip');
+  // Use the injected llmFn when the caller threaded one through (tests / the
+  // generateDrama loop); fall back to callLLM for direct callers.
+  const llm = ctx.llmFn || callLLM;
+  const raw = await llm(prompt, 'clip');
   const parsed = await parseClip(raw);
   if (ctx && ctx.mode === 'selftell') {
     return enforceSelftellPOV(parsed, ctx);
@@ -868,6 +871,10 @@ export async function generateDrama(materials, options = {}) {
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
+  // Injectable LLM (tests pass a canned fn; production falls back to callLLM).
+  // Threaded into generateClip, the clip-retry call, and per-episode
+  // compressClips so a single injected fn drives the whole loop.
+  const llmFn = options.llmFn || callLLM;
 
   // Auto-pick trope if not specified
   if (!style || style === 'default') {

@@ -21,9 +21,10 @@ export function chunkText(text, maxChunkSize = 500) {
     if (trimmed.length <= maxChunkSize) {
       chunks.push(trimmed);
     } else {
-      // Split the paragraph into sentences.
-      // We split on boundaries like ". ", "! ", "? " keeping the punctuation with the preceding sentence.
-      const parts = trimmed.split(/(?<=[.!?])\s+/);
+      // Split the paragraph into sentences. Includes CJK terminators (。！？)
+      // so Chinese prose — which has no ASCII sentence delimiters — actually
+      // splits instead of returning the whole oversized paragraph as one chunk.
+      const parts = trimmed.split(/(?<=[.!?。！？])\s*/).filter(p => p.length > 0);
       let current = '';
 
       for (const part of parts) {
@@ -33,8 +34,17 @@ export function chunkText(text, maxChunkSize = 500) {
         } else {
           if (current) {
             chunks.push(current.trim());
+            current = '';
           }
-          current = part;
+          // A single part still longer than the budget (e.g. a long run with no
+          // sentence terminator) is hard-sliced so no chunk exceeds maxChunkSize.
+          if (part.length > maxChunkSize) {
+            for (let p = 0; p < part.length; p += maxChunkSize) {
+              chunks.push(part.slice(p, p + maxChunkSize).trim());
+            }
+          } else {
+            current = part;
+          }
         }
       }
 

@@ -36,6 +36,10 @@ export function createState() {
  * @param {{ name: string, status: string, location: string, knowledge: string[], emotional: string }} char
  */
 export function addCharacter(state, { name, status, location, knowledge, emotional }) {
+  if (!name) {
+    console.warn(`[drama-state] addCharacter: skipping entry with missing name`);
+    return;
+  }
   if (state.characters[name]) {
     console.warn(`[drama-state] addCharacter: overwriting existing character "${name}" (prior knowledge/status will be lost)`);
   }
@@ -127,6 +131,10 @@ export function updateLocation(state, name, updates) {
  * @param {{ id: string, info: string, visibility: string, revealInClip: number, revealInEpisode?: number }} revelation
  */
 export function addRevelation(state, { id, info, visibility, revealInClip, revealInEpisode }) {
+  if (!id) {
+    console.warn(`[drama-state] addRevelation: skipping entry with missing id`);
+    return;
+  }
   if (state.revelations.some(r => r.id === id)) {
     console.warn(`[drama-state] addRevelation: duplicate revelation id "${id}" — markRevealed lookups will return the first match`);
   }
@@ -197,18 +205,21 @@ export function getCharacterContext(state, characterName) {
 
   const charLocation = char.location;
 
-  // Characters: self + co-located
+  // Characters: self + co-located. Guard on a truthy location so two
+  // location-less characters (location undefined/null on both sides) aren't
+  // treated as "in the same scene" via undefined === undefined.
   const characters = {};
   for (const [name, c] of Object.entries(state.characters)) {
-    if (name === characterName || c.location === charLocation) {
+    if (name === characterName || (charLocation && c.location === charLocation)) {
       characters[name] = c;
     }
   }
 
-  // Items: held by character OR at character's location (unheld)
+  // Items: held by character OR at character's location (unheld). Same
+  // truthy-location guard so unplaced items don't leak to location-less chars.
   const items = {};
   for (const [name, item] of Object.entries(state.items)) {
-    if (item.holder === characterName || item.location === charLocation) {
+    if (item.holder === characterName || (charLocation && item.location === charLocation)) {
       items[name] = item;
     }
   }
