@@ -1,6 +1,6 @@
 {
   "name": "duanju-writer",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Autonomous story generation daemon for autostory",
   "type": "module",
   "main": "src/constants.js",

@@ -15,11 +15,13 @@ export function listPublishedStories(jobsDir = JOBS_DIR, modificationsDir = MODI
   const rows = [];
   collectJobUploads(jobsDir, rows);
   collectModifications(modificationsDir, rows);
-  // Newest first. Job ids are job_YYYYMMDDHHMMSS_xxxx and modify dirs are
-  // <storyId>-<ISO-stamp>, so id then createdAt orders by creation time.
+  // Newest first by createdAt (artifact mtime). jobId is only a tie-breaker —
+  // sorting by jobId first was wrong because "job_..." < "mod:..." always
+  // buried every modification above every job upload regardless of date.
   rows.sort((a, b) => {
-    if (a.jobId !== b.jobId) return a.jobId < b.jobId ? 1 : -1;
-    return (b.createdAt || '').localeCompare(a.createdAt || '');
+    const byDate = (b.createdAt || '').localeCompare(a.createdAt || '');
+    if (byDate !== 0) return byDate;
+    return a.jobId < b.jobId ? 1 : a.jobId > b.jobId ? -1 : 0;
   });
   return rows;
 }
