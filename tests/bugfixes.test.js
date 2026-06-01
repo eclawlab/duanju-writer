@@ -218,14 +218,36 @@ describe('Fix #6 — state-mutation catches log errors', () => {
 //         artifacts are visible in the job log rather than silently skipped.
 // ──────────────────────────────────────────────────────────────────────────────
 describe('Fix #7 — loadArtifact logs corruption', () => {
-  test('loadArtifact logs when JSON parse fails', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
-    // Extract the loadArtifact function body and confirm it logs on parse failure.
-    const fnMatch = src.match(/function loadArtifact\([^]*?\n\}/);
-    assert.ok(fnMatch, 'loadArtifact function should be defined');
-    const fnBody = fnMatch[0];
-    assert.ok(fnBody.includes('corrupt'), 'loadArtifact should log "corrupt" on JSON parse failure');
-    assert.ok(/catch\s*\(\s*err\s*\)/.test(fnBody), 'catch block should bind the error so it can be logged');
+  test('loadArtifact logs and returns null for corrupt artifact JSON', async () => {
+    const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { JOBS_DIR } = await import('../src/constants.js');
+    const { loadArtifact } = await import('../src/worker.js');
+
+    // Behavioral test (replaces the old source-grep guard): loadArtifact now
+    // delegates to artifacts.js, so the log strings no longer live in worker.js.
+    // We exercise the real fn instead — a corrupt artifact must log a warning
+    // AND return null so the worker regenerates the stage rather than silently
+    // consuming garbage.
+    const jobId = `fix7-corrupt-${process.pid}`;
+    const dir = join(JOBS_DIR, jobId);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'outline.json'), '{ not json');
+
+    const logged = [];
+    const origLog = console.log;
+    console.log = (...args) => logged.push(args.join(' '));
+    let result;
+    try {
+      result = loadArtifact(jobId, 'outline.json');
+    } finally {
+      console.log = origLog;
+      rmSync(dir, { recursive: true, force: true });
+    }
+
+    assert.equal(result, null, 'corrupt artifact must return null (regenerate)');
+    const joined = logged.join('\n');
+    assert.ok(/is corrupt/.test(joined) && /will regenerate/.test(joined),
+      'loadArtifact must log corrupt artifacts (Fix #7)');
   });
 });
