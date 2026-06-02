@@ -100,6 +100,10 @@ export function selectChapterProse(chapters, range, budgetChars) {
   const full = blocks.join('\n\n');
   if (full.length <= budgetChars) return full;
   const halfBudget = Math.floor((budgetChars - 30) / 2);
+  // For tiny budgets the head/tail split is meaningless (a non-positive
+  // halfBudget makes slice(-halfBudget) return the whole/most of the string,
+  // ballooning the output past the input). Just hard-truncate from the head.
+  if (halfBudget <= 0) return full.slice(0, Math.max(0, budgetChars));
   const omitted = full.length - 2 * halfBudget;
   return `${full.slice(0, halfBudget)}\n…[省略 ${omitted} 字]…\n${full.slice(-halfBudget)}`;
 }

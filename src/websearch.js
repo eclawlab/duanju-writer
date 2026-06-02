@@ -46,27 +46,35 @@ export async function search(query, maxResults = DEFAULT_MAX_RESULTS, timeoutMs 
 
 // ─── HTML parsing ────────────────────────────────────────────────────────────
 
-function parseDuckDuckGoResults(html, maxResults) {
+export function parseDuckDuckGoResults(html, maxResults) {
   const titleRe = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/g;
   const snippetRe = /<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>|<div[^>]*class="result__snippet"[^>]*>(.*?)<\/div>/g;
 
-  const snippets = [];
+  // Find every title-anchor position first, so each result's snippet can be
+  // searched WITHIN that result's own region (from its title to the next
+  // title). A previous version paired snippets to titles by a global ordinal
+  // that also advanced for skipped empty-title anchors, shifting every later
+  // snippet by one — so a title with no snippet stole the next result's.
+  const titleMatches = [];
   let m;
-  while ((m = snippetRe.exec(html)) !== null) {
-    snippets.push(normalizeText(m[1] ?? m[2] ?? ''));
+  while ((m = titleRe.exec(html)) !== null) {
+    titleMatches.push({ href: m[1] ?? '', rawTitle: m[2] ?? '', start: m.index, end: titleRe.lastIndex });
   }
 
   const results = [];
-  let idx = 0;
-  while ((m = titleRe.exec(html)) !== null) {
+  for (let i = 0; i < titleMatches.length; i++) {
     if (results.length >= maxResults) break;
-    const href = m[1] ?? '';
-    const title = normalizeText(m[2] ?? '');
-    if (!title) { idx++; continue; }
-    const url = normalizeUrl(href);
-    const snippet = snippets[idx] || undefined;
+    const tm = titleMatches[i];
+    const title = normalizeText(tm.rawTitle);
+    if (!title) continue; // skip image/sponsored anchors without shifting anyone
+    const url = normalizeUrl(tm.href);
+    // The snippet for this result lives between this title and the next one.
+    const regionEnd = i + 1 < titleMatches.length ? titleMatches[i + 1].start : html.length;
+    const region = html.slice(tm.end, regionEnd);
+    snippetRe.lastIndex = 0;
+    const sm = snippetRe.exec(region);
+    const snippet = sm ? normalizeText(sm[1] ?? sm[2] ?? '') : '';
     results.push({ title, url, ...(snippet ? { snippet } : {}) });
-    idx++;
   }
 
   return results;
