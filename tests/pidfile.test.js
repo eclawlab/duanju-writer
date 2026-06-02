@@ -152,6 +152,38 @@ describe('pidfile', () => {
     assert.deepEqual(signals, [[444, 'SIGTERM']]);
   });
 
+  test('cleanupStaleIn releases the lock BEFORE the SIGTERM grace sleep', async () => {
+    // Regression: the graceMs sleep used to run inside withLock, so a long grace
+    // period held the pidfile lock and could starve concurrent registerChild.
+    // The lock must be gone by the time the post-SIGTERM isAlive() check runs.
+    const { existsSync } = await import('node:fs');
+    const { registerChildIn, cleanupStaleIn } = await import('../src/pidfile.js');
+    const f = freshPidfile();
+    const lockPath = f + '.lock';
+    registerChildIn(f, 555);
+
+    let lockHeldDuringGraceCheck = null;
+    let aliveCalls = 0;
+    const result = cleanupStaleIn(f, {
+      // 1st call: pre-SIGTERM liveness (still under lock). 2nd call: the
+      // survivors check that runs AFTER the grace sleep — by then the lock
+      // must already be released.
+      isAlive: () => {
+        aliveCalls++;
+        if (aliveCalls === 2) lockHeldDuringGraceCheck = existsSync(lockPath);
+        return aliveCalls === 1; // alive pre-grace, dead after → no SIGKILL
+      },
+      commandFor: () => 'claude -p --output-format json --no-session-persistence',
+      sendSignal: () => {},
+      graceMs: 10,
+    });
+
+    assert.deepEqual(result.killed, [555]);
+    assert.equal(lockHeldDuringGraceCheck, false,
+      'lock must be released before the post-grace survivors check');
+    assert.ok(!existsSync(lockPath), 'lock must be released after cleanup');
+  });
+
   test('cleanupStaleIn actually terminates a real subprocess', async () => {
     const { registerChildIn, cleanupStaleIn } = await import('../src/pidfile.js');
     const f = freshPidfile();
