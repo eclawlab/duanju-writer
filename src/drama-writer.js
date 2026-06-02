@@ -909,7 +909,7 @@ export async function generateDrama(materials, options = {}) {
   if (!snowflake) {
     try {
       log('Building story architecture (Snowflake method)...');
-      snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, mode, log });
+      snowflake = await generateSnowflake(materials, { lang, genre, referenceCharacter, referenceEvent, mode, log, llmFn });
       if (options.onSnowflake) options.onSnowflake(snowflake);
       log(`Architecture: seed defined, ${snowflake.characters.length} characters designed`);
     } catch (err) {

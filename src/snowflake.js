@@ -114,13 +114,17 @@ export async function generateSnowflake(materials, options = {}) {
   const fidelity = options.fidelity || null;
   const mode = options.mode || 'default';
   const log = options.log || (() => {});
+  // Injectable LLM (tests pass a canned fn; production falls back to callLLM).
+  // Without this, snowflake escaped any llmFn threaded through generateDrama and
+  // hit the real provider directly.
+  const llmFn = options.llmFn || callLLM;
   const parts = [];
   const localized = lang === 'cn' ? PARTS_CN : PARTS;
 
   for (let i = 0; i < localized.length; i++) {
     log(`Snowflake step ${i + 1}/${localized.length}: ${localized[i].title}...`);
     const prompt = buildSnowflakePrompt(materials, i, parts, lang, genre, referenceCharacter, referenceEvent, { bible, fidelity, mode });
-    const raw = await callLLM(prompt, 'outline');
+    const raw = await llmFn(prompt, 'outline');
     // Parse JSON (clean fences / extract object), falling back to raw text so a
     // single unparseable step degrades to `{ raw }` instead of aborting.
     parts.push(tryParseJson(raw) || { raw });

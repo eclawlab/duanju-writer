@@ -73,3 +73,23 @@ describe('snowflake bible injection', () => {
     assert.ok(!out.includes('## 参考小说'));
   });
 });
+
+describe('snowflake llmFn injection', () => {
+  // Regression: generateSnowflake called the real callLLM directly (no injection
+  // point), so even when a caller threaded a canned llmFn through generateDrama,
+  // snowflake escaped the mock and spawned the real `claude` CLI — making the
+  // drama-writer e2e/llmfn tests take minutes each. The injected fn must drive
+  // every snowflake step.
+  test('generateSnowflake uses the injected llmFn for every step (no real callLLM)', async () => {
+    const { generateSnowflake, PARTS } = await import('../src/snowflake.js');
+    let calls = 0;
+    const llmFn = async (_prompt, role) => {
+      calls++;
+      assert.equal(role, 'outline', 'snowflake steps use the outline role');
+      return JSON.stringify({ coreSeed: 'SEED', characters: [], world: {}, plot: {} });
+    };
+    const snowflake = await generateSnowflake({ topics: [] }, { lang: 'en', llmFn });
+    assert.equal(calls, PARTS.length, 'injected llmFn must be called once per snowflake step');
+    assert.equal(snowflake.coreSeed, 'SEED', 'snowflake content must derive from the injected fn');
+  });
+});
