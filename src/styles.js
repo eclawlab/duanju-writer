@@ -60,6 +60,7 @@ export function clearStyleCache() {
 
 export function getStyle(key) {
   if (!key || key === 'default') return null;
+  key = String(key); // tolerate non-string keys (e.g. a numeric config value)
   const styles = getStyles();
   const style = styles[key.toLowerCase()];
   if (!style) {

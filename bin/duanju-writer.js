@@ -421,7 +421,9 @@ switch (command) {
       if (args[1] === 'style' && value !== 'default') {
         const { getStyle } = await import('../src/styles.js');
         try {
-          getStyle(value);
+          // value may have been coerced to a Number above; getStyle does
+          // key.toLowerCase(), so pass a string to avoid a raw TypeError.
+          getStyle(String(value));
         } catch (err) {
           console.log(err.message);
           process.exit(1);
