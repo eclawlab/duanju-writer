@@ -1,4 +1,4 @@
-import { openSync, closeSync, unlinkSync, statSync, renameSync } from 'node:fs';
+import { openSync, closeSync, unlinkSync, statSync, fstatSync, renameSync } from 'node:fs';
 
 // Cross-process advisory file lock shared by queue.js / history.js / pidfile.js.
 // All three previously carried byte-identical copies of this logic; centralizing
@@ -43,10 +43,21 @@ export function withLock(filePath, fn) {
       sleepSync(LOCK_SLEEP_MS);
       continue;
     }
+    // Record the inode of the lock WE created so release only removes our own
+    // lock. If our fn outran LOCK_STALE_MS and another process took over and
+    // created a fresh lock at the same path, unlinking by path alone would
+    // delete THAT process's live lock — letting a third enter concurrently.
+    let ourIno;
+    try { ourIno = fstatSync(fd).ino; } catch {}
     try { return fn(); }
     finally {
       try { closeSync(fd); } catch {}
-      try { unlinkSync(lockPath); } catch {}
+      try {
+        // Only unlink if the lock still on disk is the one we created.
+        if (ourIno === undefined || statSync(lockPath).ino === ourIno) {
+          unlinkSync(lockPath);
+        }
+      } catch {}
     }
   }
   throw new Error(`Could not acquire lock on ${filePath}`);

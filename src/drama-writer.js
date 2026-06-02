@@ -6,7 +6,8 @@ import { parseJsonWithRepair } from './json.js';
 import { buildReferenceBlock, buildGenreBlock } from './references.js';
 import { getStyle, getStyleSafe, listStyles } from './styles.js';
 import { getAuthorStyleSafe } from './author-styles.js';
-import { initStateFromPlan, sceneKey } from './planner.js';
+import { initStateFromPlan, sceneKey, generatePlan } from './planner.js';
+import { generateSnowflake } from './snowflake.js';
 import { compressClips, buildHistoryContext } from './compressor.js';
 import {
   updateCharacter,
