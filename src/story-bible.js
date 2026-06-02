@@ -10,7 +10,7 @@ const PROMPT_PATH = join(__dirname, '..', 'prompts', 'story-bible.md');
 const CHUNK_SIZE = 3000;
 
 const HEADING_PATTERNS = [
-  { kind: 'cn-chapter', re: /^[ \t]*#{0,6}[ \t]*第[0-9一二三四五六七八九十百千零〇两]+[章节](?=$|[ \t])[ \t]*([^\n]*)$/gm },
+  { kind: 'cn-chapter', re: /^[ \t　]*#{0,6}[ \t　]*第[0-9一二三四五六七八九十百千零〇两]+[章节](?=$|[ \t　])[ \t　]*([^\n]*)$/gm },
   { kind: 'en-chapter', re: /^[ \t]*#{0,6}[ \t]*Chapter[ \t]+\d+(?:[ \t.:—-]+([^\n]*))?[ \t]*$/gim },
   { kind: 'numeric', re: /^[ \t]*#{0,6}[ \t]*(?:\d+\.|[一二三四五六七八九十百]+、)[ \t]*([^\n]*)$/gm },
 ];

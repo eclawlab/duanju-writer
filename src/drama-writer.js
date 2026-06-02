@@ -689,6 +689,19 @@ export async function parseClip(raw) {
   };
 }
 
+// After scene enrichment rewrites `content`, the structured per-beat fields
+// (setting/action/dialogue/hook) no longer match it. Clear them so `content`
+// is the single authoritative representation (the uploader otherwise sends both
+// the enriched content AND the stale beats, which downstream consumers read).
+// Returns the same scene object for convenience.
+export function reconcileEnrichedScene(scene) {
+  delete scene.setting;
+  delete scene.action;
+  delete scene.dialogue;
+  delete scene.hook;
+  return scene;
+}
+
 export async function generateClip(ctx) {
   const prompt = buildClipPrompt(ctx);
   // Use the injected llmFn when the caller threaded one through (tests / the
@@ -1296,6 +1309,11 @@ export async function generateDrama(materials, options = {}) {
           const expanded = await enrichScene(scene.content, targetCharsPerClip, lang);
           if (expanded && expanded.trim()) {
             scene.content = expanded.trim();
+            // enrichScene only returns expanded `content`; the per-beat fields
+            // (setting/action/dialogue/hook) are now stale. The uploader sends
+            // both, and downstream TTS/player consumers read the beats — so
+            // drop them, making `content` the single source of truth.
+            reconcileEnrichedScene(scene);
             wlog('scene_enriched', { episodeIndex: ep.episodeIndex, clipIndex: i, words: countWords(scene.content) });
           }
         } catch (err) {

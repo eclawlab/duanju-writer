@@ -48,7 +48,7 @@ export async function search(query, maxResults = DEFAULT_MAX_RESULTS, timeoutMs 
 
 export function parseDuckDuckGoResults(html, maxResults) {
   const titleRe = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/g;
-  const snippetRe = /<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>|<div[^>]*class="result__snippet"[^>]*>(.*?)<\/div>/g;
+  const snippetRe = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/div>/g;
 
   // Find every title-anchor position first, so each result's snippet can be
   // searched WITHIN that result's own region (from its title to the next

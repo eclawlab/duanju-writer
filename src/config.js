@@ -63,7 +63,13 @@ export function loadConfigFrom(filePath) {
   // drop sibling defaults like `type` — otherwise llm.js throws "Unknown
   // provider type: undefined". Roles are flat strings, so a key-level spread
   // is correct for them.
-  merged.providers = { ...DEFAULTS.providers };
+  // Deep-copy each default provider: a shallow { ...DEFAULTS.providers } would
+  // leave un-overridden providers as the SAME object as DEFAULTS, so the later
+  // applyEnvOverrides() would mutate DEFAULTS in place — baking env secrets into
+  // the process-wide defaults and persisting them on the next load→save.
+  merged.providers = Object.fromEntries(
+    Object.entries(DEFAULTS.providers).map(([name, def]) => [name, { ...def }]),
+  );
   for (const [name, cfg] of Object.entries(userConfig.providers || {})) {
     merged.providers[name] = { ...(DEFAULTS.providers[name] || {}), ...cfg };
   }
