@@ -695,20 +695,13 @@ export function startWorker() {
         // was created with.
         const opts = claimed.options || {};
         await processJob(claimed.id, {
-          lang: opts.lang || undefined,
-          style: opts.style || undefined,
-          genre: opts.genre || undefined,
-          newsUrl: opts.newsUrl || undefined,
+          // Scalar opts (incl. boolean-safe publish) via the shared picker so
+          // this list can't drift from the canonical JOB_OPTION_KEYS. Reference
+          // fields are excluded by pickJobOptions and passed through as-is.
+          ...pickJobOptions(opts),
           referenceCharacter: opts.referenceCharacter || undefined,
           referenceEvent: opts.referenceEvent || undefined,
           referenceStory: opts.referenceStory || undefined,
-          fidelity: opts.fidelity || undefined,
-          episodesPerDrama: opts.episodesPerDrama || undefined,
-          clipsPerEpisode: opts.clipsPerEpisode || undefined,
-          mode: opts.mode || undefined,
-          authorStyle: opts.authorStyle || undefined,
-          // Boolean: must NOT use `|| undefined` (that would turn false→true).
-          publish: opts.publish === false ? false : undefined,
         });
       }
     } catch (err) {

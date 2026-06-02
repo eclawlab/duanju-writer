@@ -153,7 +153,12 @@ export function cleanupStaleIn(filePath, options = {}) {
   const sendSignal = options.sendSignal || defaultSendSignal;
   const graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
 
-  return withLock(filePath, () => {
+  // Decide who to kill and clear the pidfile UNDER the lock (fast). The SIGTERM
+  // grace sleep + SIGKILL pass run OUTSIDE the lock: holding it across the
+  // multi-second graceMs sleep could exceed LOCK_STALE_MS and starve concurrent
+  // pidfile ops (e.g. registerChild) waiting on the same lock. The decision is
+  // already committed (state cleared) before we release, so it can't race.
+  const { toKill, skipped } = withLock(filePath, () => {
     const state = readState(filePath);
     const entries = [];
     if (state.parent !== null && state.parent !== process.pid) {
@@ -176,13 +181,15 @@ export function cleanupStaleIn(filePath, options = {}) {
     }
 
     for (const pid of toKill) sendSignal(pid, 'SIGTERM');
-    if (toKill.length > 0 && graceMs > 0) sleepSync(graceMs);
-    const survivors = toKill.filter(pid => isAlive(pid));
-    for (const pid of survivors) sendSignal(pid, 'SIGKILL');
-
     writeState(filePath, emptyState());
-    return { killed: toKill, skipped };
+    return { toKill, skipped };
   });
+
+  if (toKill.length > 0 && graceMs > 0) sleepSync(graceMs);
+  const survivors = toKill.filter(pid => isAlive(pid));
+  for (const pid of survivors) sendSignal(pid, 'SIGKILL');
+
+  return { killed: toKill, skipped };
 }
 
 // ─── Module-level wrappers using the default PIDFILE path ────────────────────
