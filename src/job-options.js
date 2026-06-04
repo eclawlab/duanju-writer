@@ -22,5 +22,8 @@ export function pickJobOptions(src = {}) {
   const out = {};
   for (const k of JOB_OPTION_KEYS) out[k] = src[k] || undefined;
   out.publish = src.publish === false ? false : undefined;
+  // Boolean like publish: only the non-default `false` must survive (||-undefined
+  // would flip it). Default true is applied downstream by processJob.
+  out.richContext = src.richContext === false ? false : undefined;
   return out;
 }

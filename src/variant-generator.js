@@ -32,6 +32,7 @@ export async function generateVariant(v, ctx) {
     baseOutline, splitIdx, frontEpisodes, frontProgress, frontStore,
     snowflake, materials, bible, chapters, fidelity,
     genre, lang, style, mode, authorStyle, referenceCharacter, referenceEvent,
+    richContext,
     log, wlog, saveArtifact, loadArtifact, computeStoryMetrics,
   } = ctx;
 
@@ -147,7 +148,7 @@ export async function generateVariant(v, ctx) {
       globalClipIndex: 0,
     };
     variantStory = await generateDrama(materials, {
-      lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, log, wlog,
+      lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, richContext, log, wlog,
       vectorStore: variantStore,
       savedSnowflake: snowflake,
       savedOutline: variantOutline,

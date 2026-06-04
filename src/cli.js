@@ -71,6 +71,8 @@ export function parseRunFlags(args) {
     mode: { type: 'string' },
     'author-style': { type: 'string' },
     'no-publish': { type: 'boolean' },
+    'rich-context': { type: 'boolean' },
+    'no-rich-context': { type: 'boolean' },
   });
   if (errors.length) return { ok: false, error: errors[0] };
 
@@ -123,6 +125,10 @@ export function parseRunFlags(args) {
   }
   if (values['author-style'] !== undefined) opts.authorStyle = values['author-style'];
   if (values['no-publish']) opts.publish = false;
+  // --rich-context / --no-rich-context override the config default. If both are
+  // passed, the explicit disable wins (safer / matches --no-* convention).
+  if (values['rich-context']) opts.richContext = true;
+  if (values['no-rich-context']) opts.richContext = false;
 
   return { ok: true, count, opts };
 }

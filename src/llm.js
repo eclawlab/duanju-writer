@@ -160,9 +160,14 @@ export function createClaudeCliAdapter(config) {
   const {
     claudePath = 'claude',
     timeout = 1500000,
+    model = '',
     registerChild = defaultRegisterChild,
     unregisterChild = defaultUnregisterChild,
   } = config;
+
+  // Pin the model when configured, otherwise let the CLI choose its default.
+  const baseFlags = ['-p', '--output-format', 'json', '--no-session-persistence'];
+  if (model) baseFlags.push('--model', model);
 
   return {
     call(prompt) {
@@ -178,7 +183,7 @@ export function createClaudeCliAdapter(config) {
 
         const child = execFile(
           claudePath,
-          ['-p', '--output-format', 'json', '--no-session-persistence'],
+          baseFlags,
           {
             timeout,
             maxBuffer: 10 * 1024 * 1024,
