@@ -916,8 +916,6 @@ export async function generateDrama(materials, options = {}) {
   // structured state-ledger blocks — a lighter prompt closer to the earlier
   // prose behavior. Default true (current behavior).
   const richContext = options.richContext !== false;
-  // Cap the number of episodes actually written (test/preview runs). 0 = all.
-  const maxEpisodes = options.maxEpisodes || 0;
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -1053,9 +1051,7 @@ export async function generateDrama(materials, options = {}) {
   const episodeContexts = {};
 
   // Sort episodes by episodeIndex for deterministic processing
-  const sortedEpisodes = [...outline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
-  // Test/preview runs cap how many leading episodes are actually written.
-  const episodesToProcess = maxEpisodes > 0 ? sortedEpisodes.slice(0, maxEpisodes) : sortedEpisodes;
+  const episodesToProcess = [...outline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
 
   let globalClipIndex = 0;
 
@@ -1158,7 +1154,7 @@ export async function generateDrama(materials, options = {}) {
     // This represents how many clips the reader has seen before this episode on this path
     let branchSceneCount = 0;
     for (const ancestorIdx of ancestorPath.slice(0, -1)) {
-      const ancestorEp = sortedEpisodes.find(e => e.episodeIndex === ancestorIdx);
+      const ancestorEp = episodesToProcess.find(e => e.episodeIndex === ancestorIdx);
       if (ancestorEp) branchSceneCount += ancestorEp.clipPlan.length;
     }
 

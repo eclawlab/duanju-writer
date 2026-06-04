@@ -82,8 +82,7 @@ function hasFlag(argv, name) {
 const fresh = hasFlag(args, '--fresh');
 
 function printUsage() {
-  console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|testgen|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
-  console.log('\nTestgen (before/after prose compare, ep.1 only, no upload): duanju-writer testgen [--style 都市] [--mode default|selftell] [--model-before claude-opus-4-7] [--model-after claude-opus-4-8] [--episodes N] [--clips-per-episode K]');
+  console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
   console.log('\nRun options: duanju-writer run [count] [--lang cn] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <作家名>] [--no-publish] [--rich-context|--no-rich-context]');
   console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn] [--model <provider>] [--title "..."] [--dry-run]');
 }
@@ -260,50 +259,6 @@ switch (command) {
     }
     if (count > 1) console.log(`\nFinished ${count} jobs.`);
     if (count === 0) console.log('Nothing to do (count=0).');
-    break;
-  }
-  case 'testgen': {
-    // Fast before/after prose comparison: write only episode 1 twice (light
-    // prompt + older model vs. current rich prompt + current model), print both
-    // to the screen, then stop. No upload, no job artifacts.
-    //   testgen [--style 都市] [--mode default|selftell] [--lang cn]
-    //           [--model-before claude-opus-4-7] [--model-after claude-opus-4-8]
-    //           [--episodes N] [--clips-per-episode K] [--genre ...]
-    const { parseFlags } = await import('../src/cli.js');
-    const { runTestGen } = await import('../src/testgen.js');
-    const { values, errors } = parseFlags(args, {
-      style: { type: 'string' },
-      mode: { type: 'string' },
-      lang: { type: 'string' },
-      genre: { type: 'string' },
-      fidelity: { type: 'string' },
-      story: { type: 'string' },
-      'author-style': { type: 'string' },
-      'model-before': { type: 'string' },
-      'model-after': { type: 'string' },
-      episodes: { type: 'string' },
-      'clips-per-episode': { type: 'string' },
-      'max-episodes': { type: 'string' },
-      samples: { type: 'string' },
-      configs: { type: 'string' },
-    });
-    if (errors.length) { console.log(errors.join('\n')); process.exit(1); }
-    await runTestGen({
-      style: values.style,
-      mode: values.mode,
-      lang: values.lang,
-      genre: values.genre,
-      fidelity: values.fidelity,
-      storyPath: values.story,
-      authorStyle: values['author-style'],
-      modelBefore: values['model-before'],
-      modelAfter: values['model-after'],
-      episodes: values.episodes ? Number(values.episodes) : undefined,
-      clipsPerEpisode: values['clips-per-episode'] ? Number(values['clips-per-episode']) : undefined,
-      maxEpisodes: values['max-episodes'] ? Number(values['max-episodes']) : undefined,
-      samples: values.samples ? Number(values.samples) : undefined,
-      configs: values.configs ? values.configs.split(',').map(s => s.trim().toUpperCase()) : undefined,
-    });
     break;
   }
   case 'modify': {
