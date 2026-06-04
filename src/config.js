@@ -20,6 +20,12 @@ const DEFAULTS = {
   // back to their built-in 60s default.
   uploadTimeout: 60000,
   targetCharsPerClip: 50,         // 0 = disabled
+  // When true (default), each clip prompt carries the semantic-retrieval +
+  // structured state-ledger blocks (added 2026-05) for cross-scene consistency.
+  // Set false for a lighter prompt that tends to produce livelier, less
+  // repetitive prose (at some risk to long-range consistency). Toggle per run
+  // with --rich-context / --no-rich-context.
+  richContext: true,
   episodesPerDrama: 20,
   clipsPerEpisode: 6,
   lang: 'cn',
@@ -33,7 +39,10 @@ const DEFAULTS = {
   style: 'default',
   authorStyle: '',
   providers: {
-    claude: { type: 'claude-cli', claudePath: 'claude', timeout: 1500000 },
+    // `model`: optional pin for the Claude CLI (e.g. 'claude-opus-4-7',
+    // 'claude-opus-4-8', or an alias like 'opus'). Empty = let the CLI pick its
+    // own default, which can silently change across CLI upgrades.
+    claude: { type: 'claude-cli', claudePath: 'claude', timeout: 1500000, model: '' },
     openai: { type: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: '', timeout: 120000 },
   },
   roles: {
@@ -107,6 +116,7 @@ function applyEnvOverrides(config) {
   // Claude env vars
   if (config.providers.claude) {
     if (process.env.CLAUDE_PATH) config.providers.claude.claudePath = process.env.CLAUDE_PATH;
+    if (process.env.CLAUDE_MODEL) config.providers.claude.model = process.env.CLAUDE_MODEL;
   }
 
   // Generic pattern: <PROVIDER>_API_KEY, <PROVIDER>_MODEL, <PROVIDER>_BASE_URL

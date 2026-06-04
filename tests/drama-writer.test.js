@@ -267,6 +267,22 @@ describe('writer', () => {
     assert.ok(result.hook && result.hook.length > 0);
   });
 
+  test('parseClip throws on missing clipIndex when no fallback is supplied', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    delete bad.clipIndex;
+    await assert.rejects(() => parseClip(JSON.stringify(bad)), /missing clipIndex/);
+  });
+
+  test('parseClip uses the caller-supplied clipIndex when the model omits it', async () => {
+    const { parseClip } = await import('../src/drama-writer.js');
+    const bad = validClip();
+    delete bad.clipIndex;
+    const result = await parseClip(JSON.stringify(bad), { clipIndex: 3 });
+    assert.equal(result.clipIndex, 3);
+    assert.ok(result.content && result.content.length > 0);
+  });
+
   test('parseClip rejects missing hook on non-conclusion clip', async () => {
     const { parseClip } = await import('../src/drama-writer.js');
     const bad = validClip();

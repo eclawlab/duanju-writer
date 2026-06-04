@@ -614,10 +614,20 @@ function stripDialogueAnnotations(s) {
   return out.trim();
 }
 
-export async function parseClip(raw) {
+export async function parseClip(raw, opts = {}) {
   const data = await parseJsonWithRepair(raw, 'clip');
 
-  if (!Number.isInteger(data.clipIndex)) throw new Error('clip missing clipIndex');
+  // clipIndex is bookkeeping the caller already knows — when the model omits or
+  // garbles it, fall back to the caller-supplied index rather than discarding an
+  // otherwise-valid clip (which previously cascaded into a garbage fallback clip,
+  // most often after an over-length retry that dropped the field).
+  if (!Number.isInteger(data.clipIndex)) {
+    if (Number.isInteger(opts.clipIndex)) {
+      data.clipIndex = opts.clipIndex;
+    } else {
+      throw new Error('clip missing clipIndex');
+    }
+  }
   for (const field of ['setting', 'action', 'dialogue']) {
     if (typeof data[field] !== 'string' || data[field].length === 0) {
       throw new Error(`clip missing ${field}`);
@@ -708,7 +718,9 @@ export async function generateClip(ctx) {
   // generateDrama loop); fall back to callLLM for direct callers.
   const llm = ctx.llmFn || callLLM;
   const raw = await llm(prompt, 'clip');
-  const parsed = await parseClip(raw);
+  // Pass the known clipIndex so a model that forgets to echo it doesn't fail the
+  // whole clip (the loop already authoritatively knows the position).
+  const parsed = await parseClip(raw, { clipIndex: ctx.clipIndex });
   if (ctx && ctx.mode === 'selftell') {
     return enforceSelftellPOV(parsed, ctx);
   }
@@ -725,7 +737,7 @@ export async function generateClip(ctx) {
  * model can correct itself.
  */
 export function buildRetryClipPrompt(ctx = {}) {
-  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', mode = 'default', lang = 'cn', authorVoice = '' } = ctx;
+  const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', clipIndex = 0, mode = 'default', lang = 'cn', authorVoice = '' } = ctx;
   const tail = isConclusion
     ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${ending}" } and you may leave "hook" empty.`
     : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
@@ -734,6 +746,7 @@ export function buildRetryClipPrompt(ctx = {}) {
     `Generate one short-drama clip (10–15 seconds) based on this summary:`,
     clipSummary,
     `CN-char limits: setting≤20, action≤80, dialogue≤60, hook≤30.`,
+    `Include "clipIndex": ${clipIndex} in the JSON object.`,
     `Output ONLY a single JSON object matching the clip schema. No markdown fences, no commentary.`,
     tail,
   ];
@@ -882,6 +895,12 @@ export async function generateDrama(materials, options = {}) {
   const authorVoice = getAuthorStyleSafe(authorStyle)?.scene || '';
   // Optional scene-length floor (CN words). 0/undefined = disabled (default).
   const targetCharsPerClip = options.targetCharsPerClip || 0;
+  // When false, the clip prompt omits the (May-2026) semantic-retrieval and
+  // structured state-ledger blocks — a lighter prompt closer to the earlier
+  // prose behavior. Default true (current behavior).
+  const richContext = options.richContext !== false;
+  // Cap the number of episodes actually written (test/preview runs). 0 = all.
+  const maxEpisodes = options.maxEpisodes || 0;
   let style = options.style;
   const log = options.log || (() => {});
   const wlog = options.wlog || (() => {});
@@ -927,7 +946,7 @@ export async function generateDrama(materials, options = {}) {
       ? { ...materials, snowflake }
       : materials;
     const totalChapters = chapters ? chapters.length : 0;
-    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters, mode });
+    outline = await generateOutline(enrichedMaterials, { lang, style, genre, referenceCharacter, referenceEvent, bible, fidelity, totalChapters, mode, episodesPerDrama: options.episodesPerDrama, clipsPerEpisode: options.clipsPerEpisode });
     if (bible && fidelity === 'tight') {
       validateOutlineChapterCoverage(outline, fidelity, totalChapters);
     }
@@ -1018,6 +1037,8 @@ export async function generateDrama(materials, options = {}) {
 
   // Sort episodes by episodeIndex for deterministic processing
   const sortedEpisodes = [...outline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
+  // Test/preview runs cap how many leading episodes are actually written.
+  const episodesToProcess = maxEpisodes > 0 ? sortedEpisodes.slice(0, maxEpisodes) : sortedEpisodes;
 
   let globalClipIndex = 0;
 
@@ -1042,7 +1063,7 @@ export async function generateDrama(materials, options = {}) {
     wlog('writing_resumed_partial', { completedEpisodes: [...completedEpisodeIndices] });
   }
 
-  for (const ep of sortedEpisodes) {
+  for (const ep of episodesToProcess) {
     // Skip episodes completed in a previous run
     if (completedEpisodeIndices.has(ep.episodeIndex)) {
       globalClipIndex += ep.clipPlan.length;
@@ -1164,13 +1185,18 @@ export async function generateDrama(materials, options = {}) {
       // Scoped to prior episodes so it complements episodeRecentDigests rather
       // than echoing the immediately-preceding clips. Best-effort: any failure
       // (or an empty store) just yields no retrieved context.
-      const retrievedScenes = retrieveRelatedScenes(options.vectorStore, plan_clip.summary || ep.title, ep.episodeIndex, log);
+      const retrievedScenes = richContext
+        ? retrieveRelatedScenes(options.vectorStore, plan_clip.summary || ep.title, ep.episodeIndex, log)
+        : '';
       // Inject the structured narrative state (characters/items/revelations/
       // foreshadowing/relationships) accumulated by prior clips so the LLM stays
       // consistent with what's already been established. Best-effort: any error
-      // formatting state must not abort clip generation.
+      // formatting state must not abort clip generation. Skipped under
+      // richContext=false (lighter prompt).
       let stateContext = '';
-      try { stateContext = toPromptContext(branchState); } catch (err) { log(`[state context] ${err.message}`); }
+      if (richContext) {
+        try { stateContext = toPromptContext(branchState); } catch (err) { log(`[state context] ${err.message}`); }
+      }
       try {
         scene = await generateClip({
           outline,
@@ -1203,12 +1229,13 @@ export async function generateDrama(materials, options = {}) {
             prevError: firstErr.message,
             isConclusion: isConcl,
             ending: concEnding,
+            clipIndex: i,
             mode,
             lang,
             authorVoice,
           });
           const retryRaw = await llmFn(retryPrompt, 'clip');
-          scene = await parseClip(retryRaw);
+          scene = await parseClip(retryRaw, { clipIndex: i });
           if (mode === 'selftell') scene = enforceSelftellPOV(scene, { outline });
         } catch (retryErr) {
           log(`[clip retry failed] ${retryErr.message} — using fallback clip`);

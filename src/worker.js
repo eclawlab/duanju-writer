@@ -265,6 +265,9 @@ async function processJob(jobId, options = {}) {
   // config `publish` key (default true) is the global switch. Distinct from
   // publishOnUpload (draft-vs-live), which only matters once we DO upload.
   const publish = options.publish !== false && config.publish !== false;
+  // Clip-prompt richness (semantic-retrieval + state-ledger blocks). Boolean
+  // like publish: an explicit false must survive; default true.
+  const richContext = options.richContext ?? config.richContext ?? true;
   const log = (msg) => console.log(chalk.dim(`  [${jobId}] ${msg}`));
   const wlog = (event, data = {}) => { try { logEntry(jobId, event, data); } catch {} };
 
@@ -456,7 +459,7 @@ async function processJob(jobId, options = {}) {
       const truncatedOutline = { ...baseOutline, episodes: frontEpisodes };
       let latestProgress = partialFront || null;
       const frontStory = await generateDrama(materials, {
-        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, targetCharsPerClip, log, wlog,
+        lang, genre, referenceCharacter, referenceEvent, bible, chapters: chapters?.chapters, fidelity, style, mode, authorStyle, targetCharsPerClip, richContext, log, wlog,
         vectorStore: frontStore,
         savedSnowflake: snowflake,
         savedOutline: truncatedOutline,
@@ -501,7 +504,7 @@ async function processJob(jobId, options = {}) {
         baseOutline, splitIdx, frontEpisodes, frontProgress, frontStore,
         snowflake, materials, bible, chapters, fidelity,
         genre, lang, style, mode, authorStyle, referenceCharacter, referenceEvent,
-        targetCharsPerClip,
+        targetCharsPerClip, richContext,
         log, wlog, saveArtifact, loadArtifact, computeStoryMetrics,
       });
       if (r.storyId) storyIds.push(r.storyId);

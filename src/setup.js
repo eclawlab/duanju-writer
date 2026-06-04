@@ -75,10 +75,24 @@ export async function setup(args) {
       clearTimeout(bootstrapTimer);
     }
 
-    // If bootstrap is disabled (keys already exist), ask for existing key and use authenticated endpoint
+    // If bootstrap is disabled (keys already exist), authenticate with an
+    // existing key. Reuse the already-configured key when we have one (so
+    // re-running setup never re-prompts); otherwise prompt — but only when
+    // stdin is a TTY, since a non-interactive prompt would throw on closed
+    // readline (ERR_USE_AFTER_CLOSE).
     if (keyRes.status === 403) {
-      const existingKey = await ask(rl, 'API keys already exist. Enter an existing API key to generate a new one: ');
-      if (!existingKey.trim()) {
+      let existingKey = (config.aiApiKey || '').trim();
+      if (existingKey) {
+        console.log(chalk.dim('  Keys already exist; reusing the configured API key.'));
+      } else if (process.stdin.isTTY) {
+        existingKey = (await ask(rl, 'API keys already exist. Enter an existing API key to generate a new one: ')).trim();
+      } else {
+        console.log(chalk.red('  API keys already exist, but none is configured and stdin is not a TTY.'));
+        console.log(chalk.dim('  Set an existing key with: duanju-writer config set aiApiKey <key>'));
+        console.log(chalk.dim('  Or re-run setup from an interactive terminal to paste one.'));
+        process.exit(1);
+      }
+      if (!existingKey) {
         console.log(chalk.red('  No key provided. Aborting.'));
         process.exit(1);
       }
@@ -89,7 +103,7 @@ export async function setup(args) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Api-Key': existingKey.trim(),
+            'X-Api-Key': existingKey,
           },
           body: JSON.stringify({ label: 'duanju-writer' }),
           signal: keyController.signal,
