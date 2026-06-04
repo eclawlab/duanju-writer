@@ -34,6 +34,15 @@ export async function setup(args) {
       autostoryUrl = urlInput.trim() || currentUrl;
     }
 
+    // Accept a bare host (e.g. "usaduanju.com") by defaulting to https://.
+    // Without a scheme, `new URL()` inside fetch() throws "Failed to parse URL",
+    // which surfaced as a confusing "Cannot reach API" error.
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(autostoryUrl)) {
+      autostoryUrl = `https://${autostoryUrl}`;
+    }
+    // Drop any trailing slash so we don't build "host//health".
+    autostoryUrl = autostoryUrl.replace(/\/+$/, '');
+
     // Step 2: Check API health
     console.log(chalk.dim(`\nChecking ${autostoryUrl}...`));
     try {
