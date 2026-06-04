@@ -14,7 +14,7 @@
 - 每集至少 1–2 次反转或打脸。
 - 角色关系在第一集就要立起来——主角是谁、对立面是谁、初始冲突是什么。
 - 3–7 个语音可分辨的角色名。
-- 全剧结尾在最后一集，`isEnding: true`，`ending` 取 {爽爆 / 苦尽甘来 / 反转} 之一。
+- 全剧结尾在最后一集，`isEnding: true`，`ending` 取 {爽爆 / 苦尽甘来 / 反转} 之一。最后一集同样要有 4–10 个片段（不要只写 1–2 个就草草收场），`isConclusion: true` 只标在**该集最后一个片段**上，其余片段一律 `isConclusion: false`。
 - 没有分支、没有读者选择。
 
 ## 输出结构
@@ -41,7 +41,12 @@
       "isEnding": false,
       "ending": null,
       "clipPlan": [
-        { "summary": "陆衡狼狈现身，岳父羞辱", "clipType": "NARRATIVE", "isConclusion": false }
+        { "summary": "陆衡狼狈现身，岳父羞辱", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "陆衡被赶出门，暗中接到神秘电话", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "苏晚私下塞钱，旧情未了", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "林董设局羞辱，陆衡隐忍", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "陆衡身份初露端倪，下属现身", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "陆衡冷笑离场，钩子拉满", "clipType": "NARRATIVE", "isConclusion": false }
       ]
     },
     {
@@ -50,7 +55,12 @@
       "isEnding": true,
       "ending": "爽爆",
       "clipPlan": [
-        { "summary": "陆衡身份揭露，反派全员跪地", "clipType": "NARRATIVE", "isConclusion": true }
+        { "summary": "陆衡召集全部势力，反派慌乱", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "林董罪证当众揭露", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "苏晚得知真相，悔不当初", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "岳父跪地求饶，被陆衡当众打脸", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "陆衡接管一切，旧仇了断", "clipType": "NARRATIVE", "isConclusion": false },
+        { "summary": "陆衡身份彻底揭露，反派全员跪地，全剧收束", "clipType": "NARRATIVE", "isConclusion": true }
       ]
     }
   ]

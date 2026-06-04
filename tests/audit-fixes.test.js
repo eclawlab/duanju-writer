@@ -101,7 +101,8 @@ describe('audit: #9 parseOutline normalizes episodeIndex to dense 0-based', () =
         { name: 'C', role: 'antagonist' },
       ],
       episodes: [
-        { episodeIndex: 2, title: 'E2', isEnding: true, ending: '爽爆', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 2, title: 'E2', isEnding: true, ending: '爽爆',
+          clipPlan: [{ summary: 's1' }, { summary: 's2' }, { summary: 's3' }, { summary: 's4' }] },
         { episodeIndex: 1, title: 'E1', isEnding: false, ending: null, clipPlan: [{ summary: 's' }] },
       ],
     };

@@ -109,7 +109,8 @@ describe('Fix #5 — outline minimum episode guard', () => {
       title: 'T', synopsis: 'S', characters: minimalChars,
       episodes: [
         { episodeIndex: 0, title: 'Start', isEnding: false, clipPlan: [{ summary: 's' }] },
-        { episodeIndex: 1, title: 'End', isEnding: true, ending: '爽爆', clipPlan: [{ summary: 's' }] },
+        { episodeIndex: 1, title: 'End', isEnding: true, ending: '爽爆',
+          clipPlan: [{ summary: 's1' }, { summary: 's2' }, { summary: 's3' }, { summary: 's4' }] },
       ],
     }));
     assert.equal(result.episodes.length, 2);

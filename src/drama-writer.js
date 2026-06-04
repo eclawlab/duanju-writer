@@ -199,7 +199,7 @@ function localSceneDigest(scene, planSummary = '') {
   };
 }
 
-export async function parseOutline(raw) {
+export async function parseOutline(raw, { clipsPerEpisode } = {}) {
   const data = await parseJsonWithRepair(raw, 'outline');
 
   if (!data.title) throw new Error('Missing required field: title');
@@ -264,6 +264,19 @@ export async function parseOutline(raw) {
     throw new Error(`Final episode ending must be one of ${VALID_ENDINGS.join('/')}, got: ${lastEp.ending}`);
   }
 
+  // The ending episode carries the conclusion on its LAST clip, so a too-short
+  // final clipPlan makes the whole story "say end" after only a handful of
+  // clips. Enforce a sane floor: clipsPerEpisode-1 when a target was given,
+  // otherwise the global 4-clip minimum (outline.md: 每集 4–10 片段). Outline
+  // generation is cheap and job-retried, so throwing here regenerates rather
+  // than shipping a stunted finale.
+  const minEndingClips = Number.isInteger(clipsPerEpisode)
+    ? Math.max(4, clipsPerEpisode - 1)
+    : 4;
+  if (lastEp.clipPlan.length < minEndingClips) {
+    throw new Error(`Final episode "${lastEp.title}" has only ${lastEp.clipPlan.length} clip(s); the ending episode must have at least ${minEndingClips} clips (its last clip carries the conclusion).`);
+  }
+
   // Always produce empty characterQuestions — the player skips that step.
   data.characterQuestions = [];
 
@@ -284,7 +297,11 @@ export async function generateOutline(materials, options = {}) {
   const clipsPerEpisode = options.clipsPerEpisode;
   const prompt = buildOutlinePrompt(materials, lang, style, genre, referenceCharacter, referenceEvent, { bible, fidelity, totalChapters, mode, episodesPerDrama, clipsPerEpisode });
   const raw = await callLLM(prompt, 'outline');
-  return await parseOutline(raw);
+  // Only enforce the clipsPerEpisode-derived floor when the prompt actually
+  // carried that directive (skipped under a bible, where chapter coverage
+  // drives clip counts); otherwise parseOutline falls back to the global
+  // 4-clip minimum for the ending episode.
+  return await parseOutline(raw, { clipsPerEpisode: bible ? undefined : clipsPerEpisode });
 }
 
 // ─── Tail outline: regenerate back-half with a divergent ending ──────────────
@@ -1176,7 +1193,12 @@ export async function generateDrama(materials, options = {}) {
       // Trope `## Clip` section is resolved from the style key.
       const tropeStyle = getStyleSafe(style);
       const tropeSection = tropeStyle?.clip || '';
-      const isConcl = !!plan_clip.isConclusion || (ep.isEnding && i === ep.clipPlan.length - 1);
+      // The conclusion ("end") marker belongs ONLY on the final clip of the
+      // ending episode. We derive it positionally and do NOT trust
+      // plan_clip.isConclusion: the outline LLM (cued by the prompt example)
+      // sometimes stamps isConclusion on an earlier clip, which would fire the
+      // STORY_END marker mid-episode and make the story appear to end early.
+      const isConcl = ep.isEnding && i === ep.clipPlan.length - 1;
       const concEnding = plan_clip.ending || (ep.isEnding ? ep.ending : '爽爆');
       let scene;
       const episodeChapterRange = bible && Array.isArray(ep.sourceChapterRange) ? ep.sourceChapterRange : null;

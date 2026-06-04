@@ -39,8 +39,15 @@ describe('writer', () => {
       episodes: [
         { episodeIndex: 0, title: '第1集', isEnding: false, ending: null,
           clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] },
+        // The ending episode needs >=4 clips (parseOutline floor): its last
+        // clip carries the conclusion, so a too-short finale is rejected.
         { episodeIndex: 1, title: '第2集', isEnding: true, ending: '爽爆',
-          clipPlan: [{ summary: 's', clipType: 'NARRATIVE' }] },
+          clipPlan: [
+            { summary: 's1', clipType: 'NARRATIVE' },
+            { summary: 's2', clipType: 'NARRATIVE' },
+            { summary: 's3', clipType: 'NARRATIVE' },
+            { summary: 's4', clipType: 'NARRATIVE' },
+          ] },
       ],
     };
   }
@@ -130,13 +137,39 @@ describe('writer', () => {
     await assert.rejects(() => parseOutline(JSON.stringify(bad)), /ending must be one of/);
   });
 
+  test('parseOutline rejects a too-short ending episode (4-clip floor)', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const bad = validOutline();
+    bad.episodes[1].clipPlan = bad.episodes[1].clipPlan.slice(0, 3);  // 3 clips
+    await assert.rejects(() => parseOutline(JSON.stringify(bad)), /at least 4 clips/);
+  });
+
+  test('parseOutline tightens the ending-clip floor to clipsPerEpisode-1', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const bad = validOutline();  // ending episode has 4 clips
+    // clipsPerEpisode=6 → floor is max(4, 5) = 5, so 4 clips is rejected.
+    await assert.rejects(
+      () => parseOutline(JSON.stringify(bad), { clipsPerEpisode: 6 }),
+      /at least 5 clips/,
+    );
+  });
+
+  test('parseOutline accepts an ending episode meeting the clipsPerEpisode floor', async () => {
+    const { parseOutline } = await import('../src/drama-writer.js');
+    const ok = validOutline();
+    ok.episodes[1].clipPlan = Array.from({ length: 5 }, (_, i) => ({ summary: `s${i}`, clipType: 'NARRATIVE' }));
+    const result = await parseOutline(JSON.stringify(ok), { clipsPerEpisode: 6 });
+    assert.equal(result.episodes[1].clipPlan.length, 5);
+  });
+
   test('parseOutline accepts linear multi-episode structure', async () => {
     const { parseOutline } = await import('../src/drama-writer.js');
     const valid = validOutline();
     valid.episodes = [
       { episodeIndex: 0, title: '第1集', isEnding: false, ending: null, clipPlan: [{ summary: 's' }] },
       { episodeIndex: 1, title: '第2集', isEnding: false, ending: null, clipPlan: [{ summary: 's' }] },
-      { episodeIndex: 2, title: '第3集', isEnding: true, ending: '反转', clipPlan: [{ summary: 's' }] },
+      { episodeIndex: 2, title: '第3集', isEnding: true, ending: '反转',
+        clipPlan: [{ summary: 's1' }, { summary: 's2' }, { summary: 's3' }, { summary: 's4' }] },
     ];
     const result = await parseOutline(JSON.stringify(valid));
     assert.equal(result.episodes.length, 3);
