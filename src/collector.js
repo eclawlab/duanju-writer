@@ -1,19 +1,14 @@
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { tryParseJson, parseJsonWithRepair } from './json.js';
 import { search } from './websearch.js';
 import { fetchPage } from './webfetch.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROMPT_PATH = join(__dirname, '..', 'prompts', 'research.md');
+import { loadPromptTemplate } from './prompts.js';
 
 const MAX_WEB_RESEARCH_LENGTH = 15_000;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (short TTL since sites are randomly picked)
 
-let webResearchCache = null;
-let webResearchCacheTime = 0;
+// Cached per language — CN and EN runs hit disjoint source pools.
+const webResearchCache = new Map(); // lang → { result, time }
 
 function pickRandom(arr, n) {
   const copy = [...arr];
@@ -25,8 +20,23 @@ function pickRandom(arr, n) {
   return result;
 }
 
-function getSearchQueries() {
+function getSearchQueries(lang = 'cn') {
   const year = new Date().getFullYear();
+  if (lang === 'en') {
+    const pool = [
+      `ReelShort trending vertical drama ${year}`,
+      `DramaBox popular short drama ${year}`,
+      `Wattpad trending stories ${year}`,
+      `RoyalRoad popular web novels ${year}`,
+      `Goodreads trending romance thriller ${year}`,
+      `BookTok viral books ${year}`,
+      `Kindle Unlimited bestselling romance ${year}`,
+      `billionaire romance trending tropes ${year}`,
+      `revenge drama plot twist trending`,
+      `popular web fiction tropes ${year}`,
+    ];
+    return pickRandom(pool, 5);
+  }
   const pool = [
     `起点中文网 热门小说 ${year}`,
     `晋江文学城 热门推荐 ${year}`,
@@ -47,7 +57,17 @@ function getSearchQueries() {
   return pickRandom(pool, 5);
 }
 
-function getFetchUrls() {
+function getFetchUrls(lang = 'cn') {
+  if (lang === 'en') {
+    const english = [
+      'https://www.royalroad.com/fictions/trending',   // EN - Royal Road trending
+      'https://www.wattpad.com/stories/romance',        // EN - Wattpad romance
+      'https://www.goodreads.com/shelf/show/romance',   // EN - Goodreads romance shelf
+      'https://www.reelshort.com/',                     // EN - ReelShort vertical dramas
+      'https://www.webnovel.com/ranking',               // EN - Webnovel rankings
+    ];
+    return pickRandom(english, 5);
+  }
   const chinese = [
     'https://www.qidian.com/',                                          // CN - 起点中文网
     'https://www.qidian.com/rank/',                                     // CN - Qidian rankings
@@ -59,11 +79,11 @@ function getFetchUrls() {
   return pickRandom(chinese, 5);
 }
 
-async function fetchWebResearch() {
+async function fetchWebResearch(lang = 'cn') {
   const sections = [];
   let totalLength = 0;
-  const searchQueries = getSearchQueries();
-  const fetchUrls = getFetchUrls();
+  const searchQueries = getSearchQueries(lang);
+  const fetchUrls = getFetchUrls(lang);
 
   // Run searches
   const searchResults = await Promise.allSettled(
@@ -109,25 +129,23 @@ async function fetchWebResearch() {
   return sections.join('\n\n');
 }
 
-export async function gatherWebResearch() {
+export async function gatherWebResearch(lang = 'cn') {
   const now = Date.now();
-  if (webResearchCache && (now - webResearchCacheTime) < CACHE_TTL_MS) {
-    return webResearchCache;
+  const cached = webResearchCache.get(lang);
+  if (cached && (now - cached.time) < CACHE_TTL_MS) {
+    return cached.result;
   }
-  const result = await fetchWebResearch();
-  webResearchCache = result;
-  webResearchCacheTime = now;
+  const result = await fetchWebResearch(lang);
+  webResearchCache.set(lang, { result, time: now });
   return result;
 }
 
 export function clearWebResearchCache() {
-  webResearchCache = null;
-  webResearchCacheTime = 0;
+  webResearchCache.clear();
 }
 
 export function buildResearchPrompt(history, webResearch, lang = 'cn', genre = '') {
-  const templateFile = PROMPT_PATH;
-  let template = readFileSync(templateFile, 'utf8');
+  let template = loadPromptTemplate('research.md', lang);
   const historyText = history.length > 0
     ? history.map(h => `- ${h.topic} (${(h.genres || []).join(', ')})`).join('\n')
     : lang === 'cn' ? '（无——这是首次运行）' : '(none — this is the first run)';
@@ -405,7 +423,7 @@ export async function collect(history, options = {}) {
     return materials;
   }
 
-  const webResearch = await gatherWebResearch();
+  const webResearch = await gatherWebResearch(lang);
   const prompt = buildResearchPrompt(history, webResearch, lang, genre);
   const raw = await callLLM(prompt, 'research');
   return await parseMaterials(raw);

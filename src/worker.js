@@ -39,6 +39,20 @@ const VARIANTS = [
   { key: 'v3', ending: '反转',     label: '反转结局' },
 ];
 
+// English display labels for the same variants. The `ending` tokens stay CN —
+// they're the canonical internal enum (artifact filenames, tail-outline
+// targets, ENDING_LABEL_TO_ENUM) — only the platform-facing label localizes.
+const VARIANT_LABELS_EN = {
+  v1: 'Triumphant Ending',
+  v2: 'Bittersweet Ending',
+  v3: 'Twist Ending',
+};
+
+export function variantsForLang(lang = 'cn') {
+  if (lang !== 'en') return VARIANTS;
+  return VARIANTS.map(v => ({ ...v, label: VARIANT_LABELS_EN[v.key] || v.label }));
+}
+
 // Static description of valid status edges in the pipeline. Informational
 // only — the actual transitions are driven by claimNextPending (pending →
 // collecting, unconditionally) and processJob (which then flips to
@@ -498,7 +512,8 @@ async function processJob(jobId, options = {}) {
     let totalClipsAcrossVariants = 0;
     let totalWordsAcrossVariants = 0;
 
-    for (const v of VARIANTS) {
+    const variants = variantsForLang(lang);
+    for (const v of variants) {
       const r = await generateVariant(v, {
         jobId, publish, variationGroupId,
         baseOutline, splitIdx, frontEpisodes, frontProgress, frontStore,
@@ -544,11 +559,11 @@ async function processJob(jobId, options = {}) {
 
     log(`\n--- Generation Report ---`);
     log(`Variations: ${storyIds.length} (group ${variationGroupId})`);
-    for (let i = 0; i < VARIANTS.length && i < storyIds.length; i++) {
-      log(`  ${VARIANTS[i].label}: ${storyIds[i]}`);
+    for (let i = 0; i < variants.length && i < storyIds.length; i++) {
+      log(`  ${variants[i].label}: ${storyIds[i]}`);
     }
     log(`Episodes per variant: ${epsPerVariant}, total clips across variants: ${totalClipsAcrossVariants}, total words across variants: ${totalWordsAcrossVariants}`);
-    if (!publish) log(`Publishing disabled — ${VARIANTS.length} variant(s) generated but NOT uploaded.`);
+    if (!publish) log(`Publishing disabled — ${variants.length} variant(s) generated but NOT uploaded.`);
     log(`Total time: ${minutes} min (LLM time: ${llmMinutes} min)`);
     log(`LLM calls: ${llmStats.calls}`);
     if (llmStats.inputTokens || llmStats.outputTokens) {
@@ -575,7 +590,7 @@ async function processJob(jobId, options = {}) {
       `Variation Group: ${variationGroupId}`,
       ``,
       `--- Variations ---`,
-      ...VARIANTS.map((v, i) => `${v.label.padEnd(22)} ${storyIds[i] || '(not uploaded)'}`),
+      ...variants.map((v, i) => `${v.label.padEnd(22)} ${storyIds[i] || '(not uploaded)'}`),
       ``,
       `Episodes per variant: ${epsPerVariant}`,
       `Split point:          ${splitIdx}/${totalEpisodes} (front shared)`,

@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { parseJsonWithRepair } from './json.js';
 import { buildReferenceBlock, buildGenreBlock } from './references.js';
@@ -32,11 +29,7 @@ import {
   substituteProtagonist,
 } from './selftell.js';
 import { composeScene } from './scene.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const OUTLINE_PATH = join(__dirname, '..', 'prompts', 'outline.md');
-const TAIL_OUTLINE_PATH = join(__dirname, '..', 'prompts', 'tail-outline.md');
+import { loadPromptTemplate } from './prompts.js';
 
 export const VALID_TAIL_ENDINGS = ['爽爆', '苦尽甘来', '反转'];
 
@@ -51,8 +44,7 @@ export { buildSelftellDirective, enforceSelftellPOV, composeScene };
 
 export function buildOutlinePrompt(materials, lang = 'cn', styleKey, genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
   // options.mode: 'selftell' switches the prompt into first-person POV directives.
-  const templateFile = OUTLINE_PATH;
-  let template = readFileSync(templateFile, 'utf8');
+  let template = loadPromptTemplate('outline.md', lang);
   const style = getStyleSafe(styleKey);
   if (style) {
     template += `\n\n## Writing Style\n\n${style.outline}\n`;
@@ -160,6 +152,36 @@ export const ENDING_LABEL_TO_ENUM = {
   '反转':   'SPECIAL',  // final twist outside the standard taxonomy
 };
 
+// The CN labels above are the canonical internal ending tokens (artifact
+// files, worker variant descriptors, ENDING_LABEL_TO_ENUM all key on them).
+// English prompts emit the aliases below instead; parsers normalize them back
+// to the canonical token so everything downstream stays single-vocabulary.
+export const ENDING_EN_ALIASES = {
+  triumph:     '爽爆',
+  bittersweet: '苦尽甘来',
+  twist:       '反转',
+};
+
+export const ENDING_CN_TO_EN = {
+  '爽爆':   'triumph',
+  '苦尽甘来': 'bittersweet',
+  '反转':   'twist',
+};
+
+// Map a model-emitted ending value to the canonical CN token. Unknown values
+// pass through unchanged so existing "invalid ending" errors stay accurate.
+export function normalizeEnding(value) {
+  if (typeof value !== 'string') return value;
+  const v = value.trim();
+  if (VALID_ENDINGS.includes(v)) return v;
+  return ENDING_EN_ALIASES[v.toLowerCase()] || value;
+}
+
+// Render a canonical CN ending token in the requested prompt language.
+export function localizeEnding(ending, lang = 'cn') {
+  return lang === 'en' ? (ENDING_CN_TO_EN[ending] || ending) : ending;
+}
+
 // composeScene lives in ./scene.js (re-exported above) so selftell.js can use
 // it without a circular import.
 
@@ -255,6 +277,12 @@ export async function parseOutline(raw, { clipsPerEpisode } = {}) {
     ep.episodeChoices = [];
   }
 
+  // English outlines emit ending aliases (triumph/bittersweet/twist) —
+  // normalize to the canonical CN tokens before validating.
+  for (const ep of data.episodes) {
+    if (ep.ending != null) ep.ending = normalizeEnding(ep.ending);
+  }
+
   // Linear dramas require the FINAL episode to be the ending with a valid label.
   const lastEp = data.episodes[data.episodes.length - 1];
   if (!lastEp.isEnding) {
@@ -329,7 +357,7 @@ function summarizeSnowflakeForTail(snowflake) {
 }
 
 export function buildTailOutlinePrompt(baseOutline, splitIdx, targetEnding, snowflake, options = {}) {
-  const template = readFileSync(TAIL_OUTLINE_PATH, 'utf8');
+  const template = loadPromptTemplate('tail-outline.md', options.lang || 'cn');
   const sorted = [...baseOutline.episodes].sort((a, b) => a.episodeIndex - b.episodeIndex);
   const totalEpisodes = sorted.length;
   const lastIdx = totalEpisodes - 1;
@@ -533,8 +561,6 @@ export async function generateTailOutline(baseOutline, splitIdx, targetEnding, o
 
 // ─── Step 2: Generate clips one at a time ────────────────────────────────────
 
-const CLIPS_PROMPT_PATH = join(__dirname, '..', 'prompts', 'clips.md');
-
 /**
  * Build the per-clip generation prompt (new drama-pipeline signature).
  *
@@ -574,7 +600,7 @@ export function buildClipPrompt(ctx) {
     authorVoice = '',
   } = ctx || {};
 
-  let template = readFileSync(CLIPS_PROMPT_PATH, 'utf8');
+  let template = loadPromptTemplate('clips.md', lang);
   let rendered = template
     .replace(/\{\{title\}\}/g, outline.title || '')
     .replace(/\{\{synopsis\}\}/g, outline.synopsis || '')
@@ -586,8 +612,8 @@ export function buildClipPrompt(ctx) {
     .replace(/\{\{clipSummary\}\}/g, clipSummary || '')
     .replace(/\{\{isConclusion\}\}/g, isConclusion ? 'true' : 'false')
     .replace(/\{\{priorClipDigest\}\}/g, priorClipDigest || '(none)')
-    .replace(/\{\{retrievedScenes\}\}/g, () => retrievedScenes || '（无）')
-    .replace(/\{\{stateContext\}\}/g, () => stateContext || '（无）')
+    .replace(/\{\{retrievedScenes\}\}/g, () => retrievedScenes || (lang === 'en' ? '(none)' : '（无）'))
+    .replace(/\{\{stateContext\}\}/g, () => stateContext || (lang === 'en' ? '(none)' : '（无）'))
     .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
     .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
     .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
@@ -606,10 +632,15 @@ export function buildClipPrompt(ctx) {
   }
 
   if (authorVoice) {
-    rendered += '\n\n## 文风 / Author Voice\n\n'
-      + '请用以下作家的文风来写作。这只影响遣词、节奏、意象与句子质感——'
-      + '不改变剧情、套路结构、人物或事件。\n\n'
-      + authorVoice;
+    rendered += lang === 'en'
+      ? '\n\n## Author Voice\n\n'
+        + 'Write in the following author\'s prose voice. It affects ONLY diction, rhythm, '
+        + 'imagery, and sentence texture — never the plot, trope structure, characters, or events.\n\n'
+        + authorVoice
+      : '\n\n## 文风 / Author Voice\n\n'
+        + '请用以下作家的文风来写作。这只影响遣词、节奏、意象与句子质感——'
+        + '不改变剧情、套路结构、人物或事件。\n\n'
+        + authorVoice;
   }
 
   return rendered;
@@ -677,6 +708,7 @@ export async function parseClip(raw, opts = {}) {
     if (data.conclusion.type !== 'DRAMA_END') {
       throw new Error(`conclusion.type must be 'DRAMA_END', got: ${data.conclusion.type}`);
     }
+    data.conclusion.ending = normalizeEnding(data.conclusion.ending);
     if (!VALID_ENDINGS.includes(data.conclusion.ending)) {
       throw new Error(`conclusion.ending must be one of ${VALID_ENDINGS.join('/')}, got: ${data.conclusion.ending}`);
     }
@@ -756,13 +788,17 @@ export async function generateClip(ctx) {
 export function buildRetryClipPrompt(ctx = {}) {
   const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', clipIndex = 0, mode = 'default', lang = 'cn', authorVoice = '' } = ctx;
   const tail = isConclusion
-    ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${ending}" } and you may leave "hook" empty.`
-    : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
+    ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${localizeEnding(ending, lang)}" } and you may leave "hook" empty.`
+    : lang === 'en'
+      ? '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤20 words).'
+      : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
   const parts = [
     `Previous attempt failed: ${prevError || 'invalid output'}.`,
     `Generate one short-drama clip (10–15 seconds) based on this summary:`,
     clipSummary,
-    `CN-char limits: setting≤20, action≤80, dialogue≤60, hook≤30.`,
+    lang === 'en'
+      ? `Write everything in English. Word limits: setting≤12, action≤50, dialogue≤40, hook≤20.`
+      : `CN-char limits: setting≤20, action≤80, dialogue≤60, hook≤30.`,
     `Include "clipIndex": ${clipIndex} in the JSON object.`,
     `Output ONLY a single JSON object matching the clip schema. No markdown fences, no commentary.`,
     tail,
@@ -771,7 +807,9 @@ export function buildRetryClipPrompt(ctx = {}) {
     parts.push(buildSelftellDirective(lang, 'clip'));
   }
   if (authorVoice) {
-    parts.push('文风（仅影响遣词、节奏与意象，不改变剧情、人物或事件）：\n' + authorVoice);
+    parts.push(lang === 'en'
+      ? 'Author voice (affects only diction, rhythm, and imagery — never plot, characters, or events):\n' + authorVoice
+      : '文风（仅影响遣词、节奏与意象，不改变剧情、人物或事件）：\n' + authorVoice);
   }
   return parts.join('\n');
 }
@@ -787,33 +825,39 @@ export function buildFallbackClip(ctx = {}) {
     isConclusion = false,
     ending = '爽爆',
     mode = 'default',
+    lang = 'cn',
     outline = null,
   } = ctx;
+  const isEn = lang === 'en';
+  // CN truncation budgets are CN-char counts; for English reuse them as word
+  // budgets (parseClip's CN-char limits never bind on English text anyway).
   const truncate = (s, n) => {
+    if (isEn) return (s || '').split(/\s+/).filter(Boolean).slice(0, n).join(' ');
     const chars = (s || '').match(/[一-鿿㐀-䶿]/g) || [];
     return chars.slice(0, n).join('');
   };
   const isSelftell = mode === 'selftell';
-  const setting  = '场景 · 时间 · 氛围';
-  let action     = truncate(summary || '动作描述', 80) || '动作描述';
-  let dialogue   = '[narrator]\n' + (truncate(summary, 50) || '叙述');
-  const hook     = isConclusion ? '' : '镜头特写关键道具';
+  const firstPerson = isEn ? 'I' : '我';
+  const setting  = isEn ? 'Scene · Time · Mood' : '场景 · 时间 · 氛围';
+  let action     = truncate(summary || (isEn ? 'Action beat' : '动作描述'), 80) || (isEn ? 'Action beat' : '动作描述');
+  let dialogue   = '[narrator]\n' + (truncate(summary, 50) || (isEn ? 'Narration' : '叙述'));
+  const hook     = isConclusion ? '' : (isEn ? 'Close-up on a key prop' : '镜头特写关键道具');
   const durationSec = 12;
   if (isSelftell) {
     // Cheap first-person rewrite of the fallback: substitute the protagonist's
-    // name with "我", and prepend "我：" if the action still doesn't open in
-    // first person. Use the overlap-safe substitution so co-stars whose name
-    // contains the protagonist as a substring aren't mangled. The substitution
-    // never grows CN-char counts (1 char in, 1 char out); the prepend trims
-    // to keep action under the 80 CN-char cap.
+    // name with the first-person pronoun, and prepend it if the action still
+    // doesn't open in first person. Use the overlap-safe substitution so
+    // co-stars whose name contains the protagonist as a substring aren't
+    // mangled. The CN substitution never grows CN-char counts (1 char in,
+    // 1 char out); the prepend trims to keep action under the 80-unit cap.
     const proto = pickSelftellProtagonist(outline);
     if (proto) {
       const others = collectOtherCharacterNames(outline, proto);
-      action = substituteProtagonist(action, proto, others);
-      dialogue = substituteProtagonist(dialogue, proto, others);
+      action = substituteProtagonist(action, proto, others, firstPerson);
+      dialogue = substituteProtagonist(dialogue, proto, others, firstPerson);
     }
-    if (!action.startsWith('我')) {
-      action = '我：' + truncate(action, 78);
+    if (!action.startsWith(firstPerson)) {
+      action = (isEn ? 'I: ' : '我：') + truncate(action, 78);
     }
   }
 
@@ -821,15 +865,15 @@ export function buildFallbackClip(ctx = {}) {
   let conclusion = null;
   if (isConclusion) {
     const safeEnding = VALID_ENDINGS.includes(ending) ? ending : '爽爆';
-    let concTitle = '结局';
-    let concOverview = summary || '故事结束';
+    let concTitle = isEn ? 'Finale' : '结局';
+    let concOverview = summary || (isEn ? 'The story ends' : '故事结束');
     if (isSelftell) {
       // Rewrite the conclusion fields too so the ending stays in first person.
       const proto = pickSelftellProtagonist(outline);
       if (proto) {
         const others = collectOtherCharacterNames(outline, proto);
-        concTitle = substituteProtagonist(concTitle, proto, others);
-        concOverview = substituteProtagonist(concOverview, proto, others);
+        concTitle = substituteProtagonist(concTitle, proto, others, firstPerson);
+        concOverview = substituteProtagonist(concOverview, proto, others, firstPerson);
       }
     }
     conclusion = {
@@ -1254,7 +1298,7 @@ export async function generateDrama(materials, options = {}) {
           });
           const retryRaw = await llmFn(retryPrompt, 'clip');
           scene = await parseClip(retryRaw, { clipIndex: i });
-          if (mode === 'selftell') scene = enforceSelftellPOV(scene, { outline });
+          if (mode === 'selftell') scene = enforceSelftellPOV(scene, { outline, lang });
         } catch (retryErr) {
           log(`[clip retry failed] ${retryErr.message} — using fallback clip`);
           wlog('clip_fallback', { episodeIndex: ep.episodeIndex, clipIndex: i, error: retryErr.message });
@@ -1264,6 +1308,7 @@ export async function generateDrama(materials, options = {}) {
             isConclusion: isConcl,
             ending: concEnding,
             mode,
+            lang,
             outline,
           });
         }

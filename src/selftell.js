@@ -98,8 +98,9 @@ export function buildSelftellDirective(lang = 'cn', stage = 'general') {
 export function enforceSelftellPOV(clip, ctx = {}) {
   const protagonist = pickSelftellProtagonist(ctx.outline);
   if (!protagonist) return clip;
+  const firstPerson = ctx.lang === 'en' ? 'I' : '我';
   const otherNames = collectOtherCharacterNames(ctx.outline, protagonist);
-  const subFirstPerson = (s) => substituteProtagonist(s, protagonist, otherNames);
+  const subFirstPerson = (s) => substituteProtagonist(s, protagonist, otherNames, firstPerson);
   const out = {
     ...clip,
     setting: subFirstPerson(clip.setting),
@@ -109,7 +110,7 @@ export function enforceSelftellPOV(clip, ctx = {}) {
   // For dialogue, only rewrite content inside [narrator] blocks. [character:Name]
   // blocks may legitimately name the protagonist as a speaker.
   if (typeof clip.dialogue === 'string') {
-    out.dialogue = rewriteNarratorBlocks(clip.dialogue, protagonist, otherNames);
+    out.dialogue = rewriteNarratorBlocks(clip.dialogue, protagonist, otherNames, firstPerson);
   }
   // Conclusion title/overview also flow downstream verbatim (uploader sends
   // them to the platform). Rewrite them in selftell mode so the ending stays
@@ -162,7 +163,7 @@ export function collectOtherCharacterNames(outline, protagonist) {
 
 const SENTINEL = '\u0001'; // unlikely-in-text marker (U+0001) for overlap-safe name substitution
 
-export function substituteProtagonist(s, protagonist, otherNames) {
+export function substituteProtagonist(s, protagonist, otherNames, firstPerson = '我') {
   if (typeof s !== 'string' || !s.includes(protagonist)) return s;
   let working = s;
   // Replace each other-name occurrence with a unique sentinel before touching
@@ -173,14 +174,14 @@ export function substituteProtagonist(s, protagonist, otherNames) {
     working = working.split(otherNames[i]).join(placeholder);
     replacements.push({ placeholder, original: otherNames[i] });
   }
-  working = working.split(protagonist).join('我');
+  working = working.split(protagonist).join(firstPerson);
   for (const { placeholder, original } of replacements) {
     working = working.split(placeholder).join(original);
   }
   return working;
 }
 
-function rewriteNarratorBlocks(dialogue, protagonist, otherNames) {
+function rewriteNarratorBlocks(dialogue, protagonist, otherNames, firstPerson = '我') {
   // Dialogue is a sequence of [narrator]\n... or [character:Name]\n... blocks
   // separated by blank lines. Walk block by block and only rewrite narrator
   // blocks. We deliberately leave [character:ProtagonistName] alone so the
@@ -188,7 +189,7 @@ function rewriteNarratorBlocks(dialogue, protagonist, otherNames) {
   const blocks = dialogue.split(/\n(?=\[(?:narrator|character:))/);
   return blocks.map((block) => {
     if (/^\[narrator\]/i.test(block)) {
-      return substituteProtagonist(block, protagonist, otherNames);
+      return substituteProtagonist(block, protagonist, otherNames, firstPerson);
     }
     return block;
   }).join('\n');

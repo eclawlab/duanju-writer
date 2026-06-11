@@ -1,5 +1,5 @@
-// Loads Chinese-author prose-voice definitions from .md files in the
-// author-styles/ directory. Each .md file has YAML-like frontmatter
+// Loads author prose-voice definitions (Chinese and English authors) from
+// .md files in the author-styles/ directory. Each .md file has YAML-like frontmatter
 // (name, category) and ## Outline / ## Scene sections. Only ## Scene is
 // consumed (prose voice for clip generation); ## Outline is ignored.
 //

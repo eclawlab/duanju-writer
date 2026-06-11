@@ -59,10 +59,10 @@ describe('cli flag validation', () => {
     assert.match(r.out, /--clips-per-episode must be an integer in \[4, 10\]/);
   });
 
-  test('--lang en is rejected', () => {
-    const r = runCli(['run', '--lang', 'en']);
+  test('--lang fr is rejected', () => {
+    const r = runCli(['run', '--lang', 'fr']);
     assert.equal(r.code, 1);
-    assert.match(r.out, /--lang en is not supported \(CN only\)/);
+    assert.match(r.out, /--lang fr is not supported \(cn or en\)/);
   });
 
   test('run with a non-finite count (Infinity) is rejected, not a silent no-op', () => {
@@ -95,10 +95,10 @@ describe('cli flag validation', () => {
     assert.match(r.out, /'targetWordsPerScene' has been renamed to 'targetCharsPerClip'/);
   });
 
-  test('config set lang en is rejected', () => {
-    const r = runCli(['config', 'set', 'lang', 'en']);
+  test('config set lang fr is rejected', () => {
+    const r = runCli(['config', 'set', 'lang', 'fr']);
     assert.equal(r.code, 1);
-    assert.match(r.out, /Only 'cn' is supported/);
+    assert.match(r.out, /Supported: cn, en/);
   });
 
   test('--author-style with unknown name is rejected; list shows author names', () => {

@@ -1,14 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { tryParseJson } from './json.js';
 import { buildReferenceBlock } from './references.js';
 import { buildBibleBlock } from './story-bible.js';
 import { buildSelftellDirective } from './selftell.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_PATH = join(__dirname, '..', 'prompts', 'snowflake.md');
+import { loadPromptTemplate } from './prompts.js';
 
 const PARTS = [
   {
@@ -49,7 +44,7 @@ const PARTS_CN = [
 ];
 
 export function buildSnowflakePrompt(materials, partIndex, priorParts, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
-  let template = readFileSync(TEMPLATE_PATH, 'utf8');
+  let template = loadPromptTemplate('snowflake.md', lang);
   const parts = lang === 'cn' ? PARTS_CN : PARTS;
   const part = parts[partIndex];
 

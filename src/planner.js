@@ -1,11 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { callLLM } from './llm.js';
 import { tryParseJson } from './json.js';
 import { buildReferenceBlock, buildGenreBlock } from './references.js';
 import { buildBibleBlock, buildProseBlock } from './story-bible.js';
 import { buildSelftellDirective } from './selftell.js';
+import { loadPromptTemplate } from './prompts.js';
 import {
   createState,
   addCharacter,
@@ -13,8 +11,6 @@ import {
   addLocation,
   addRevelation,
 } from './drama-state.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // JSON extraction helpers are shared via ./json.js.
 
@@ -36,8 +32,7 @@ export function sceneKey(episodeIndex, ordinal) {
  * @returns {string}
  */
 export function buildPlanPrompt(outline, lang = 'cn', genre = '', referenceCharacter = '', referenceEvent = '', options = {}) {
-  const templatePath = join(__dirname, '..', 'prompts', 'plan.md');
-  let template = readFileSync(templatePath, 'utf8');
+  let template = loadPromptTemplate('plan.md', lang);
   if (genre) {
     template += buildGenreBlock(lang,
       `这个故事是**${genre}**类型的小说。所有场景规划、角色行为、事件设计都必须符合此类型的特征。`,

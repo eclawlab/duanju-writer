@@ -165,7 +165,8 @@ node bin/duanju-writer.js run
 | `--reference-event <path.md>` | 注入预定义事件描述 |
 | `--story <path.{txt,md}>` | 注入参考小说（≤1MB），抽取 story bible 注入下游阶段 |
 | `--fidelity <tight\|medium\|loose>` | 配合 `--story`：改编紧密度（默认 medium）|
-| `--author-style <作家名>` | 叠加指定中文作家文风（如 `莫言`、`金庸`，亦可用英文名或 key；仅影响文笔，与 `--style`/`--story` 正交可叠加）；`duanju-writer author-styles` 查看 15 位作家 |
+| `--author-style <作家名>` | 叠加指定作家文风（中文作家如 `莫言`、`金庸`，英文作家如 `Hemingway`、`Stephen King`，亦可用 key；仅影响文笔，与 `--style`/`--story` 正交可叠加）；`duanju-writer author-styles` 查看 30 位作家 |
+| `--lang <cn\|en>` | 输出语言（默认 `cn`；`en` 生成英文剧本，使用 `prompts/en/` 英文提示词模板） |
 | `--no-publish` | 只生成不上传 |
 
 ### 守护进程模式
@@ -191,14 +192,14 @@ duanju-writer scheduler      单独运行调度器
 duanju-writer worker         单独运行 worker
 duanju-writer jobs           查看任务队列
 duanju-writer styles         列出全部 30 个套路
-duanju-writer author-styles  列出 15 位作家文风
+duanju-writer author-styles  列出 30 位作家文风（15 中文 + 15 英文）
 duanju-writer config         查看 / 修改配置
 duanju-writer provider       管理 LLM 供应商
 duanju-writer role           为不同任务角色分配模型
 duanju-writer knowledge      管理知识库（导入 / 列表 / 清空）
 ```
 
-注：`--lang en` 已不再支持（本工具为短剧定制，仅生成中文剧本）。
+注：`--lang en` 生成英文短剧。英文模式下使用 `prompts/en/` 下的英文提示词模板，研究阶段抓取英文平台（ReelShort、Wattpad、RoyalRoad 等）热榜；结局枚举在英文输出中为 `triumph` / `bittersweet` / `twist`（内部归一化为 `爽爆` / `苦尽甘来` / `反转`）。
 
 ---
 

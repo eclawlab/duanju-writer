@@ -92,7 +92,7 @@ export function parseRunFlags(args) {
   const opts = {};
   if (values.lang !== undefined) {
     opts.lang = values.lang.toLowerCase();
-    if (opts.lang !== 'cn') return { ok: false, error: `--lang ${values.lang} is not supported (CN only).` };
+    if (opts.lang !== 'cn' && opts.lang !== 'en') return { ok: false, error: `--lang ${values.lang} is not supported (cn or en).` };
   }
   if (values.style !== undefined) opts.style = values.style;
   if (values.type !== undefined) opts.genre = values.type;
