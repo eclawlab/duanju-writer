@@ -46,6 +46,42 @@ export function buildSelftellDirective(lang = 'cn', stage = 'general') {
     }
     return lines.join('\n') + '\n';
   }
+  if (lang === 'ph') {
+    const lines = [
+      '',
+      '## Selftell na Pagsasalaysay (selftell)',
+      '',
+      'Ang dramang ito ay **isinasalaysay sa unang panauhan ng pangunahing tauhan**. Ang protagonista ang nagkukwento ng sarili niyang kuwento mula simula hanggang wakas.',
+      '',
+      'Mahigpit na patakaran:',
+      '- Pumili ng **isang** protagonista bilang tagapagsalaysay at panatilihin siyang POV na tauhan sa buong drama.',
+      '- Lahat ng pagsasalaysay (panloob na tinig, gunita, atmospera, balangkas) ay nasa unang panauhan: "ako", "akin", "kami/tayo".',
+      '- Sa `action` ng bawat clip, ang mga kilos ng protagonista ay nagsisimula sa "Ako…" (hal. "Itinulak ko ang pinto, basang-basa"). Ang ibang tauhan ay tinutukoy sa pangalan.',
+      '- Sa `dialogue` ng bawat clip:',
+      '  - Ang mga bloke ng `[narrator]` ay panloob na tinig / gunita ng protagonista sa unang panauhan — HINDI tagapagsalaysay na nakakaalam ng lahat.',
+      '  - Ang ibang tauhan ay nagsasalita pa rin sa ilalim ng `[character:Pangalan]` gaya ng dati.',
+      '  - Maaari ring magsalita ang protagonista sa ilalim ng `[character:PangalanNgProtagonista]` kapag may linyang binibitiwan sa eksena; ang panloob niyang tinig ay nananatili sa `[narrator]`.',
+      '- Sa `setting` at `hook`, iwasan ang pagtukoy sa protagonista sa ikatlong panauhan ("siya") — gamitin ang pangalan niya o "ako".',
+      '- Walang kaalamang nakakaalam-ng-lahat: huwag ibunyag ang hindi pa alam ng protagonista sa sandaling iyon; ang mga naantalang pagbubunyag ay maaaring bumalik bilang "Nang maglaon ay nalaman ko…".',
+      '- Manatili ang mga limitasyon sa haba (setting≤12, action≤50, dialogue≤40, hook≤20 na salita) at ang kahilingan sa hook.',
+    ];
+    if (stage === 'outline' || stage === 'tail-outline') {
+      lines.push(
+        '- Linawin sa pangunahing `synopsis` na ito ay kuwento ng protagonista tungkol sa sarili. Ang bawat `clipPlan[*].summary` ay dapat maisalin sa unang panauhan.',
+      );
+    }
+    if (stage === 'plan') {
+      lines.push(
+        '- Sa `clips.events`, ilarawan sa unang panauhan ang mga pangyayaring nararanasan ng protagonista ("Nalaman ko…", "Napagpasyahan kong…"). Ang ibang tauhan ay maaaring tukuyin sa pangalan.',
+      );
+    }
+    if (stage === 'snowflake') {
+      lines.push(
+        '- Sa array ng characters, markahan ang eksaktong isang "POV protagonist (selftell narrator)". Ang motibasyon at arc niya ay dapat makasuporta sa buong pagsasalaysay sa unang panauhan.',
+      );
+    }
+    return lines.join('\n') + '\n';
+  }
   const lines = [
     '',
     '## Selftell Narration Mode',
@@ -98,7 +134,7 @@ export function buildSelftellDirective(lang = 'cn', stage = 'general') {
 export function enforceSelftellPOV(clip, ctx = {}) {
   const protagonist = pickSelftellProtagonist(ctx.outline);
   if (!protagonist) return clip;
-  const firstPerson = ctx.lang === 'en' ? 'I' : '我';
+  const firstPerson = ctx.lang === 'en' ? 'I' : ctx.lang === 'ph' ? 'Ako' : '我';
   const otherNames = collectOtherCharacterNames(ctx.outline, protagonist);
   const subFirstPerson = (s) => substituteProtagonist(s, protagonist, otherNames, firstPerson);
   const out = {

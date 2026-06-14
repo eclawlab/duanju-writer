@@ -10,11 +10,12 @@ import {
 describe('author-styles loader', () => {
   beforeEach(() => clearAuthorStyleCache());
 
-  test('lists all 30 authors (15 Chinese + 15 English)', () => {
+  test('lists all 40 authors (15 Chinese + 15 English + 10 Philippine)', () => {
     const list = listAuthorStyles();
-    assert.equal(list.length, 30);
+    assert.equal(list.length, 40);
     assert.equal(list.filter(s => s.category.startsWith('chinese-')).length, 15);
     assert.equal(list.filter(s => s.category.startsWith('english-')).length, 15);
+    assert.equal(list.filter(s => s.category.startsWith('philippine-')).length, 10);
     const keys = list.map(s => s.key).sort();
     assert.ok(keys.includes('moyan'));
     assert.ok(keys.includes('jinyong'));
@@ -22,6 +23,28 @@ describe('author-styles loader', () => {
     assert.ok(keys.includes('priest'));
     assert.ok(keys.includes('hemingway'));
     assert.ok(keys.includes('tolkien'));
+    assert.ok(keys.includes('rizal'));
+    assert.ok(keys.includes('joaquin'));
+  });
+
+  test('all 10 Philippine authors load with a non-empty Scene voice', () => {
+    const expected = [
+      'rizal', 'joaquin', 'gonzalez', 'sionil-jose', 'santos',
+      'balagtas', 'villa', 'hernandez',
+      'bulosan', 'bautista',
+    ];
+    for (const key of expected) {
+      const s = getAuthorStyle(key);
+      assert.ok(s, `missing author style: ${key}`);
+      assert.match(s.category, /^philippine-/);
+      assert.ok(s.scene && s.scene.length > 0, `empty Scene for ${key}`);
+    }
+  });
+
+  test('Philippine authors resolve by full name, space/case-insensitive', () => {
+    assert.equal(getAuthorStyle('José Rizal').name, 'José Rizal');
+    assert.equal(getAuthorStyle('nick joaquin').name, 'Nick Joaquin');
+    assert.equal(getAuthorStyle('LUALHATI BAUTISTA').name, 'Lualhati Bautista');
   });
 
   test('all 15 English authors load with a non-empty Scene voice', () => {

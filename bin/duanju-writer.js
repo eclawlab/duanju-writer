@@ -83,8 +83,8 @@ const fresh = hasFlag(args, '--fresh');
 
 function printUsage() {
   console.log('Usage: duanju-writer [setup|start|scheduler|worker|run|modify|stories|jobs|styles|author-styles|config|provider|role|knowledge|resume]');
-  console.log('\nRun options: duanju-writer run [count] [--lang cn|en] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <作家名>] [--no-publish] [--rich-context|--no-rich-context]');
-  console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn|en] [--model <provider>] [--title "..."] [--dry-run]');
+  console.log('\nRun options: duanju-writer run [count] [--lang cn|en|ph] [--style 战神归来] [--type 都市] [--news URL] [--story path.{txt,md}] [--fidelity tight|medium|loose] [--character path.md] [--event path.md] [--model claude|openai] [--episodes N] [--clips-per-episode K] [--mode default|selftell] [--author-style <作家名>] [--no-publish] [--rich-context|--no-rich-context]');
+  console.log('\nModify options: duanju-writer modify <storyId> --feedback "..." [--feedback-file path] [--lang cn|en|ph] [--model <provider>] [--title "..."] [--dry-run]');
 }
 
 // No subcommand (bare `duanju-writer`) must NOT silently launch the daemon —
@@ -292,7 +292,7 @@ switch (command) {
       dryRun = !!parsed.values['dry-run'];
       if (parsed.values.lang !== undefined) {
         lang = parsed.values.lang.toLowerCase();
-        if (lang !== 'cn' && lang !== 'en') { console.log(`--lang ${parsed.values.lang} is not supported (cn or en).`); process.exit(1); }
+        if (lang !== 'cn' && lang !== 'en' && lang !== 'ph') { console.log(`--lang ${parsed.values.lang} is not supported (cn, en, or ph).`); process.exit(1); }
       }
     }
     if (!storyId) {
@@ -430,8 +430,8 @@ switch (command) {
         }
       }
       // Validate lang values
-      if (args[1] === 'lang' && value !== 'cn' && value !== 'en') {
-        console.log(`Invalid lang "${value}". Supported: cn, en.`);
+      if (args[1] === 'lang' && value !== 'cn' && value !== 'en' && value !== 'ph') {
+        console.log(`Invalid lang "${value}". Supported: cn, en, ph.`);
         process.exit(1);
       }
       // Validate mode values — mirror the --mode CLI flag's allowlist.

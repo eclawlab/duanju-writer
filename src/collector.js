@@ -37,6 +37,21 @@ function getSearchQueries(lang = 'cn') {
     ];
     return pickRandom(pool, 5);
   }
+  if (lang === 'ph') {
+    const pool = [
+      `Wattpad Tagalog trending stories ${year}`,
+      `Wattpad Philippines popular stories ${year}`,
+      `Filipino teleserye trending ${year}`,
+      `Pinoy pocketbook romance bestseller ${year}`,
+      `PSICOM Precious Pages bestselling romance ${year}`,
+      `Filipino vertical short drama ${year}`,
+      `kilig pabebe romance trope Filipino`,
+      `Pinoy revenge teleserye plot twist ${year}`,
+      `GMA ABS-CBN teleserye trending ${year}`,
+      `Tagalog web novel trending ${year}`,
+    ];
+    return pickRandom(pool, 5);
+  }
   const pool = [
     `起点中文网 热门小说 ${year}`,
     `晋江文学城 热门推荐 ${year}`,
@@ -67,6 +82,16 @@ function getFetchUrls(lang = 'cn') {
       'https://www.webnovel.com/ranking',               // EN - Webnovel rankings
     ];
     return pickRandom(english, 5);
+  }
+  if (lang === 'ph') {
+    const philippine = [
+      'https://www.wattpad.com/stories/tagalog',   // PH - Wattpad Tagalog stories
+      'https://www.wattpad.com/stories/filipino',  // PH - Wattpad Filipino stories
+      'https://www.wattpad.com/stories/romance',   // PH - Wattpad romance (huge PH readership)
+      'https://www.goodreads.com/shelf/show/filipino', // PH - Goodreads Filipino shelf
+      'https://www.reelshort.com/',                // PH - ReelShort vertical dramas
+    ];
+    return pickRandom(philippine, 5);
   }
   const chinese = [
     'https://www.qidian.com/',                                          // CN - 起点中文网

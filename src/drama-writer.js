@@ -168,18 +168,34 @@ export const ENDING_CN_TO_EN = {
   '反转':   'twist',
 };
 
+// Filipino (lang 'ph') aliases — same canonical CN tokens underneath.
+export const ENDING_PH_ALIASES = {
+  tagumpay:          '爽爆',
+  'mapait-matamis':  '苦尽甘来',
+  pagbaligtad:       '反转',
+};
+
+export const ENDING_CN_TO_PH = {
+  '爽爆':   'tagumpay',
+  '苦尽甘来': 'mapait-matamis',
+  '反转':   'pagbaligtad',
+};
+
 // Map a model-emitted ending value to the canonical CN token. Unknown values
 // pass through unchanged so existing "invalid ending" errors stay accurate.
 export function normalizeEnding(value) {
   if (typeof value !== 'string') return value;
   const v = value.trim();
   if (VALID_ENDINGS.includes(v)) return v;
-  return ENDING_EN_ALIASES[v.toLowerCase()] || value;
+  const lower = v.toLowerCase();
+  return ENDING_EN_ALIASES[lower] || ENDING_PH_ALIASES[lower] || value;
 }
 
 // Render a canonical CN ending token in the requested prompt language.
 export function localizeEnding(ending, lang = 'cn') {
-  return lang === 'en' ? (ENDING_CN_TO_EN[ending] || ending) : ending;
+  if (lang === 'en') return ENDING_CN_TO_EN[ending] || ending;
+  if (lang === 'ph') return ENDING_CN_TO_PH[ending] || ending;
+  return ending;
 }
 
 // composeScene lives in ./scene.js (re-exported above) so selftell.js can use
@@ -612,8 +628,8 @@ export function buildClipPrompt(ctx) {
     .replace(/\{\{clipSummary\}\}/g, clipSummary || '')
     .replace(/\{\{isConclusion\}\}/g, isConclusion ? 'true' : 'false')
     .replace(/\{\{priorClipDigest\}\}/g, priorClipDigest || '(none)')
-    .replace(/\{\{retrievedScenes\}\}/g, () => retrievedScenes || (lang === 'en' ? '(none)' : '（无）'))
-    .replace(/\{\{stateContext\}\}/g, () => stateContext || (lang === 'en' ? '(none)' : '（无）'))
+    .replace(/\{\{retrievedScenes\}\}/g, () => retrievedScenes || (lang === 'cn' ? '（无）' : lang === 'ph' ? '(wala)' : '(none)'))
+    .replace(/\{\{stateContext\}\}/g, () => stateContext || (lang === 'cn' ? '（无）' : lang === 'ph' ? '(wala)' : '(none)'))
     .replace(/\{\{tropeSection\}\}/g, tropeSection || '')
     .replace(/\{\{referenceCharacter\}\}/g, referenceCharacter || '')
     .replace(/\{\{referenceEvent\}\}/g, referenceEvent || '');
@@ -632,7 +648,13 @@ export function buildClipPrompt(ctx) {
   }
 
   if (authorVoice) {
-    rendered += lang === 'en'
+    rendered += lang === 'ph'
+      ? '\n\n## Tinig ng May-akda / Author Voice\n\n'
+        + 'Isulat sa tinig ng prosa ng sumusunod na may-akda. Naaapektuhan nito LAMANG ang '
+        + 'pagpili ng salita, ritmo, imahe, at tekstura ng pangungusap — hindi ang banghay, '
+        + 'istruktura ng trope, mga tauhan, o mga pangyayari.\n\n'
+        + authorVoice
+      : lang === 'en'
       ? '\n\n## Author Voice\n\n'
         + 'Write in the following author\'s prose voice. It affects ONLY diction, rhythm, '
         + 'imagery, and sentence texture — never the plot, trope structure, characters, or events.\n\n'
@@ -789,14 +811,16 @@ export function buildRetryClipPrompt(ctx = {}) {
   const { clipSummary = '', prevError = '', isConclusion = false, ending = '爽爆', clipIndex = 0, mode = 'default', lang = 'cn', authorVoice = '' } = ctx;
   const tail = isConclusion
     ? `\nThis is the conclusion clip. Output a "conclusion" object: { "title": "...", "overview": "...", "type": "DRAMA_END", "ending": "${localizeEnding(ending, lang)}" } and you may leave "hook" empty.`
-    : lang === 'en'
-      ? '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤20 words).'
-      : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).';
+    : lang === 'cn'
+      ? '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤30 CN chars).'
+      : '\nThis is a non-conclusion clip. Output a non-empty "hook" field (≤20 words).';
   const parts = [
     `Previous attempt failed: ${prevError || 'invalid output'}.`,
     `Generate one short-drama clip (10–15 seconds) based on this summary:`,
     clipSummary,
-    lang === 'en'
+    lang === 'ph'
+      ? `Write everything in Filipino (Tagalog). Word limits: setting≤12, action≤50, dialogue≤40, hook≤20.`
+      : lang === 'en'
       ? `Write everything in English. Word limits: setting≤12, action≤50, dialogue≤40, hook≤20.`
       : `CN-char limits: setting≤20, action≤80, dialogue≤60, hook≤30.`,
     `Include "clipIndex": ${clipIndex} in the JSON object.`,
@@ -807,7 +831,9 @@ export function buildRetryClipPrompt(ctx = {}) {
     parts.push(buildSelftellDirective(lang, 'clip'));
   }
   if (authorVoice) {
-    parts.push(lang === 'en'
+    parts.push(lang === 'ph'
+      ? 'Tinig ng may-akda (naaapektuhan lamang ang pagpili ng salita, ritmo, at imahe — hindi ang banghay, tauhan, o pangyayari):\n' + authorVoice
+      : lang === 'en'
       ? 'Author voice (affects only diction, rhythm, and imagery — never plot, characters, or events):\n' + authorVoice
       : '文风（仅影响遣词、节奏与意象，不改变剧情、人物或事件）：\n' + authorVoice);
   }
@@ -828,20 +854,28 @@ export function buildFallbackClip(ctx = {}) {
     lang = 'cn',
     outline = null,
   } = ctx;
-  const isEn = lang === 'en';
-  // CN truncation budgets are CN-char counts; for English reuse them as word
-  // budgets (parseClip's CN-char limits never bind on English text anyway).
+  const isCjk = lang === 'cn';
+  // Per-language fallback boilerplate. Latin-script langs (en, ph) are word-counted;
+  // CN is CN-char counted.
+  const FB = {
+    cn: { firstPerson: '我',   setting: '场景 · 时间 · 氛围',          action: '动作描述',   narration: '叙述',      hook: '镜头特写关键道具',          me: '我：',  finale: '结局',  ends: '故事结束' },
+    en: { firstPerson: 'I',    setting: 'Scene · Time · Mood',        action: 'Action beat', narration: 'Narration', hook: 'Close-up on a key prop',    me: 'I: ',   finale: 'Finale', ends: 'The story ends' },
+    ph: { firstPerson: 'Ako',  setting: 'Eksena · Oras · Damdamin',   action: 'Aksyon',      narration: 'Salaysay',  hook: 'Close-up sa mahalagang bagay', me: 'Ako: ', finale: 'Wakas', ends: 'Nagtatapos ang kuwento' },
+  };
+  const t = FB[lang] || FB.cn;
+  // CN truncation budgets are CN-char counts; for latin-script langs reuse them as
+  // word budgets (parseClip's CN-char limits never bind on latin text anyway).
   const truncate = (s, n) => {
-    if (isEn) return (s || '').split(/\s+/).filter(Boolean).slice(0, n).join(' ');
+    if (!isCjk) return (s || '').split(/\s+/).filter(Boolean).slice(0, n).join(' ');
     const chars = (s || '').match(/[一-鿿㐀-䶿]/g) || [];
     return chars.slice(0, n).join('');
   };
   const isSelftell = mode === 'selftell';
-  const firstPerson = isEn ? 'I' : '我';
-  const setting  = isEn ? 'Scene · Time · Mood' : '场景 · 时间 · 氛围';
-  let action     = truncate(summary || (isEn ? 'Action beat' : '动作描述'), 80) || (isEn ? 'Action beat' : '动作描述');
-  let dialogue   = '[narrator]\n' + (truncate(summary, 50) || (isEn ? 'Narration' : '叙述'));
-  const hook     = isConclusion ? '' : (isEn ? 'Close-up on a key prop' : '镜头特写关键道具');
+  const firstPerson = t.firstPerson;
+  const setting  = t.setting;
+  let action     = truncate(summary || t.action, 80) || t.action;
+  let dialogue   = '[narrator]\n' + (truncate(summary, 50) || t.narration);
+  const hook     = isConclusion ? '' : t.hook;
   const durationSec = 12;
   if (isSelftell) {
     // Cheap first-person rewrite of the fallback: substitute the protagonist's
@@ -857,7 +891,7 @@ export function buildFallbackClip(ctx = {}) {
       dialogue = substituteProtagonist(dialogue, proto, others, firstPerson);
     }
     if (!action.startsWith(firstPerson)) {
-      action = (isEn ? 'I: ' : '我：') + truncate(action, 78);
+      action = t.me + truncate(action, 78);
     }
   }
 
@@ -865,8 +899,8 @@ export function buildFallbackClip(ctx = {}) {
   let conclusion = null;
   if (isConclusion) {
     const safeEnding = VALID_ENDINGS.includes(ending) ? ending : '爽爆';
-    let concTitle = isEn ? 'Finale' : '结局';
-    let concOverview = summary || (isEn ? 'The story ends' : '故事结束');
+    let concTitle = t.finale;
+    let concOverview = summary || t.ends;
     if (isSelftell) {
       // Rewrite the conclusion fields too so the ending stays in first person.
       const proto = pickSelftellProtagonist(outline);

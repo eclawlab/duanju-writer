@@ -48,9 +48,17 @@ const VARIANT_LABELS_EN = {
   v3: 'Twist Ending',
 };
 
+// Filipino (lang 'ph') display labels for the same variants.
+const VARIANT_LABELS_PH = {
+  v1: 'Matagumpay na Wakas',
+  v2: 'Mapait-matamis na Wakas',
+  v3: 'Wakas na Pabaligtad',
+};
+
 export function variantsForLang(lang = 'cn') {
-  if (lang !== 'en') return VARIANTS;
-  return VARIANTS.map(v => ({ ...v, label: VARIANT_LABELS_EN[v.key] || v.label }));
+  const labels = lang === 'en' ? VARIANT_LABELS_EN : lang === 'ph' ? VARIANT_LABELS_PH : null;
+  if (!labels) return VARIANTS;
+  return VARIANTS.map(v => ({ ...v, label: labels[v.key] || v.label }));
 }
 
 // Static description of valid status edges in the pipeline. Informational

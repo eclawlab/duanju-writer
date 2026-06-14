@@ -62,7 +62,7 @@ describe('cli flag validation', () => {
   test('--lang fr is rejected', () => {
     const r = runCli(['run', '--lang', 'fr']);
     assert.equal(r.code, 1);
-    assert.match(r.out, /--lang fr is not supported \(cn or en\)/);
+    assert.match(r.out, /--lang fr is not supported \(cn, en, or ph\)/);
   });
 
   test('run with a non-finite count (Infinity) is rejected, not a silent no-op', () => {
@@ -98,7 +98,7 @@ describe('cli flag validation', () => {
   test('config set lang fr is rejected', () => {
     const r = runCli(['config', 'set', 'lang', 'fr']);
     assert.equal(r.code, 1);
-    assert.match(r.out, /Supported: cn, en/);
+    assert.match(r.out, /Supported: cn, en, ph/);
   });
 
   test('--author-style with unknown name is rejected; list shows author names', () => {

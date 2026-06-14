@@ -81,11 +81,13 @@ test('parseRunFlags: validates clips-per-episode range', () => {
   assert.equal(parseRunFlags(['--clips-per-episode', '6']).opts.clipsPerEpisode, 6);
 });
 
-test('parseRunFlags: accepts cn/en lang, rejects others and bad count and second count', () => {
+test('parseRunFlags: accepts cn/en/ph lang, rejects others and bad count and second count', () => {
   assert.equal(parseRunFlags(['--lang', 'cn']).opts.lang, 'cn');
   assert.equal(parseRunFlags(['--lang', 'en']).opts.lang, 'en');
   assert.equal(parseRunFlags(['--lang', 'EN']).opts.lang, 'en');
-  assert.match(parseRunFlags(['--lang', 'fr']).error, /cn or en/);
+  assert.equal(parseRunFlags(['--lang', 'ph']).opts.lang, 'ph');
+  assert.equal(parseRunFlags(['--lang', 'PH']).opts.lang, 'ph');
+  assert.match(parseRunFlags(['--lang', 'fr']).error, /cn, en, or ph/);
   assert.match(parseRunFlags(['abc']).error, /non-negative integer/);
   assert.match(parseRunFlags(['1', '2']).error, /single count/);
 });
